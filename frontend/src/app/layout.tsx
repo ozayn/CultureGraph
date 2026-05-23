@@ -21,20 +21,54 @@ const sourceSerif = Source_Serif_4({
   subsets: ["latin"],
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
     default: "CultureGraph",
     template: "%s · CultureGraph",
   },
   description:
-    "A minimal, mobile-first cultural exploration platform for museum visits and artwork notes.",
+    "A minimal, mobile-first cultural exploration platform for museum visits, artwork annotation, and AI-assisted research.",
   applicationName: "CultureGraph",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icons/icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "CultureGraph",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: siteUrl,
+    siteName: "CultureGraph",
+    title: "CultureGraph",
+    description:
+      "Log museum visits, annotate artworks, and explore AI-assisted research.",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "CultureGraph" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CultureGraph",
+    description:
+      "Log museum visits, annotate artworks, and explore AI-assisted research.",
+    images: ["/og-image.png"],
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#2A2622",
 };
 
 export default function RootLayout({

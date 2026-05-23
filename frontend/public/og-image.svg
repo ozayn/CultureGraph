@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <title>CultureGraph</title>
+  <rect width="1200" height="630" fill="#F7F4EE"/>
+  <rect x="48" y="48" width="1104" height="534" stroke="#2A2622" stroke-width="2" opacity="0.12"/>
+  <g transform="translate(600 250)">
+    <g transform="translate(-128 -128) scale(0.5)">
+      <g stroke="#2A2622" stroke-linecap="square">
+        <path d="M128 208V128H208" stroke-width="24"/>
+        <path d="M304 128H384V208" stroke-width="24"/>
+        <path d="M384 304V384H304" stroke-width="24"/>
+        <path d="M208 384H128V304" stroke-width="24"/>
+        <rect x="168" y="168" width="176" height="176" stroke-width="10" opacity="0.45"/>
+      </g>
+      <circle cx="256" cy="268" r="18" fill="#8A7356"/>
+      <circle cx="256" cy="268" r="7" fill="#F7F4EE"/>
+    </g>
+  </g>
+  <text x="600" y="420" text-anchor="middle" fill="#2A2622" font-family="Georgia, Times New Roman, serif" font-size="72" font-weight="400" letter-spacing="-0.02em">CultureGraph</text>
+  <text x="600" y="472" text-anchor="middle" fill="#6B645C" font-family="Georgia, Times New Roman, serif" font-size="28" font-weight="400" letter-spacing="0.12em">CULTURAL EXPLORATION</text>
+</svg>

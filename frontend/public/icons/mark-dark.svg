@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-label="CultureGraph">
+  <title>CultureGraph</title>
+  <rect width="512" height="512" fill="#1C1916"/>
+  <g stroke="#E8E2D9" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M128 208V128H208" stroke-width="24"/>
+    <path d="M304 128H384V208" stroke-width="24"/>
+    <path d="M384 304V384H304" stroke-width="24"/>
+    <path d="M208 384H128V304" stroke-width="24"/>
+    <rect x="168" y="168" width="176" height="176" stroke-width="10" opacity="0.45"/>
+  </g>
+  <circle cx="256" cy="268" r="18" fill="#A89272"/>
+  <circle cx="256" cy="268" r="7" fill="#1C1916"/>
+</svg>
