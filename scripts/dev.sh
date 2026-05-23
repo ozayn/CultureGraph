@@ -4,15 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-if [ -f .env ]; then
-  set -a
-  # shellcheck disable=SC1091
-  source .env
-  set +a
-fi
+# shellcheck disable=SC1091
+source "$ROOT_DIR/scripts/lib/load-env.sh"
 
-export DATABASE_URL="${DATABASE_URL:-postgresql://culturegraph:culturegraph@localhost:5432/culturegraph}"
-export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:8000}"
+culturegraph_print_env_status
+culturegraph_load_env
+
+API_DIR="$CULTUREGRAPH_API_DIR"
+WEB_DIR="$CULTUREGRAPH_WEB_DIR"
 
 if command -v docker >/dev/null 2>&1; then
   docker compose up -d db
@@ -30,21 +29,21 @@ else
   exit 1
 fi
 
-if [ ! -d backend/.venv ]; then
-  python3 -m venv backend/.venv
+if [ ! -d "$ROOT_DIR/$API_DIR/.venv" ]; then
+  python3 -m venv "$ROOT_DIR/$API_DIR/.venv"
 fi
 
 # shellcheck disable=SC1091
-source backend/.venv/bin/activate
-pip install -q -r backend/requirements.txt
+source "$ROOT_DIR/$API_DIR/.venv/bin/activate"
+pip install -q -r "$ROOT_DIR/$API_DIR/requirements.txt"
 
-cd backend
+cd "$ROOT_DIR/$API_DIR"
 alembic upgrade head
 PYTHONPATH=. python scripts/seed.py
 cd "$ROOT_DIR"
 
-if [ ! -d frontend/node_modules ]; then
-  (cd frontend && npm install)
+if [ ! -d "$ROOT_DIR/$WEB_DIR/node_modules" ]; then
+  (cd "$ROOT_DIR/$WEB_DIR" && npm install)
 fi
 
 cleanup() {
@@ -53,19 +52,19 @@ cleanup() {
 trap cleanup EXIT
 
 (
-  cd backend
-  uvicorn app.main:app --reload --host "${API_HOST:-0.0.0.0}" --port "${API_PORT:-8000}"
+  cd "$ROOT_DIR/$API_DIR"
+  uvicorn app.main:app --reload --host "$API_HOST" --port "$API_PORT"
 ) &
 BACKEND_PID=$!
 
 (
-  cd frontend
-  npm run dev
+  cd "$ROOT_DIR/$WEB_DIR"
+  npm run dev -- --port "$WEB_PORT"
 ) &
 FRONTEND_PID=$!
 
 echo "CultureGraph running:"
-echo "  Frontend: http://localhost:3000"
-echo "  Backend:  ${NEXT_PUBLIC_API_URL}"
+echo "  Web   http://localhost:${WEB_PORT}"
+echo "  API   http://localhost:${API_PORT}"
 
 wait
