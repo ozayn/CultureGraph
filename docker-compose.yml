@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: culturegraph
+      POSTGRES_PASSWORD: culturegraph
+      POSTGRES_DB: culturegraph
+    ports:
+      - "5432:5432"
+    volumes:
+      - culturegraph_pg:/var/lib/postgresql/data
+
+volumes:
+  culturegraph_pg:
