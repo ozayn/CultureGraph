@@ -2,9 +2,7 @@
 .env.local
 *.local
 
-# Per-service local secrets (apps/* symlinks to backend/frontend)
-apps/api/.env
-apps/web/.env.local
+# Per-service local secrets
 backend/.env
 frontend/.env.local
 

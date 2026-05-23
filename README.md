@@ -13,10 +13,8 @@ Minimal, mobile-first cultural exploration platform for museum visits, artwork a
 ## Project layout
 
 ```
-backend/          FastAPI API (canonical source)
-frontend/         Next.js web app (canonical source)
-apps/api/         Symlink → backend/
-apps/web/         Symlink → frontend/
+backend/          FastAPI API
+frontend/         Next.js web app
 scripts/dev.sh    Full local stack: Docker Postgres, migrate, seed, both servers
 scripts/start.sh  Start API + web with env loading (no Docker)
 DESIGN.md         Interaction philosophy and future Story Mode notes
@@ -28,37 +26,37 @@ CultureGraph splits configuration by service. **Railway does not read the repo r
 
 | File | Purpose |
 |------|---------|
-| [`apps/api/.env.example`](apps/api/.env.example) | API template → copy to `apps/api/.env` |
-| [`apps/web/.env.example`](apps/web/.env.example) | Web template → copy to `apps/web/.env.local` |
+| [`backend/.env.example`](backend/.env.example) | API template → copy to `backend/.env` |
+| [`frontend/.env.example`](frontend/.env.example) | Web template → copy to `frontend/.env.local` |
 | [`.env.example`](.env.example) | Optional root convenience for local scripts only |
 
 `scripts/start.sh` and `scripts/dev.sh` load env in this order (later files override earlier ones):
 
 1. `.env` at repo root — **only if it exists** (optional)
-2. `apps/api/.env` — backend/API variables
-3. `apps/web/.env.local` — frontend variables
+2. `backend/.env` — API variables
+3. `frontend/.env.local` — frontend variables
 
 The script prints which files were found or missing; it never prints secret values.
 
 ### Local setup
 
 ```bash
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env.local
-# Edit apps/api/.env — add ANTHROPIC_API_KEY if using Claude research
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
+# Edit backend/.env — add ANTHROPIC_API_KEY if using Claude research
 ```
 
-**API-only:** `DATABASE_URL`, `CORS_ORIGINS`, `ANTHROPIC_API_KEY`, etc. belong in `apps/api/.env`.
+**Backend only:** `DATABASE_URL`, `CORS_ORIGINS`, `ANTHROPIC_API_KEY`, etc. belong in `backend/.env`.
 
-**Web-only:** `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SITE_URL`, `WEB_PORT` belong in `apps/web/.env.local`.
+**Frontend only:** `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SITE_URL`, `WEB_PORT` belong in `frontend/.env.local`.
 
-Never put `ANTHROPIC_API_KEY` in the web env — it must stay on the API service.
+Never put `ANTHROPIC_API_KEY` in the frontend env — it must stay on the API service.
 
 ## Quick start (Docker)
 
 ```bash
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env.local
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
 ./scripts/dev.sh
 ```
 
@@ -69,15 +67,15 @@ cp apps/web/.env.example apps/web/.env.local
 ## Quick start (existing Postgres)
 
 ```bash
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env.local
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
 ./scripts/start.sh
 ```
 
 ## Regenerate PWA icons
 
 ```bash
-cd apps/web && npm run icons
+cd frontend && npm run icons
 ```
 
 ## Railway deployment
@@ -86,7 +84,7 @@ Deploy as **two services** from this monorepo. Configure variables in each servi
 
 ### API service
 
-- **Root directory:** `backend/` (or `apps/api/`)
+- **Root directory:** `backend/`
 - Attach a **PostgreSQL** plugin; Railway injects `DATABASE_URL`.
 - Railway sets `PORT`; the app reads it automatically.
 - Release command runs Alembic migrations (see `backend/railway.toml`).
@@ -102,7 +100,7 @@ Do **not** set `NEXT_PUBLIC_*` variables on the API service.
 
 ### Web service
 
-- **Root directory:** `frontend/` (or `apps/web/`)
+- **Root directory:** `frontend/`
 - Set `NEXT_PUBLIC_API_URL` to the public API URL **before** build/deploy.
 
 | Variable | Required | Notes |

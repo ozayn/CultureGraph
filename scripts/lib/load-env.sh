@@ -7,27 +7,22 @@ if [ -z "${ROOT_DIR:-}" ]; then
   return 1 2>/dev/null || exit 1
 fi
 
-if [ -d "$ROOT_DIR/apps/api" ]; then
-  CULTUREGRAPH_API_DIR="apps/api"
-elif [ -d "$ROOT_DIR/backend" ]; then
-  CULTUREGRAPH_API_DIR="backend"
-else
-  echo "Error: API directory not found (expected apps/api or backend)." >&2
+CULTUREGRAPH_API_DIR="backend"
+CULTUREGRAPH_WEB_DIR="frontend"
+
+if [ ! -d "$ROOT_DIR/$CULTUREGRAPH_API_DIR" ]; then
+  echo "Error: backend/ directory not found." >&2
   return 1 2>/dev/null || exit 1
 fi
 
-if [ -d "$ROOT_DIR/apps/web" ]; then
-  CULTUREGRAPH_WEB_DIR="apps/web"
-elif [ -d "$ROOT_DIR/frontend" ]; then
-  CULTUREGRAPH_WEB_DIR="frontend"
-else
-  echo "Error: Web directory not found (expected apps/web or frontend)." >&2
+if [ ! -d "$ROOT_DIR/$CULTUREGRAPH_WEB_DIR" ]; then
+  echo "Error: frontend/ directory not found." >&2
   return 1 2>/dev/null || exit 1
 fi
 
 CULTUREGRAPH_ROOT_ENV="$ROOT_DIR/.env"
-CULTUREGRAPH_API_ENV="$ROOT_DIR/$CULTUREGRAPH_API_DIR/.env"
-CULTUREGRAPH_WEB_ENV="$ROOT_DIR/$CULTUREGRAPH_WEB_DIR/.env.local"
+CULTUREGRAPH_API_ENV="$ROOT_DIR/backend/.env"
+CULTUREGRAPH_WEB_ENV="$ROOT_DIR/frontend/.env.local"
 
 culturegraph_report_env_file() {
   local label=$1
@@ -52,8 +47,8 @@ culturegraph_load_env_file() {
 culturegraph_print_env_status() {
   echo "CultureGraph — environment files"
   culturegraph_report_env_file "root .env (optional)" "$CULTUREGRAPH_ROOT_ENV"
-  culturegraph_report_env_file "API .env" "$CULTUREGRAPH_API_ENV"
-  culturegraph_report_env_file "Web .env.local" "$CULTUREGRAPH_WEB_ENV"
+  culturegraph_report_env_file "backend .env" "$CULTUREGRAPH_API_ENV"
+  culturegraph_report_env_file "frontend .env.local" "$CULTUREGRAPH_WEB_ENV"
   echo "  (values are not printed)"
 }
 
