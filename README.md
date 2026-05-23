@@ -101,6 +101,8 @@ Do **not** set `NEXT_PUBLIC_*` variables on the API service.
 ### Web service
 
 - **Root directory:** `frontend/`
+- Node **≥20.12** (enforced via `package.json` engines and `frontend/nixpacks.toml`)
+- Nixpacks runs `npm ci` and `npm run build`; do not duplicate those in Railway build settings
 - Set `NEXT_PUBLIC_API_URL` to the public API URL **before** build/deploy.
 
 | Variable | Required | Notes |
