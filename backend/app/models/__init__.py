@@ -1,0 +1,90 @@
+import enum
+from datetime import date, datetime
+
+from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+class AnnotationCategory(str, enum.Enum):
+    observation = "observation"
+    symbol = "symbol"
+    history = "history"
+    question = "question"
+    composition = "composition"
+
+
+class Visit(Base):
+    __tablename__ = "visits"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    museum_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    city: Mapped[str] = mapped_column(String(255), nullable=False)
+    visit_date: Mapped[date] = mapped_column(Date, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    artworks: Mapped[list["Artwork"]] = relationship(back_populates="visit")
+
+
+class Artwork(Base):
+    __tablename__ = "artworks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    visit_id: Mapped[int | None] = mapped_column(ForeignKey("visits.id"), nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    artist: Mapped[str | None] = mapped_column(String(255))
+    year_period: Mapped[str | None] = mapped_column(String(100))
+    medium: Mapped[str | None] = mapped_column(String(255))
+    museum_gallery: Mapped[str | None] = mapped_column(String(255))
+    image_url: Mapped[str | None] = mapped_column(String(512))
+    personal_notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    visit: Mapped["Visit | None"] = relationship(back_populates="artworks")
+    annotations: Mapped[list["Annotation"]] = relationship(
+        back_populates="artwork", cascade="all, delete-orphan"
+    )
+    research_notes: Mapped[list["ResearchNote"]] = relationship(
+        back_populates="artwork", cascade="all, delete-orphan"
+    )
+
+
+class Annotation(Base):
+    __tablename__ = "annotations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    artwork_id: Mapped[int] = mapped_column(ForeignKey("artworks.id"), nullable=False)
+    x_percent: Mapped[float] = mapped_column(Float, nullable=False)
+    y_percent: Mapped[float] = mapped_column(Float, nullable=False)
+    category: Mapped[AnnotationCategory] = mapped_column(
+        Enum(AnnotationCategory, name="annotation_category"), nullable=False
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    artwork: Mapped["Artwork"] = relationship(back_populates="annotations")
+
+
+class ResearchNote(Base):
+    __tablename__ = "research_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    artwork_id: Mapped[int] = mapped_column(ForeignKey("artworks.id"), nullable=False)
+    short_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    historical_context: Mapped[str] = mapped_column(Text, nullable=False)
+    visual_elements_to_notice: Mapped[str] = mapped_column(Text, nullable=False)
+    related_questions: Mapped[str] = mapped_column(Text, nullable=False)
+    suggested_annotations: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    artwork: Mapped["Artwork"] = relationship(back_populates="research_notes")
