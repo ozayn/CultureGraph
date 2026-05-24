@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { CATEGORY_COLORS } from "@/components/annotations/konva-canvas-stage";
 import { Badge } from "@/components/ui/badge";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -17,28 +18,14 @@ import {
   type AnnotationCategory,
 } from "@/lib/types";
 
-const Stage = dynamic(() => import("react-konva").then((mod) => mod.Stage), {
+const KonvaCanvasStage = dynamic(() => import("@/components/annotations/konva-canvas-stage"), {
   ssr: false,
+  loading: () => (
+    <div className="flex min-h-[240px] w-full items-center justify-center bg-[#f3efe8] text-sm text-muted-foreground">
+      Loading canvas…
+    </div>
+  ),
 });
-const Layer = dynamic(() => import("react-konva").then((mod) => mod.Layer), {
-  ssr: false,
-});
-const Group = dynamic(() => import("react-konva").then((mod) => mod.Group), {
-  ssr: false,
-});
-const Circle = dynamic(() => import("react-konva").then((mod) => mod.Circle), {
-  ssr: false,
-});
-const Text = dynamic(() => import("react-konva").then((mod) => mod.Text), {
-  ssr: false,
-});
-const KonvaImage = dynamic(
-  () => import("react-konva").then((mod) => mod.Image),
-  { ssr: false }
-);
-
-const PIN_RADIUS = 14;
-const HIT_RADIUS = 22;
 
 interface AnnotationCanvasProps {
   artworkId: number;
@@ -50,14 +37,6 @@ interface PendingPin {
   x_percent: number;
   y_percent: number;
 }
-
-const CATEGORY_COLORS: Record<AnnotationCategory, string> = {
-  observation: "#5c4d3c",
-  symbol: "#7a5c2e",
-  history: "#4a5d4a",
-  question: "#5a4a6a",
-  composition: "#3d4a5c",
-};
 
 export function AnnotationCanvas({
   artworkId,
@@ -107,8 +86,6 @@ export function AnnotationCanvas({
       img.onload = null;
     };
   }, [imageUrl]);
-
-  const displayImage = imageUrl ? image : null;
 
   const placePin = useCallback(
     (x: number, y: number) => {
@@ -186,30 +163,14 @@ export function AnnotationCanvas({
         className="w-full overflow-hidden rounded-xl border border-border bg-[#f3efe8] touch-none"
       >
         {imageUrl ? (
-          <Stage width={size.width} height={size.height} onTap={handleStageTap}>
-            <Layer>
-              {displayImage ? (
-                <KonvaImage
-                  image={displayImage}
-                  width={size.width}
-                  height={size.height}
-                />
-              ) : null}
-              {pins.map((pin) => (
-                <PinMarker key={pin.id} pin={pin} />
-              ))}
-              {pendingPin ? (
-                <Circle
-                  x={(pendingPin.x_percent / 100) * size.width}
-                  y={(pendingPin.y_percent / 100) * size.height}
-                  radius={PIN_RADIUS}
-                  fill="#1f1a17"
-                  stroke="#faf7f2"
-                  strokeWidth={3}
-                />
-              ) : null}
-            </Layer>
-          </Stage>
+          <KonvaCanvasStage
+            width={size.width}
+            height={size.height}
+            image={image}
+            pins={pins}
+            pendingPin={pendingPin}
+            onStageTap={handleStageTap}
+          />
         ) : (
           <button
             type="button"
@@ -217,10 +178,7 @@ export function AnnotationCanvas({
             style={{ height: size.height }}
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
-              placePin(
-                event.clientX - rect.left,
-                event.clientY - rect.top
-              );
+              placePin(event.clientX - rect.left, event.clientY - rect.top);
             }}
           >
             Tap to place a pin on this placeholder canvas
@@ -304,31 +262,5 @@ export function AnnotationCanvas({
         </div>
       </BottomSheet>
     </div>
-  );
-}
-
-function PinMarker({
-  pin,
-}: {
-  pin: Annotation & { x: number; y: number; color: string; label: string };
-}) {
-  return (
-    <Group x={pin.x} y={pin.y}>
-      <Circle radius={HIT_RADIUS} fill="rgba(0,0,0,0.001)" />
-      <Circle
-        radius={PIN_RADIUS}
-        fill={pin.color}
-        stroke="#faf7f2"
-        strokeWidth={3}
-      />
-      <Text
-        x={PIN_RADIUS + 6}
-        y={-8}
-        text={pin.label}
-        fontSize={14}
-        fontStyle="600"
-        fill={pin.color}
-      />
-    </Group>
   );
 }
