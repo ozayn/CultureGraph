@@ -4,7 +4,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Artwork, ResearchNote
 from app.schemas import ResearchDraft, ResearchNoteRead
-from app.services.research import llm_provider, serialize_research_draft
+from app.services.research import (
+    ResearchConfigurationError,
+    ResearchProviderError,
+    get_research_provider,
+    serialize_research_draft,
+)
 
 router = APIRouter(prefix="/artworks", tags=["research"])
 
@@ -21,9 +26,19 @@ async def generate_research(artwork_id: int, db: Session = Depends(get_db)) -> R
         "year_period": artwork.year_period,
         "medium": artwork.medium,
         "museum_gallery": artwork.museum_gallery,
+        "personal_notes": artwork.personal_notes,
+        "image_url": artwork.image_url,
     }
 
-    draft = await llm_provider.generate_research(context)
+    provider = get_research_provider()
+
+    try:
+        draft = await provider.generate_research(context)
+    except ResearchConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ResearchProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     serialized = serialize_research_draft(draft)
 
     note = ResearchNote(artwork_id=artwork_id, **serialized)

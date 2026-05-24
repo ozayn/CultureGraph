@@ -1,12 +1,21 @@
 import json
 from typing import Protocol
 
+from app.config import settings
 from app.schemas import ResearchDraft
+
+
+class ResearchConfigurationError(Exception):
+    """Raised when Anthropic is misconfigured (invalid or empty API key)."""
+
+
+class ResearchProviderError(Exception):
+    """Raised when the research provider fails at runtime."""
 
 
 class LLMProvider(Protocol):
     async def generate_research(self, artwork_context: dict) -> ResearchDraft:
-        """Generate research draft from artwork metadata. Swap in a real LLM later."""
+        """Generate research draft from artwork metadata and optional image."""
         ...
 
 
@@ -51,6 +60,7 @@ class MockLLMProvider:
                     "text": "Research the patron or institution associated with this work.",
                 },
             ],
+            source="mock",
         )
 
 
@@ -64,4 +74,11 @@ def serialize_research_draft(draft: ResearchDraft) -> dict[str, str]:
     }
 
 
-llm_provider: LLMProvider = MockLLMProvider()
+def get_research_provider() -> LLMProvider:
+    api_key = settings.anthropic_api_key
+    if not api_key or not api_key.strip():
+        return MockLLMProvider()
+
+    from app.services.claude_research import ClaudeResearchProvider
+
+    return ClaudeResearchProvider(api_key)

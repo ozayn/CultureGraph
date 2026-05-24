@@ -102,6 +102,28 @@ class ResearchDraft(BaseModel):
     visual_elements_to_notice: list[str]
     related_questions: list[str]
     suggested_annotations: list[dict[str, str]]
+    possible_title: str | None = None
+    possible_artist: str | None = None
+    period_or_movement: str | None = None
+    ocr_label_text: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    source: str = "mock"
+
+
+class ClaudeSuggestedAnnotation(BaseModel):
+    category: AnnotationCategory
+    text: str = Field(min_length=1)
+
+
+class ClaudeResearchResponse(BaseModel):
+    possible_title: str | None = None
+    possible_artist: str | None = None
+    period_or_movement: str | None = None
+    visible_elements: list[str] = Field(min_length=1)
+    ocr_label_text: str | None = None
+    historical_context: str = Field(min_length=1)
+    confidence: float = Field(ge=0.0, le=1.0)
+    suggested_annotations: list[ClaudeSuggestedAnnotation] = Field(min_length=1)
 
 
 class ResearchNoteRead(BaseModel):
