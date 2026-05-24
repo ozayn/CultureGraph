@@ -24,11 +24,116 @@ from app.schemas import (
     VisitImportDraft,
 )
 from app.services.artwork_note_parser import ParsedArtworkFields, parse_artwork_fields
-from app.services.claude_research import _extract_json
+from app.services.claude_json import JsonExtractionError, extract_json_object, sanitize_response_preview
 from app.services.research import ResearchConfigurationError, ResearchProviderError
 
+IMPORT_TOOL_NAME = "submit_museum_notes_import"
+IMPORT_FALLBACK_WARNING = (
+    "Claude response could not be parsed; used local fallback extraction."
+)
+
+IMPORT_TOOL_SCHEMA: dict = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "visit": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "museum_name": {"type": "string"},
+                "city": {"type": "string"},
+                "visit_date": {"type": "string"},
+                "summary": {"type": "string"},
+            },
+            "required": ["museum_name", "city", "visit_date", "summary"],
+        },
+        "entities": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "entity_type": {
+                        "type": "string",
+                        "enum": [
+                            "artwork",
+                            "artist",
+                            "concept",
+                            "movement",
+                            "technique",
+                            "material",
+                            "historical_event",
+                            "symbol",
+                            "architecture",
+                            "museum_space",
+                            "political_idea",
+                        ],
+                    },
+                    "name": {"type": "string"},
+                    "description": {"type": ["string", "null"]},
+                    "related_entities": {"type": "array", "items": {"type": "string"}},
+                    "uncertainty": {"type": ["string", "null"]},
+                    "title": {"type": ["string", "null"]},
+                    "artist": {"type": ["string", "null"]},
+                    "period_or_year": {"type": ["string", "null"]},
+                    "medium": {"type": ["string", "null"]},
+                    "display_label": {"type": ["string", "null"]},
+                    "themes": {"type": "array", "items": {"type": "string"}},
+                    "concepts": {"type": "array", "items": {"type": "string"}},
+                    "movements": {"type": "array", "items": {"type": "string"}},
+                    "historical_events": {"type": "array", "items": {"type": "string"}},
+                    "suggested_annotations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "category": {
+                                    "type": "string",
+                                    "enum": [
+                                        "history",
+                                        "symbol",
+                                        "observation",
+                                        "composition",
+                                        "question",
+                                    ],
+                                },
+                                "note": {"type": "string"},
+                            },
+                            "required": ["category", "note"],
+                        },
+                    },
+                },
+                "required": ["entity_type", "name"],
+            },
+        },
+        "concept_links": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "source": {"type": "string"},
+                    "target": {"type": "string"},
+                    "relationship": {"type": "string"},
+                },
+                "required": ["source", "target", "relationship"],
+            },
+        },
+    },
+    "required": ["visit", "entities", "concept_links"],
+}
+
 IMPORT_JSON_SCHEMA_PROMPT = """\
-Return ONLY a single JSON object (no markdown fences, no commentary) with this exact shape:
+Return ONLY valid JSON matching the required schema.
+- No markdown.
+- No code fences.
+- No explanation before or after the JSON.
+- No trailing comments.
+- Use double quotes only.
+- Use null for unknown values instead of placeholder strings like "unknown" or "N/A".
+
+Exact shape:
 {
   "visit": {
     "museum_name": string,
@@ -66,15 +171,8 @@ Rules:
 - Classify each distinct note entry by entity_type before filling fields.
 - Do NOT force every line into artwork. Artists, concepts, movements, materials, techniques,
   historical events, symbols, architecture, museum spaces, and political ideas are valid entries.
-- Examples: Thomas Moran → artist; Manifest Destiny → concept or political_idea;
-  WPA → historical_event; Gesso → material; Unprimed canvas → technique;
-  DC Color School → movement; Clenched fist → symbol; Lincoln Gallery → museum_space;
-  Found objects → material or concept depending on context.
 - Extract only what appears in the pasted museum notes. Do not invent titles, dates, or artists.
 - Do not invent artwork titles. Extract exact titles only when they appear explicitly in the notes.
-- If text says "by [Artist]" with no explicit title, classify as artwork only when clearly describing
-  a specific work; otherwise classify as artist.
-- If an artwork title is unknown, use entity_type artwork with title=null and descriptive name.
 - Preserve uncertainty in description or uncertainty when classification or details are unclear.
 - related_entities: names of other extracted entities this entry connects to.
 - For artwork entities, optionally populate artist, concepts, movements, historical_events.
@@ -446,6 +544,32 @@ class MockMuseumNotesImportProvider:
         )
 
 
+def _read_claude_import_payload(message: object) -> dict:
+    content = getattr(message, "content", [])
+    for block in content:
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == IMPORT_TOOL_NAME:
+            payload = getattr(block, "input", None)
+            if isinstance(payload, dict):
+                return payload
+            raise JsonExtractionError("Claude tool response was not a JSON object.")
+
+    text_blocks = [block.text for block in content if getattr(block, "type", None) == "text"]
+    if text_blocks:
+        return extract_json_object(text_blocks[0])
+
+    raise JsonExtractionError("Claude returned an empty response.")
+
+
+async def _fallback_to_mock_import(request: MuseumNotesImportRequest) -> MuseumNotesImportResponse:
+    fallback = await MockMuseumNotesImportProvider().extract(request)
+    return fallback.model_copy(
+        update={
+            "source": "mock",
+            "ai_warning": IMPORT_FALLBACK_WARNING,
+        }
+    )
+
+
 class ClaudeMuseumNotesImportProvider:
     def __init__(self, api_key: str) -> None:
         if not api_key.strip():
@@ -464,6 +588,7 @@ class ClaudeMuseumNotesImportProvider:
         prompt = "\n".join(
             [
                 "Convert the following rough museum notes into structured CultureGraph draft data.",
+                "Use the submit_museum_notes_import tool with valid JSON only.",
                 "",
                 f"Default museum: {request.default_museum}",
                 f"Default city: {request.default_city}",
@@ -482,6 +607,16 @@ class ClaudeMuseumNotesImportProvider:
                 max_tokens=settings.anthropic_max_tokens,
                 temperature=0.1,
                 messages=[{"role": "user", "content": prompt}],
+                tools=[
+                    {
+                        "name": IMPORT_TOOL_NAME,
+                        "description": (
+                            "Submit structured museum notes import data matching the CultureGraph schema."
+                        ),
+                        "input_schema": IMPORT_TOOL_SCHEMA,
+                    }
+                ],
+                tool_choice={"type": "tool", "name": IMPORT_TOOL_NAME},
             )
         except AuthenticationError as exc:
             raise ResearchConfigurationError(
@@ -504,18 +639,27 @@ class ClaudeMuseumNotesImportProvider:
                 f"Anthropic API error ({exc.status_code}): {exc.message}"
             ) from exc
 
-        text_blocks = [
-            block.text for block in message.content if getattr(block, "type", None) == "text"
-        ]
-        if not text_blocks:
-            raise ResearchProviderError("Claude returned an empty response.")
-
         try:
-            parsed = _ClaudeImportPayload.model_validate(_extract_json(text_blocks[0]))
-        except ValidationError as exc:
-            raise ResearchProviderError(
-                "Claude response did not match the expected museum notes import schema."
-            ) from exc
+            payload = _read_claude_import_payload(message)
+            parsed = _ClaudeImportPayload.model_validate(payload)
+        except (JsonExtractionError, ValidationError) as exc:
+            preview = sanitize_response_preview(
+                "".join(
+                    block.text
+                    for block in message.content
+                    if getattr(block, "type", None) == "text"
+                )
+            )
+            if settings.is_production:
+                return await _fallback_to_mock_import(request)
+
+            if isinstance(exc, ValidationError):
+                raise ResearchProviderError(
+                    "Claude response did not match the expected museum notes import schema. "
+                    f"Preview: {preview or '[tool response]'}"
+                ) from exc
+
+            raise ResearchProviderError(f"{exc} Preview: {preview or '[tool response]'}") from exc
 
         return MuseumNotesImportResponse(
             visit=parsed.visit,

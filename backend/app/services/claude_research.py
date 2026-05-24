@@ -1,6 +1,4 @@
 import base64
-import json
-import re
 from pathlib import Path
 
 from anthropic import (
@@ -15,6 +13,7 @@ from pydantic import ValidationError
 
 from app.config import settings
 from app.schemas import ClaudeResearchResponse, ResearchDraft
+from app.services.claude_json import JsonExtractionError, extract_json_object
 from app.services.research import ResearchConfigurationError, ResearchProviderError
 
 JSON_SCHEMA_PROMPT = """\
@@ -139,22 +138,10 @@ def _build_metadata_prompt(artwork_context: dict) -> str:
 
 
 def _extract_json(text: str) -> dict:
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
-        stripped = re.sub(r"\s*```$", "", stripped)
-
     try:
-        payload = json.loads(stripped)
-    except json.JSONDecodeError as exc:
-        raise ResearchProviderError(
-            "Claude returned a response that could not be parsed as JSON."
-        ) from exc
-
-    if not isinstance(payload, dict):
-        raise ResearchProviderError("Claude JSON response must be a single object.")
-
-    return payload
+        return extract_json_object(text)
+    except JsonExtractionError as exc:
+        raise ResearchProviderError(str(exc)) from exc
 
 
 class ClaudeResearchProvider:

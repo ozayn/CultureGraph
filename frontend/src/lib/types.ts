@@ -159,4 +159,5 @@ export interface MuseumNotesImportResponse {
   entities: ImportedEntityDraft[];
   concept_links: ConceptLinkDraft[];
   source: string;
+  ai_warning: string | null;
 }

@@ -229,6 +229,7 @@ class MuseumNotesImportResponse(BaseModel):
     entities: list[ImportedEntityDraft]
     concept_links: list[ConceptLinkDraft] = Field(default_factory=list)
     source: str = "mock"
+    ai_warning: str | None = None
 
 
 class GoogleAuthRequest(BaseModel):

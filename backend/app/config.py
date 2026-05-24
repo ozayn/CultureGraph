@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     jwt_expiration_days: int = 7
     google_client_id: str | None = None
     admin_emails: str = ""
+    app_env: str = "development"
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.strip().lower() in {"production", "prod"}
 
     @property
     def admin_email_set(self) -> set[str]:

@@ -108,6 +108,7 @@ export function ImportPageClient() {
   );
   const [entities, setEntities] = useState<ReviewEntity[]>([]);
   const [source, setSource] = useState<string>("mock");
+  const [aiWarning, setAiWarning] = useState<string | null>(null);
 
   const groupedEntities = useMemo(() => groupEntities(entities), [entities]);
 
@@ -135,6 +136,7 @@ export function ImportPageClient() {
       setVisitSummary(result.visit.summary);
       setConceptLinks(result.concept_links);
       setSource(result.source);
+      setAiWarning(result.ai_warning ?? null);
       setEntities(
         result.entities.map((entity) => ({
           ...entity,
@@ -322,6 +324,12 @@ export function ImportPageClient() {
               Edit notes
             </Button>
           </div>
+
+          {aiWarning ? (
+            <p className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+              AI extraction needed cleanup; please review carefully.
+            </p>
+          ) : null}
 
           <article className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5">
             <label className="flex items-start gap-3">
