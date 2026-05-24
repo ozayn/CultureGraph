@@ -48,6 +48,13 @@ function buildPersonalNotes(artwork: ReviewArtwork): string | null {
   return parts.length ? parts.join("\n\n") : null;
 }
 
+function artworkCardHeading(artwork: ArtworkImportDraft, index: number): string {
+  if (artwork.display_label?.trim()) return artwork.display_label.trim();
+  if (artwork.title?.trim()) return artwork.title.trim();
+  if (artwork.artist?.trim()) return artwork.artist.trim();
+  return `Entry ${index + 1}`;
+}
+
 function formatConceptLinks(links: MuseumNotesImportResponse["concept_links"]): string {
   return links
     .map((link) => `${link.source} → ${link.target} (${link.relationship})`)
@@ -371,7 +378,7 @@ export function ImportPageClient() {
                     }
                   />
                   <span className="font-heading text-lg">
-                    {artwork.title?.trim() || artwork.artist?.trim() || `Entry ${index + 1}`}
+                    {artworkCardHeading(artwork, index)}
                   </span>
                 </label>
 

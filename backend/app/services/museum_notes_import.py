@@ -22,6 +22,7 @@ from app.schemas import (
     SuggestedAnnotationDraft,
     VisitImportDraft,
 )
+from app.services.artwork_note_parser import ParsedArtworkFields, parse_artwork_fields
 from app.services.claude_research import _extract_json
 from app.services.research import ResearchConfigurationError, ResearchProviderError
 
@@ -40,6 +41,7 @@ Return ONLY a single JSON object (no markdown fences, no commentary) with this e
       "artist": string or null,
       "period_or_year": string or null,
       "medium": string or null,
+      "display_label": string or null,
       "notes": string or null,
       "themes": [string, ...],
       "concepts": [string, ...],
@@ -55,7 +57,13 @@ Return ONLY a single JSON object (no markdown fences, no commentary) with this e
 
 Rules:
 - Extract only what appears in the pasted museum notes. Do not invent titles, dates, or artists.
+- Do not invent artwork titles. Extract exact titles only when they appear explicitly in the notes.
+- Distinguish artist/person headings, artwork titles, concept headings, and movement/context headings.
+- If text says "by [Artist]" with no explicit title, set artist and title=null.
+- If text matches patterns like "[Title] by [Artist]", "[Title] (YEAR) by [Artist]",
+  "centers on [Artist]'s [Title]", or "is [Title] (YEAR) by [Artist]", extract title and artist.
 - If an artwork title is unknown, set title to null and put the description in notes.
+- display_label: artist name or short descriptive label when title is null (never a invented title).
 - Preserve uncertainty in notes and summary when details are unclear.
 - suggested_annotations: 1–3 ideas tied to details actually mentioned in the notes.
 - concept_links: only when the notes explicitly connect an artist, artwork, or idea to a concept.
@@ -92,14 +100,12 @@ _ARTIST_HINTS: list[dict] = [
     {
         "match": ("sanford biggers", "biggers"),
         "artist": "Sanford Biggers",
-        "title": "Reclining Liberty",
         "concepts": ["liberty", "Brooklyn Waterfront"],
         "themes": ["contemporary sculpture"],
     },
     {
         "match": ("alexis rockman", "rockman"),
         "artist": "Alexis Rockman",
-        "title": "Manifest Destiny",
         "concepts": ["Manifest Destiny", "ecological futures"],
         "themes": ["apocalyptic landscape"],
     },
@@ -161,20 +167,41 @@ def _match_artist_hint(block: str) -> dict | None:
     return None
 
 
-def _infer_title(block: str, hint: dict | None) -> str | None:
-    if hint and hint.get("title"):
-        return hint["title"]
+def _merge_parsed_with_hint(
+    block: str,
+    parsed: ParsedArtworkFields,
+    hint: dict | None,
+) -> ArtworkImportDraft:
+    artist = parsed.artist or (hint["artist"] if hint else None)
+    title = parsed.title
+    period_or_year = parsed.period_or_year
+    medium = parsed.medium
+    concepts = _concepts_from_block(block, hint)
+    themes = _themes_from_block(block, hint)
 
-    quoted = re.search(r'"([^"]+)"|“([^”]+)”|‘([^’]+)’', block)
-    if quoted:
-        return next(group for group in quoted.groups() if group)
+    if parsed.concept_heading and parsed.concept_heading not in concepts:
+        concepts.insert(0, parsed.concept_heading)
 
-    if hint:
-        for theme in hint.get("themes", []):
-            if theme.lower() in block.lower():
-                return None
+    display_label = parsed.display_label
+    if not display_label:
+        if title:
+            display_label = title
+        elif artist:
+            display_label = artist
+        elif parsed.descriptive_label:
+            display_label = parsed.descriptive_label
 
-    return None
+    return ArtworkImportDraft(
+        title=title,
+        artist=artist,
+        period_or_year=period_or_year,
+        medium=medium,
+        display_label=display_label,
+        notes=block,
+        themes=themes,
+        concepts=concepts,
+        suggested_annotations=_suggested_annotations_for_block(block, concepts),
+    )
 
 
 def _themes_from_block(block: str, hint: dict | None) -> list[str]:
@@ -251,26 +278,12 @@ class MockMuseumNotesImportProvider:
 
         for block in blocks:
             hint = _match_artist_hint(block)
-            artist = hint["artist"] if hint else None
-            concepts = _concepts_from_block(block, hint)
-            themes = _themes_from_block(block, hint)
-            title = _infer_title(block, hint)
+            parsed = parse_artwork_fields(block)
 
-            if not hint and len(block.split()) < 4:
+            if not hint and not parsed.artist and len(block.split()) < 4:
                 continue
 
-            artworks.append(
-                ArtworkImportDraft(
-                    title=title,
-                    artist=artist,
-                    period_or_year=None,
-                    medium=None,
-                    notes=block,
-                    themes=themes,
-                    concepts=concepts,
-                    suggested_annotations=_suggested_annotations_for_block(block, concepts),
-                )
-            )
+            artworks.append(_merge_parsed_with_hint(block, parsed, hint))
 
         if not artworks and request.text.strip():
             artworks.append(

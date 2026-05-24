@@ -157,6 +157,7 @@ class ArtworkImportDraft(BaseModel):
     artist: str | None = None
     period_or_year: str | None = None
     medium: str | None = None
+    display_label: str | None = None
     notes: str | None = None
     themes: list[str] = Field(default_factory=list)
     concepts: list[str] = Field(default_factory=list)

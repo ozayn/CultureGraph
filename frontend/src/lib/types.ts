@@ -79,6 +79,7 @@ export interface ArtworkImportDraft {
   artist: string | null;
   period_or_year: string | null;
   medium: string | null;
+  display_label: string | null;
   notes: string | null;
   themes: string[];
   concepts: string[];
