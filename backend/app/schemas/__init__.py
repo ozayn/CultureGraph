@@ -4,6 +4,20 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class CulturalEntityType(str, Enum):
+    artwork = "artwork"
+    artist = "artist"
+    concept = "concept"
+    movement = "movement"
+    technique = "technique"
+    material = "material"
+    historical_event = "historical_event"
+    symbol = "symbol"
+    architecture = "architecture"
+    museum_space = "museum_space"
+    political_idea = "political_idea"
+
+
 class AnnotationCategory(str, Enum):
     observation = "observation"
     symbol = "symbol"
@@ -160,6 +174,24 @@ class SuggestedAnnotationDraft(BaseModel):
     note: str = Field(min_length=1)
 
 
+class ImportedEntityDraft(BaseModel):
+    entity_type: CulturalEntityType
+    name: str = Field(min_length=1)
+    description: str | None = None
+    related_entities: list[str] = Field(default_factory=list)
+    uncertainty: str | None = None
+    title: str | None = None
+    artist: str | None = None
+    period_or_year: str | None = None
+    medium: str | None = None
+    display_label: str | None = None
+    themes: list[str] = Field(default_factory=list)
+    concepts: list[str] = Field(default_factory=list)
+    movements: list[str] = Field(default_factory=list)
+    historical_events: list[str] = Field(default_factory=list)
+    suggested_annotations: list[SuggestedAnnotationDraft] = Field(default_factory=list)
+
+
 class ArtworkImportDraft(BaseModel):
     title: str | None = None
     artist: str | None = None
@@ -194,7 +226,7 @@ class MuseumNotesImportRequest(BaseModel):
 
 class MuseumNotesImportResponse(BaseModel):
     visit: VisitImportDraft
-    artworks: list[ArtworkImportDraft]
+    entities: list[ImportedEntityDraft]
     concept_links: list[ConceptLinkDraft] = Field(default_factory=list)
     source: str = "mock"
 

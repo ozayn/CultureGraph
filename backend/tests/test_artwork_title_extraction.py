@@ -2,7 +2,7 @@ import pytest
 
 from app.services.artwork_note_parser import parse_artwork_fields
 from app.services.museum_notes_import import MockMuseumNotesImportProvider
-from app.schemas import MuseumNotesImportRequest
+from app.schemas import CulturalEntityType, MuseumNotesImportRequest
 
 
 @pytest.mark.parametrize(
@@ -63,7 +63,11 @@ async def test_artwork_title_extraction_examples(
     result = await provider.extract(
         MuseumNotesImportRequest(text=note, default_museum="Test Museum", default_city="DC")
     )
-    artwork = result.artworks[0]
+    artwork_entities = [
+        entity for entity in result.entities if entity.entity_type == CulturalEntityType.artwork
+    ]
+    assert artwork_entities
+    artwork = artwork_entities[0]
     assert artwork.title == title
     assert artwork.artist == artist
     assert artwork.period_or_year == year

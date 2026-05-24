@@ -15,8 +15,9 @@ from pydantic import BaseModel, Field, ValidationError
 from app.config import settings
 from app.schemas import (
     AnnotationCategory,
-    ArtworkImportDraft,
     ConceptLinkDraft,
+    CulturalEntityType,
+    ImportedEntityDraft,
     MuseumNotesImportRequest,
     MuseumNotesImportResponse,
     SuggestedAnnotationDraft,
@@ -35,16 +36,22 @@ Return ONLY a single JSON object (no markdown fences, no commentary) with this e
     "visit_date": "YYYY-MM-DD",
     "summary": string
   },
-  "artworks": [
+  "entities": [
     {
+      "entity_type": "artwork" | "artist" | "concept" | "movement" | "technique" | "material" | "historical_event" | "symbol" | "architecture" | "museum_space" | "political_idea",
+      "name": string,
+      "description": string or null,
+      "related_entities": [string, ...],
+      "uncertainty": string or null,
       "title": string or null,
       "artist": string or null,
       "period_or_year": string or null,
       "medium": string or null,
       "display_label": string or null,
-      "notes": string or null,
       "themes": [string, ...],
       "concepts": [string, ...],
+      "movements": [string, ...],
+      "historical_events": [string, ...],
       "suggested_annotations": [
         {"category": "history" | "symbol" | "observation" | "composition" | "question", "note": string}
       ]
@@ -56,24 +63,30 @@ Return ONLY a single JSON object (no markdown fences, no commentary) with this e
 }
 
 Rules:
+- Classify each distinct note entry by entity_type before filling fields.
+- Do NOT force every line into artwork. Artists, concepts, movements, materials, techniques,
+  historical events, symbols, architecture, museum spaces, and political ideas are valid entries.
+- Examples: Thomas Moran → artist; Manifest Destiny → concept or political_idea;
+  WPA → historical_event; Gesso → material; Unprimed canvas → technique;
+  DC Color School → movement; Clenched fist → symbol; Lincoln Gallery → museum_space;
+  Found objects → material or concept depending on context.
 - Extract only what appears in the pasted museum notes. Do not invent titles, dates, or artists.
 - Do not invent artwork titles. Extract exact titles only when they appear explicitly in the notes.
-- Distinguish artist/person headings, artwork titles, concept headings, and movement/context headings.
-- If text says "by [Artist]" with no explicit title, set artist and title=null.
-- If text matches patterns like "[Title] by [Artist]", "[Title] (YEAR) by [Artist]",
-  "centers on [Artist]'s [Title]", or "is [Title] (YEAR) by [Artist]", extract title and artist.
-- If an artwork title is unknown, set title to null and put the description in notes.
-- display_label: artist name or short descriptive label when title is null (never a invented title).
-- Preserve uncertainty in notes and summary when details are unclear.
-- suggested_annotations: 1–3 ideas tied to details actually mentioned in the notes.
-- concept_links: only when the notes explicitly connect an artist, artwork, or idea to a concept.
+- If text says "by [Artist]" with no explicit title, classify as artwork only when clearly describing
+  a specific work; otherwise classify as artist.
+- If an artwork title is unknown, use entity_type artwork with title=null and descriptive name.
+- Preserve uncertainty in description or uncertainty when classification or details are unclear.
+- related_entities: names of other extracted entities this entry connects to.
+- For artwork entities, optionally populate artist, concepts, movements, historical_events.
+- suggested_annotations: 0–3 ideas tied to details actually mentioned (artwork entries only).
+- concept_links: only when the notes explicitly connect entities.
 - visit.summary: a short notebook-style overview of the visit based on the notes.
 """
 
 
 class _ClaudeImportPayload(BaseModel):
     visit: VisitImportDraft
-    artworks: list[ArtworkImportDraft]
+    entities: list[ImportedEntityDraft]
     concept_links: list[ConceptLinkDraft] = Field(default_factory=list)
 
 
@@ -86,46 +99,52 @@ _ARTIST_HINTS: list[dict] = [
     {
         "match": ("grandma moses",),
         "artist": "Grandma Moses",
-        "title": None,
-        "concepts": ["folk art", "American scenes"],
-        "themes": ["nighttime", "baseball"],
+        "themes": ["folk art", "American scenes"],
     },
     {
         "match": ("thomas moran", "moran"),
         "artist": "Thomas Moran",
-        "title": None,
-        "concepts": ["Manifest Destiny", "Hudson River School"],
         "themes": ["western landscape"],
+        "related": ["Manifest Destiny"],
     },
     {
         "match": ("sanford biggers", "biggers"),
         "artist": "Sanford Biggers",
-        "concepts": ["liberty", "Brooklyn Waterfront"],
         "themes": ["contemporary sculpture"],
     },
     {
         "match": ("alexis rockman", "rockman"),
         "artist": "Alexis Rockman",
-        "concepts": ["Manifest Destiny", "ecological futures"],
         "themes": ["apocalyptic landscape"],
+        "related": ["Manifest Destiny"],
     },
     {
         "match": ("sam gilliam", "gilliam"),
         "artist": "Sam Gilliam",
-        "title": None,
-        "concepts": ["Color Field", "draped canvas"],
         "themes": ["abstraction", "installation"],
     },
     {
         "match": ("leonardo drew", "drew"),
         "artist": "Leonardo Drew",
-        "title": None,
-        "concepts": ["found objects", "materiality"],
         "themes": ["assemblage"],
     },
 ]
 
-_CONCEPT_KEYWORDS = ("manifest destiny", "found objects", "draped canvas", "brooklyn waterfront")
+_TYPED_KEYWORDS: list[tuple[str, CulturalEntityType, str | None]] = [
+    ("manifest destiny", CulturalEntityType.political_idea, "Manifest Destiny"),
+    ("wpa", CulturalEntityType.historical_event, "WPA"),
+    ("works progress administration", CulturalEntityType.historical_event, "WPA"),
+    ("gesso", CulturalEntityType.material, "Gesso"),
+    ("unprimed canvas", CulturalEntityType.technique, "Unprimed canvas"),
+    ("dc color school", CulturalEntityType.movement, "DC Color School"),
+    ("color school", CulturalEntityType.movement, "DC Color School"),
+    ("clenched fist", CulturalEntityType.symbol, "Clenched fist"),
+    ("lincoln gallery", CulturalEntityType.museum_space, "Lincoln Gallery"),
+    ("found object", CulturalEntityType.material, "Found objects"),
+    ("found objects", CulturalEntityType.concept, "Found objects"),
+    ("draped canvas", CulturalEntityType.technique, "Draped canvas"),
+    ("brooklyn waterfront", CulturalEntityType.concept, "Brooklyn Waterfront"),
+]
 
 
 def _default_visit_date(request: MuseumNotesImportRequest) -> str:
@@ -167,63 +186,30 @@ def _match_artist_hint(block: str) -> dict | None:
     return None
 
 
-def _merge_parsed_with_hint(
-    block: str,
-    parsed: ParsedArtworkFields,
-    hint: dict | None,
-) -> ArtworkImportDraft:
-    artist = parsed.artist or (hint["artist"] if hint else None)
-    title = parsed.title
-    period_or_year = parsed.period_or_year
-    medium = parsed.medium
-    concepts = _concepts_from_block(block, hint)
-    themes = _themes_from_block(block, hint)
-
-    if parsed.concept_heading and parsed.concept_heading not in concepts:
-        concepts.insert(0, parsed.concept_heading)
-
-    display_label = parsed.display_label
-    if not display_label:
-        if title:
-            display_label = title
-        elif artist:
-            display_label = artist
-        elif parsed.descriptive_label:
-            display_label = parsed.descriptive_label
-
-    return ArtworkImportDraft(
-        title=title,
-        artist=artist,
-        period_or_year=period_or_year,
-        medium=medium,
-        display_label=display_label,
-        notes=block,
-        themes=themes,
-        concepts=concepts,
-        suggested_annotations=_suggested_annotations_for_block(block, concepts),
-    )
-
-
-def _themes_from_block(block: str, hint: dict | None) -> list[str]:
-    themes = list(hint.get("themes", [])) if hint else []
-    for keyword in _CONCEPT_KEYWORDS:
-        if keyword in block.lower() and keyword.title() not in themes:
-            themes.append(keyword.title())
-    return themes
-
-
-def _concepts_from_block(block: str, hint: dict | None) -> list[str]:
-    concepts = list(hint.get("concepts", [])) if hint else []
+def _match_typed_keyword(block: str) -> tuple[CulturalEntityType, str] | None:
     lowered = block.lower()
-    if "manifest destiny" in lowered and "Manifest Destiny" not in concepts:
-        concepts.append("Manifest Destiny")
-    if "found object" in lowered and "found objects" not in [c.lower() for c in concepts]:
-        concepts.append("found objects")
-    if "draped canvas" in lowered and "draped canvas" not in [c.lower() for c in concepts]:
-        concepts.append("draped canvas")
-    if "brooklyn waterfront" in lowered and "Brooklyn Waterfront" not in concepts:
-        concepts.append("Brooklyn Waterfront")
-    return concepts
+    for keyword, entity_type, name in _TYPED_KEYWORDS:
+        if keyword in lowered:
+            return entity_type, name
+    return None
+
+
+def _split_compound_block(block: str) -> list[str]:
+    if " and " not in block.lower():
+        return [block]
+
+    parts = re.split(r"\s+and\s+", block, maxsplit=1, flags=re.IGNORECASE)
+    if len(parts) != 2:
+        return [block]
+
+    left, right = parts[0].strip(), parts[1].strip()
+    if not left or not right:
+        return [block]
+
+    right_match = _match_typed_keyword(right) or _match_typed_keyword(f"x {right}")
+    if right_match or len(right.split()) <= 4:
+        return [left, right]
+    return [block]
 
 
 def _suggested_annotations_for_block(block: str, concepts: list[str]) -> list[SuggestedAnnotationDraft]:
@@ -251,21 +237,157 @@ def _suggested_annotations_for_block(block: str, concepts: list[str]) -> list[Su
     return annotations[:3]
 
 
-def _concept_links_from_artworks(artworks: list[ArtworkImportDraft]) -> list[ConceptLinkDraft]:
+def _build_artwork_entity(
+    block: str,
+    parsed: ParsedArtworkFields,
+    hint: dict | None,
+) -> ImportedEntityDraft:
+    artist = parsed.artist or (hint["artist"] if hint else None)
+    title = parsed.title
+    concepts = list(hint.get("related", [])) if hint else []
+    for keyword, _, name in _TYPED_KEYWORDS:
+        if keyword in block.lower() and name and name not in concepts:
+            concepts.append(name)
+
+    display_label = parsed.display_label or title or artist or parsed.descriptive_label or block[:80]
+    name = title or display_label or artist or block[:80]
+
+    return ImportedEntityDraft(
+        entity_type=CulturalEntityType.artwork,
+        name=name,
+        description=block,
+        related_entities=[artist] if artist else [],
+        title=title,
+        artist=artist,
+        period_or_year=parsed.period_or_year,
+        medium=parsed.medium,
+        display_label=display_label,
+        themes=list(hint.get("themes", [])) if hint else [],
+        concepts=concepts,
+        suggested_annotations=_suggested_annotations_for_block(block, concepts),
+        uncertainty="Title not explicit in notes." if not title and artist else None,
+    )
+
+
+def _build_artist_entity(block: str, artist: str, hint: dict | None) -> ImportedEntityDraft:
+    related = list(hint.get("related", [])) if hint else []
+    return ImportedEntityDraft(
+        entity_type=CulturalEntityType.artist,
+        name=artist,
+        description=block,
+        related_entities=related,
+        themes=list(hint.get("themes", [])) if hint else [],
+    )
+
+
+def _build_typed_entity(
+    block: str,
+    entity_type: CulturalEntityType,
+    name: str,
+    related: list[str] | None = None,
+) -> ImportedEntityDraft:
+    return ImportedEntityDraft(
+        entity_type=entity_type,
+        name=name,
+        description=block if block.lower() != name.lower() else None,
+        related_entities=related or [],
+    )
+
+
+def _classify_block(block: str) -> list[ImportedEntityDraft]:
+    hint = _match_artist_hint(block)
+    parsed = parse_artwork_fields(block)
+    typed = _match_typed_keyword(block)
+
+    subblocks = _split_compound_block(block)
+    if len(subblocks) > 1:
+        entities: list[ImportedEntityDraft] = []
+        for subblock in subblocks:
+            entities.extend(_classify_block(subblock))
+        return entities
+
+    if typed:
+        entity_type, name = typed
+        if not parsed.title and (
+            not parsed.artist or parsed.artist.strip().lower() == name.lower()
+        ):
+            related = [hint["artist"]] if hint else []
+            return [_build_typed_entity(block, entity_type, name, related)]
+
+    if parsed.title:
+        return [_build_artwork_entity(block, parsed, hint)]
+
+    if hint:
+        artist = hint["artist"]
+        if parsed.artist and parsed.artist != artist:
+            artist = parsed.artist
+        if len(block.split()) > 6 or any(
+            word in block.lower()
+            for word in ("scene", "canvas", "landscape", "print", "sculpture", "painting")
+        ):
+            return [_build_artwork_entity(block, parsed, hint)]
+        return [_build_artist_entity(block, artist, hint)]
+
+    if parsed.artist:
+        return [_build_artist_entity(block, parsed.artist, None)]
+
+    if typed:
+        entity_type, name = typed
+        return [_build_typed_entity(block, entity_type, name)]
+
+    if len(block.split()) < 4:
+        return []
+
+    return [
+        ImportedEntityDraft(
+            entity_type=CulturalEntityType.concept,
+            name=block[:80],
+            description=block,
+            uncertainty="Could not confidently classify this entry.",
+        )
+    ]
+
+
+def _dedupe_entities(entities: list[ImportedEntityDraft]) -> list[ImportedEntityDraft]:
+    seen: set[tuple[str, str]] = set()
+    unique: list[ImportedEntityDraft] = []
+    for entity in entities:
+        key = (entity.entity_type.value, entity.name.strip().lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(entity)
+    return unique
+
+
+def _concept_links_from_entities(entities: list[ImportedEntityDraft]) -> list[ConceptLinkDraft]:
     links: list[ConceptLinkDraft] = []
     seen: set[tuple[str, str]] = set()
 
-    for artwork in artworks:
-        source = artwork.artist or artwork.title
-        if not source:
+    for entity in entities:
+        if entity.entity_type == CulturalEntityType.artwork:
+            source = entity.artist or entity.title or entity.name
+            targets = [
+                *entity.concepts,
+                *entity.movements,
+                *entity.historical_events,
+                *entity.related_entities,
+            ]
+            for target in targets:
+                key = (source, target)
+                if not source or key in seen:
+                    continue
+                seen.add(key)
+                links.append(ConceptLinkDraft(source=source, target=target, relationship="context"))
             continue
-        for concept in artwork.concepts:
-            key = (source, concept)
+
+        for related in entity.related_entities:
+            key = (entity.name, related)
             if key in seen:
                 continue
             seen.add(key)
             links.append(
-                ConceptLinkDraft(source=source, target=concept, relationship="context")
+                ConceptLinkDraft(source=entity.name, target=related, relationship="related")
             )
 
     return links
@@ -274,38 +396,38 @@ def _concept_links_from_artworks(artworks: list[ArtworkImportDraft]) -> list[Con
 class MockMuseumNotesImportProvider:
     async def extract(self, request: MuseumNotesImportRequest) -> MuseumNotesImportResponse:
         blocks = _split_note_blocks(request.text)
-        artworks: list[ArtworkImportDraft] = []
+        entities: list[ImportedEntityDraft] = []
 
         for block in blocks:
-            hint = _match_artist_hint(block)
-            parsed = parse_artwork_fields(block)
+            entities.extend(_classify_block(block))
 
-            if not hint and not parsed.artist and len(block.split()) < 4:
-                continue
+        entities = _dedupe_entities(entities)
 
-            artworks.append(_merge_parsed_with_hint(block, parsed, hint))
-
-        if not artworks and request.text.strip():
-            artworks.append(
-                ArtworkImportDraft(
-                    title=None,
-                    artist=None,
-                    notes=request.text.strip(),
+        if not entities and request.text.strip():
+            entities.append(
+                ImportedEntityDraft(
+                    entity_type=CulturalEntityType.concept,
+                    name="Unclassified notes",
+                    description=request.text.strip(),
+                    uncertainty="Review pasted notes and classify individual entries.",
                     suggested_annotations=[
                         SuggestedAnnotationDraft(
                             category=AnnotationCategory.observation,
-                            note="Review pasted notes and identify individual artworks.",
+                            note="Review pasted notes and identify individual cultural entries.",
                         )
                     ],
                 )
             )
 
+        type_counts: dict[str, int] = {}
+        for entity in entities:
+            type_counts[entity.entity_type.value] = type_counts.get(entity.entity_type.value, 0) + 1
+
         summary_parts = [
             f"Imported notebook entries for {request.default_museum}.",
-            f"{len(artworks)} artwork{'s' if len(artworks) != 1 else ''} extracted from pasted notes.",
+            f"{len(entities)} entr{'ies' if len(entities) != 1 else 'y'} extracted across "
+            f"{len(type_counts)} type{'s' if len(type_counts) != 1 else ''}.",
         ]
-        if artworks and artworks[0].concepts:
-            summary_parts.append(f"Themes include {', '.join(artworks[0].concepts[:3])}.")
 
         visit = VisitImportDraft(
             museum_name=request.default_museum,
@@ -314,11 +436,11 @@ class MockMuseumNotesImportProvider:
             summary=" ".join(summary_parts),
         )
 
-        concept_links = _concept_links_from_artworks(artworks)
+        concept_links = _concept_links_from_entities(entities)
 
         return MuseumNotesImportResponse(
             visit=visit,
-            artworks=artworks,
+            entities=entities,
             concept_links=concept_links,
             source="mock",
         )
@@ -397,7 +519,7 @@ class ClaudeMuseumNotesImportProvider:
 
         return MuseumNotesImportResponse(
             visit=parsed.visit,
-            artworks=parsed.artworks,
+            entities=parsed.entities,
             concept_links=parsed.concept_links,
             source="claude",
         )

@@ -98,6 +98,37 @@ export interface SuggestedAnnotationDraft {
   note: string;
 }
 
+export type CulturalEntityType =
+  | "artwork"
+  | "artist"
+  | "concept"
+  | "movement"
+  | "technique"
+  | "material"
+  | "historical_event"
+  | "symbol"
+  | "architecture"
+  | "museum_space"
+  | "political_idea";
+
+export interface ImportedEntityDraft {
+  entity_type: CulturalEntityType;
+  name: string;
+  description: string | null;
+  related_entities: string[];
+  uncertainty: string | null;
+  title: string | null;
+  artist: string | null;
+  period_or_year: string | null;
+  medium: string | null;
+  display_label: string | null;
+  themes: string[];
+  concepts: string[];
+  movements: string[];
+  historical_events: string[];
+  suggested_annotations: SuggestedAnnotationDraft[];
+}
+
 export interface ArtworkImportDraft {
   title: string | null;
   artist: string | null;
@@ -125,7 +156,7 @@ export interface ConceptLinkDraft {
 
 export interface MuseumNotesImportResponse {
   visit: VisitImportDraft;
-  artworks: ArtworkImportDraft[];
+  entities: ImportedEntityDraft[];
   concept_links: ConceptLinkDraft[];
   source: string;
 }
