@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, MapPin, Plus } from "lucide-react";
+import { FileInput, Home, MapPin } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const tabs = [
   { href: "/", label: "Home", icon: Home },
   { href: "/visits", label: "Visits", icon: MapPin },
-  { href: "/visits?new=1", label: "Add", icon: Plus },
+  { href: "/import", label: "Import", icon: FileInput },
 ];
 
 export function MobileBottomNav() {
@@ -30,9 +30,11 @@ export function MobileBottomNav() {
           const active =
             tab.href === "/"
               ? pathname === "/"
-              : tab.href.startsWith("/visits")
-                ? pathname.startsWith("/visits")
-                : false;
+              : tab.href === "/import"
+                ? pathname.startsWith("/import")
+                : tab.href.startsWith("/visits")
+                  ? pathname.startsWith("/visits")
+                  : false;
           const Icon = tab.icon;
 
           return (

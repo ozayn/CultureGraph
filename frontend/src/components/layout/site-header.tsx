@@ -35,6 +35,12 @@ export function SiteHeader() {
           >
             Visits
           </Link>
+          <Link
+            href="/import"
+            className="min-h-11 py-2 text-muted-foreground hover:text-foreground"
+          >
+            Import
+          </Link>
         </nav>
       </div>
       <Separator className="hidden md:block" />

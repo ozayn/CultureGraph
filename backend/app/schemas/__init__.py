@@ -145,3 +145,46 @@ class ResearchNoteRead(BaseModel):
     related_questions: str
     suggested_annotations: str
     created_at: datetime
+
+
+class SuggestedAnnotationDraft(BaseModel):
+    category: AnnotationCategory
+    note: str = Field(min_length=1)
+
+
+class ArtworkImportDraft(BaseModel):
+    title: str | None = None
+    artist: str | None = None
+    period_or_year: str | None = None
+    medium: str | None = None
+    notes: str | None = None
+    themes: list[str] = Field(default_factory=list)
+    concepts: list[str] = Field(default_factory=list)
+    suggested_annotations: list[SuggestedAnnotationDraft] = Field(default_factory=list)
+
+
+class VisitImportDraft(BaseModel):
+    museum_name: str
+    city: str
+    visit_date: str
+    summary: str
+
+
+class ConceptLinkDraft(BaseModel):
+    source: str
+    target: str
+    relationship: str
+
+
+class MuseumNotesImportRequest(BaseModel):
+    text: str = Field(min_length=1)
+    default_museum: str = Field(default="Smithsonian American Art Museum", min_length=1)
+    default_city: str = Field(default="Washington, DC", min_length=1)
+    visit_date: date | None = None
+
+
+class MuseumNotesImportResponse(BaseModel):
+    visit: VisitImportDraft
+    artworks: list[ArtworkImportDraft]
+    concept_links: list[ConceptLinkDraft] = Field(default_factory=list)
+    source: str = "mock"

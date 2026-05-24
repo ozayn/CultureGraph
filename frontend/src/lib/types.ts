@@ -68,3 +68,39 @@ export const CATEGORY_LABELS: Record<AnnotationCategory, string> = {
   question: "Question",
   composition: "Composition",
 };
+
+export interface SuggestedAnnotationDraft {
+  category: AnnotationCategory;
+  note: string;
+}
+
+export interface ArtworkImportDraft {
+  title: string | null;
+  artist: string | null;
+  period_or_year: string | null;
+  medium: string | null;
+  notes: string | null;
+  themes: string[];
+  concepts: string[];
+  suggested_annotations: SuggestedAnnotationDraft[];
+}
+
+export interface VisitImportDraft {
+  museum_name: string;
+  city: string;
+  visit_date: string;
+  summary: string;
+}
+
+export interface ConceptLinkDraft {
+  source: string;
+  target: string;
+  relationship: string;
+}
+
+export interface MuseumNotesImportResponse {
+  visit: VisitImportDraft;
+  artworks: ArtworkImportDraft[];
+  concept_links: ConceptLinkDraft[];
+  source: string;
+}
