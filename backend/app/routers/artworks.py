@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import require_admin_user
@@ -11,7 +11,16 @@ from app.auth.dependencies import require_admin_user
 from app.config import settings
 from app.database import get_db
 from app.models import Artwork, Visit
-from app.schemas import ArtworkCreate, ArtworkRead, ArtworkUpdate
+from app.schemas import (
+    ArtworkCreate,
+    ArtworkLookupCandidateRead,
+    ArtworkLookupResponse,
+    ArtworkRead,
+    ArtworkUpdate,
+)
+from app.services.artwork_lookup import lookup_artwork_candidates
+from app.sources.base import ArtworkLookupQuery
+from app.sources.nga import NGA_SOURCE_NAME, is_nga_museum, should_search_nga
 
 router = APIRouter(prefix="/artworks", tags=["artworks"])
 
@@ -50,6 +59,35 @@ def create_artwork(
 @router.get("/{artwork_id}", response_model=ArtworkRead)
 def get_artwork(artwork_id: int, db: Session = Depends(get_db)) -> Artwork:
     return _get_artwork_or_404(db, artwork_id)
+
+
+@router.get("/{artwork_id}/lookup-image", response_model=ArtworkLookupResponse)
+def lookup_artwork_image(
+    artwork_id: int,
+    db: Session = Depends(get_db),
+    source: str | None = Query(default=None, description="Explicit source, e.g. nga"),
+) -> ArtworkLookupResponse:
+    artwork = _get_artwork_or_404(db, artwork_id)
+    museum_name = artwork.visit.museum_name if artwork.visit else None
+
+    if source is None and museum_name and not is_nga_museum(museum_name):
+        return ArtworkLookupResponse(candidates=[], sources_searched=[])
+
+    query = ArtworkLookupQuery(
+        title=artwork.title,
+        artist=artwork.artist,
+        museum_name=museum_name,
+        year_period=artwork.year_period,
+        notes=artwork.personal_notes,
+        source=source,
+    )
+    candidates = lookup_artwork_candidates(query)
+    sources_searched = [NGA_SOURCE_NAME] if should_search_nga(query) else []
+
+    return ArtworkLookupResponse(
+        candidates=[ArtworkLookupCandidateRead.model_validate(item) for item in candidates],
+        sources_searched=sources_searched,
+    )
 
 
 @router.put("/{artwork_id}", response_model=ArtworkRead)

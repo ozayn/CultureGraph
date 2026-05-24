@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Camera, MapPin, Pencil, Sparkles } from "lucide-react";
 import { useRef, useState } from "react";
 
+import { ArtworkImageLookupPanel } from "@/components/artworks/artwork-image-lookup-panel";
 import { ResearchPanel } from "@/components/artworks/research-panel";
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Badge } from "@/components/ui/badge";
@@ -25,12 +26,14 @@ interface ArtworkDetailClientProps {
   artwork: Artwork;
   annotations: Annotation[];
   imageSrc: string | null;
+  museumName: string | null;
 }
 
 export function ArtworkDetailClient({
   artwork: initialArtwork,
   annotations: initialAnnotations,
   imageSrc: initialImageSrc,
+  museumName,
 }: ArtworkDetailClientProps) {
   const router = useRouter();
   const { canEdit } = useAuth();
@@ -112,6 +115,19 @@ export function ArtworkDetailClient({
         )}
       </section>
 
+      {!imageSrc && canEdit ? (
+        <ArtworkImageLookupPanel
+          artwork={artwork}
+          museumName={museumName}
+          canEdit={canEdit}
+          onApplied={(updated) => {
+            setArtwork(updated);
+            setImageSrc(mediaUrl(updated.image_url));
+            router.refresh();
+          }}
+        />
+      ) : null}
+
       <section className="space-y-3 px-4 sm:px-0">
         <p className="text-sm text-muted-foreground">
           {[artwork.museum_gallery, artwork.medium].filter(Boolean).join(" · ")}
@@ -122,6 +138,27 @@ export function ArtworkDetailClient({
         <p className="text-base text-muted-foreground">
           {[artwork.artist, artwork.year_period].filter(Boolean).join(" · ")}
         </p>
+        {artwork.catalog_source ? (
+          <p className="text-xs text-muted-foreground">
+            Image via {artwork.catalog_source}
+            {artwork.catalog_accession_number
+              ? ` · ${artwork.catalog_accession_number}`
+              : null}
+            {artwork.catalog_object_url ? (
+              <>
+                {" · "}
+                <a
+                  href={artwork.catalog_object_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline-offset-2 hover:underline"
+                >
+                  Collection record
+                </a>
+              </>
+            ) : null}
+          </p>
+        ) : null}
       </section>
 
       {canEdit ? (

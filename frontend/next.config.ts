@@ -23,7 +23,14 @@ function apiImageRemotePattern() {
 
 const nextConfig: NextConfig = {
   images: {
-    remotePatterns: [apiImageRemotePattern()],
+    remotePatterns: [
+      apiImageRemotePattern(),
+      {
+        protocol: "https",
+        hostname: "api.nga.gov",
+        pathname: "/**",
+      },
+    ],
   },
 };
 

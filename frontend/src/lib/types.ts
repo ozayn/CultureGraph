@@ -31,8 +31,32 @@ export interface Artwork {
   medium: string | null;
   museum_gallery: string | null;
   image_url: string | null;
+  catalog_source: string | null;
+  catalog_object_url: string | null;
+  catalog_accession_number: string | null;
+  catalog_rights_label: string | null;
   personal_notes: string | null;
   created_at: string;
+}
+
+export interface ArtworkLookupCandidate {
+  title: string;
+  artist: string | null;
+  date: string | null;
+  medium: string | null;
+  image_url: string | null;
+  object_url: string | null;
+  accession_number: string | null;
+  source_name: string;
+  confidence: number;
+  rights_label: string | null;
+  external_id: string | null;
+}
+
+export interface ArtworkLookupResponse {
+  candidates: ArtworkLookupCandidate[];
+  sources_searched: string[];
+  disclaimer: string;
 }
 
 export interface Annotation {

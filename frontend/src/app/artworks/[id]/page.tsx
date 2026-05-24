@@ -14,12 +14,17 @@ export default async function ArtworkDetailPage({
 
   let artwork: Artwork;
   let annotations: Annotation[] = [];
+  let museumName: string | null = null;
 
   try {
     artwork = await api.get<Artwork>(`/api/artworks/${artworkId}`);
     annotations = await api.get<Annotation[]>(
       `/api/artworks/${artworkId}/annotations`
     );
+    if (artwork.visit_id) {
+      const visit = await api.get<{ museum_name: string }>(`/api/visits/${artwork.visit_id}`);
+      museumName = visit.museum_name;
+    }
   } catch {
     notFound();
   }
@@ -29,6 +34,7 @@ export default async function ArtworkDetailPage({
       artwork={artwork}
       annotations={annotations}
       imageSrc={mediaUrl(artwork.image_url)}
+      museumName={museumName}
     />
   );
 }

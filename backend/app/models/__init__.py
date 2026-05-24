@@ -41,6 +41,10 @@ class Artwork(Base):
     medium: Mapped[str | None] = mapped_column(String(255))
     museum_gallery: Mapped[str | None] = mapped_column(String(255))
     image_url: Mapped[str | None] = mapped_column(String(512))
+    catalog_source: Mapped[str | None] = mapped_column(String(128))
+    catalog_object_url: Mapped[str | None] = mapped_column(String(512))
+    catalog_accession_number: Mapped[str | None] = mapped_column(String(64))
+    catalog_rights_label: Mapped[str | None] = mapped_column(String(255))
     personal_notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

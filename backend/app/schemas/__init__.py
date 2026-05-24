@@ -52,6 +52,10 @@ class ArtworkBase(BaseModel):
     medium: str | None = None
     museum_gallery: str | None = None
     image_url: str | None = None
+    catalog_source: str | None = None
+    catalog_object_url: str | None = None
+    catalog_accession_number: str | None = None
+    catalog_rights_label: str | None = None
     personal_notes: str | None = None
     visit_id: int | None = None
 
@@ -67,6 +71,10 @@ class ArtworkUpdate(BaseModel):
     medium: str | None = None
     museum_gallery: str | None = None
     image_url: str | None = None
+    catalog_source: str | None = None
+    catalog_object_url: str | None = None
+    catalog_accession_number: str | None = None
+    catalog_rights_label: str | None = None
     personal_notes: str | None = None
     visit_id: int | None = None
 
@@ -205,3 +213,26 @@ class AuthTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: AuthUserRead
+
+
+class ArtworkLookupCandidateRead(BaseModel):
+    title: str
+    artist: str | None = None
+    date: str | None = None
+    medium: str | None = None
+    image_url: str | None = None
+    object_url: str | None = None
+    accession_number: str | None = None
+    source_name: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    rights_label: str | None = None
+    external_id: str | None = None
+
+
+class ArtworkLookupResponse(BaseModel):
+    candidates: list[ArtworkLookupCandidateRead]
+    sources_searched: list[str]
+    disclaimer: str = (
+        "Matches are suggestions from open museum collection data. "
+        "Review title, artist, and image before applying."
+    )
