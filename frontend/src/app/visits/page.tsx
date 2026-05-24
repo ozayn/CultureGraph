@@ -9,12 +9,15 @@ export default async function VisitsPage({
 }) {
   const params = await searchParams;
   let visits: Visit[] = [];
+  let error: string | null = null;
 
   try {
     visits = await api.get<Visit[]>("/api/visits");
-  } catch {
-    visits = [];
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Unable to reach the API.";
   }
 
-  return <VisitsPageClient visits={visits} showForm={params.new === "1"} />;
+  return (
+    <VisitsPageClient visits={visits} showForm={params.new === "1"} error={error} />
+  );
 }

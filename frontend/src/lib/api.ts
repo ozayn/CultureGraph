@@ -1,4 +1,23 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const DEFAULT_API_BASE = "http://localhost:8000";
+
+function normalizeApiBase(raw: string | undefined): string {
+  const value = raw?.trim();
+  if (!value) return DEFAULT_API_BASE;
+
+  if (!/^https?:\/\//i.test(value)) {
+    throw new Error(
+      "NEXT_PUBLIC_API_URL must include http:// or https:// (e.g. https://your-api.up.railway.app)."
+    );
+  }
+
+  return value.replace(/\/+$/, "");
+}
+
+const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
+
+export function getApiBase(): string {
+  return API_BASE;
+}
 
 export function apiUrl(path: string): string {
   return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
@@ -27,6 +46,12 @@ async function request<T>(
 
   if (!response.ok) {
     const detail = await response.text();
+    const trimmed = detail.trimStart();
+    if (trimmed.startsWith("<!DOCTYPE") || trimmed.startsWith("<html")) {
+      throw new Error(
+        `API returned HTML (status ${response.status}). Check NEXT_PUBLIC_API_URL — it must point to the CultureGraph API service, not the web app.`
+      );
+    }
     throw new Error(detail || `Request failed: ${response.status}`);
   }
 

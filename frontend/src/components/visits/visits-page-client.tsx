@@ -9,9 +9,10 @@ import type { Visit } from "@/lib/types";
 interface VisitsPageClientProps {
   visits: Visit[];
   showForm?: boolean;
+  error?: string | null;
 }
 
-export function VisitsPageClient({ visits, showForm }: VisitsPageClientProps) {
+export function VisitsPageClient({ visits, showForm, error }: VisitsPageClientProps) {
   return (
     <div className="space-y-8 sm:space-y-10">
       <section className="space-y-2">
@@ -30,7 +31,11 @@ export function VisitsPageClient({ visits, showForm }: VisitsPageClientProps) {
 
       <section className="space-y-3">
         <h3 className="font-heading text-xl">All visits</h3>
-        {visits.length === 0 ? (
+        {error ? (
+          <p className="rounded-xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
+            {error} Check <code>NEXT_PUBLIC_API_URL</code> and that the API is running.
+          </p>
+        ) : visits.length === 0 ? (
           <p className="text-muted-foreground">No visits recorded yet.</p>
         ) : (
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
