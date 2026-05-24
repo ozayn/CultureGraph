@@ -1,19 +1,45 @@
 "use client";
 
-import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 
+import { useGoogleIdentity } from "@/contexts/google-identity-context";
 import { useAuth } from "@/contexts/auth-context";
+import { renderGoogleSignInButton } from "@/lib/google-identity";
 import { cn } from "@/lib/utils";
 
 interface GoogleSignInButtonProps {
   className?: string;
 }
 
+function GoogleSignInButtonInner({ className }: GoogleSignInButtonProps) {
+  const { ready, error: initError } = useGoogleIdentity();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!ready || !containerRef.current) return;
+
+    renderGoogleSignInButton(containerRef.current, {
+      theme: "outline",
+      size: "large",
+      text: "signin_with",
+      shape: "rectangular",
+      width: 280,
+    });
+  }, [ready]);
+
+  return (
+    <div className={cn("space-y-2", className)}>
+      <div ref={containerRef} className="min-h-11" aria-label="Sign in with Google" />
+      {!ready && !initError ? (
+        <p className="text-sm text-muted-foreground">Loading Google sign-in…</p>
+      ) : null}
+      {initError ? <p className="text-sm text-destructive">{initError}</p> : null}
+    </div>
+  );
+}
+
 export function GoogleSignInButton({ className }: GoogleSignInButtonProps) {
-  const { googleConfigured, signInWithGoogleToken } = useAuth();
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { googleConfigured } = useAuth();
 
   if (!googleConfigured) {
     return (
@@ -23,36 +49,5 @@ export function GoogleSignInButton({ className }: GoogleSignInButtonProps) {
     );
   }
 
-  async function handleSuccess(response: CredentialResponse) {
-    if (!response.credential) {
-      setError("Google did not return a sign-in token.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      await signInWithGoogleToken(response.credential);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not sign in.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className={cn("space-y-2", className)}>
-      <GoogleLogin
-        onSuccess={(response) => void handleSuccess(response)}
-        onError={() => setError("Google sign-in failed.")}
-        theme="outline"
-        size="large"
-        shape="rectangular"
-        text="signin_with"
-        width="280"
-      />
-      {loading ? <p className="text-sm text-muted-foreground">Signing in…</p> : null}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-    </div>
-  );
+  return <GoogleSignInButtonInner className={className} />;
 }
