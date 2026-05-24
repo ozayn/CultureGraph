@@ -149,7 +149,14 @@ export function ImportPageClient() {
       setVisitDate(result.visit.visit_date);
       setStep("review");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not extract entries.");
+      const message = e instanceof Error ? e.message : "Could not extract entries.";
+      if (message.includes("unexpected shape") || message.includes("could not be parsed")) {
+        setError(
+          "AI extraction returned an unexpected shape. Try again or use local fallback."
+        );
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }

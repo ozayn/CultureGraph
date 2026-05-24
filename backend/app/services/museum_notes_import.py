@@ -1,5 +1,6 @@
 import re
 from datetime import date
+import logging
 from typing import Protocol
 
 from anthropic import (
@@ -24,12 +25,24 @@ from app.schemas import (
     VisitImportDraft,
 )
 from app.services.artwork_note_parser import ParsedArtworkFields, parse_artwork_fields
-from app.services.claude_json import JsonExtractionError, extract_json_object, sanitize_response_preview
+from app.services.claude_json import JsonExtractionError, extract_json_object
+from app.services.import_normalize import (
+    ImportNormalizationError,
+    log_import_validation_failure,
+    normalize_import_result,
+    summarize_validation_failure,
+    validate_normalized_import,
+)
 from app.services.research import ResearchConfigurationError, ResearchProviderError
+
+logger = logging.getLogger(__name__)
 
 IMPORT_TOOL_NAME = "submit_museum_notes_import"
 IMPORT_FALLBACK_WARNING = (
     "Claude response could not be parsed; used local fallback extraction."
+)
+IMPORT_SCHEMA_MISMATCH_MESSAGE = (
+    "AI extraction returned an unexpected shape. Try again or use local fallback."
 )
 
 IMPORT_TOOL_SCHEMA: dict = {
@@ -121,7 +134,7 @@ IMPORT_TOOL_SCHEMA: dict = {
             },
         },
     },
-    "required": ["visit", "entities", "concept_links"],
+    "required": ["visit", "entities"],
 }
 
 IMPORT_JSON_SCHEMA_PROMPT = """\
@@ -186,6 +199,15 @@ class _ClaudeImportPayload(BaseModel):
     visit: VisitImportDraft
     entities: list[ImportedEntityDraft]
     concept_links: list[ConceptLinkDraft] = Field(default_factory=list)
+
+
+def _visit_defaults(request: MuseumNotesImportRequest) -> dict[str, str]:
+    return {
+        "museum_name": request.default_museum,
+        "city": request.default_city,
+        "visit_date": _default_visit_date(request),
+        "summary": f"Imported notebook entries for {request.default_museum}.",
+    }
 
 
 class MuseumNotesImportProvider(Protocol):
@@ -546,18 +568,48 @@ class MockMuseumNotesImportProvider:
 
 def _read_claude_import_payload(message: object) -> dict:
     content = getattr(message, "content", [])
+    block_types = [getattr(block, "type", None) for block in content]
+
     for block in content:
-        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == IMPORT_TOOL_NAME:
-            payload = getattr(block, "input", None)
-            if isinstance(payload, dict):
-                return payload
-            raise JsonExtractionError("Claude tool response was not a JSON object.")
+        block_type = getattr(block, "type", None)
+        if block_type != "tool_use":
+            continue
+
+        tool_name = getattr(block, "name", None)
+        if tool_name and tool_name != IMPORT_TOOL_NAME:
+            continue
+
+        payload = getattr(block, "input", None)
+        if isinstance(payload, dict):
+            logger.info(
+                "Claude import tool_use received: name=%s keys=%s",
+                tool_name,
+                sorted(payload.keys()),
+            )
+            return payload
+
+        raise JsonExtractionError("Claude tool response was not a JSON object.")
 
     text_blocks = [block.text for block in content if getattr(block, "type", None) == "text"]
     if text_blocks:
         return extract_json_object(text_blocks[0])
 
-    raise JsonExtractionError("Claude returned an empty response.")
+    raise JsonExtractionError(
+        f"Claude returned no usable import payload. content_types={block_types}"
+    )
+
+
+def _parse_claude_import_payload(
+    payload: dict,
+    request: MuseumNotesImportRequest,
+) -> _ClaudeImportPayload:
+    normalized = normalize_import_result(payload, visit_defaults=_visit_defaults(request))
+    draft = validate_normalized_import(normalized)
+    return _ClaudeImportPayload(
+        visit=draft.visit,
+        entities=draft.entities,
+        concept_links=draft.concept_links,
+    )
 
 
 async def _fallback_to_mock_import(request: MuseumNotesImportRequest) -> MuseumNotesImportResponse:
@@ -639,27 +691,19 @@ class ClaudeMuseumNotesImportProvider:
                 f"Anthropic API error ({exc.status_code}): {exc.message}"
             ) from exc
 
+        payload: dict | None = None
         try:
             payload = _read_claude_import_payload(message)
-            parsed = _ClaudeImportPayload.model_validate(payload)
-        except (JsonExtractionError, ValidationError) as exc:
-            preview = sanitize_response_preview(
-                "".join(
-                    block.text
-                    for block in message.content
-                    if getattr(block, "type", None) == "text"
-                )
-            )
+            parsed = _parse_claude_import_payload(payload, request)
+        except (JsonExtractionError, ImportNormalizationError, ValidationError) as exc:
+            log_import_validation_failure(payload, exc)
             if settings.is_production:
                 return await _fallback_to_mock_import(request)
 
-            if isinstance(exc, ValidationError):
-                raise ResearchProviderError(
-                    "Claude response did not match the expected museum notes import schema. "
-                    f"Preview: {preview or '[tool response]'}"
-                ) from exc
-
-            raise ResearchProviderError(f"{exc} Preview: {preview or '[tool response]'}") from exc
+            summary = summarize_validation_failure(payload, exc)
+            raise ResearchProviderError(
+                f"{IMPORT_SCHEMA_MISMATCH_MESSAGE} ({summary})"
+            ) from exc
 
         return MuseumNotesImportResponse(
             visit=parsed.visit,
