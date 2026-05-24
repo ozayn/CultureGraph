@@ -46,7 +46,10 @@ async def test_mock_import_extracts_structured_draft() -> None:
 
 
 @pytest.mark.asyncio
-async def test_import_endpoint_returns_structured_draft(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_import_endpoint_returns_structured_draft(
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
     monkeypatch.setattr(
         import_notes,
         "get_museum_notes_import_provider",
@@ -57,6 +60,7 @@ async def test_import_endpoint_returns_structured_draft(monkeypatch: pytest.Monk
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             "/api/import/museum-notes",
+            headers=auth_headers,
             json={
                 "text": SAMPLE_NOTES,
                 "default_museum": "Smithsonian American Art Museum",

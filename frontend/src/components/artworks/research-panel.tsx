@@ -2,16 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { ResearchDraft } from "@/lib/types";
 
 interface ResearchPanelProps {
   artworkId: number;
+  canEdit?: boolean;
   onReady?: (generate: () => Promise<void>) => void;
 }
 
-export function ResearchPanel({ artworkId, onReady }: ResearchPanelProps) {
+export function ResearchPanel({ artworkId, canEdit = true, onReady }: ResearchPanelProps) {
   const [draft, setDraft] = useState<ResearchDraft | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export function ResearchPanel({ artworkId, onReady }: ResearchPanelProps) {
         </div>
         <Button
           onClick={() => void generateDraft()}
-          disabled={loading}
+          disabled={loading || !canEdit}
           variant="outline"
           size="touch"
           className="w-full sm:w-auto"
@@ -54,6 +56,8 @@ export function ResearchPanel({ artworkId, onReady }: ResearchPanelProps) {
           {loading ? "Generating…" : "Research with AI"}
         </Button>
       </div>
+
+      {!canEdit ? <SignInPrompt compact className="mt-2" /> : null}
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 

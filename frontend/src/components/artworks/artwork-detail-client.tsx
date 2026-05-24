@@ -6,6 +6,7 @@ import { Camera, MapPin, Pencil, Sparkles } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { ResearchPanel } from "@/components/artworks/research-panel";
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Badge } from "@/components/ui/badge";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { ButtonLink } from "@/components/ui/button-link";
@@ -13,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { CameraUpload } from "@/components/ui/camera-upload";
 import { Textarea } from "@/components/ui/textarea";
 import { api, mediaUrl } from "@/lib/api";
+import { useAuth } from "@/contexts/auth-context";
 import {
   CATEGORY_LABELS,
   type Annotation,
@@ -31,6 +33,7 @@ export function ArtworkDetailClient({
   imageSrc: initialImageSrc,
 }: ArtworkDetailClientProps) {
   const router = useRouter();
+  const { canEdit } = useAuth();
   const researchRef = useRef<HTMLDivElement>(null);
   const generateResearchRef = useRef<(() => Promise<void>) | null>(null);
   const [artwork, setArtwork] = useState(initialArtwork);
@@ -121,36 +124,49 @@ export function ArtworkDetailClient({
         </p>
       </section>
 
-      <div className="hidden flex-wrap gap-2 px-4 sm:px-0 md:flex">
-        <Button size="touch" variant="outline" onClick={() => setNoteOpen(true)}>
-          Add note
-        </Button>
-        <ButtonLink href={`/artworks/${artwork.id}/annotate`} variant="outline">
-          Add annotation
-        </ButtonLink>
-        <Button size="touch" variant="outline" onClick={() => setPhotoOpen(true)}>
-          Add photo
-        </Button>
-        <Button size="touch" variant="outline" onClick={triggerResearch}>
-          Research with AI
-        </Button>
-      </div>
+      {canEdit ? (
+        <div className="hidden flex-wrap gap-2 px-4 sm:px-0 md:flex">
+          <Button size="touch" variant="outline" onClick={() => setNoteOpen(true)}>
+            Add note
+          </Button>
+          <ButtonLink href={`/artworks/${artwork.id}/annotate`} variant="outline">
+            Add annotation
+          </ButtonLink>
+          <Button size="touch" variant="outline" onClick={() => setPhotoOpen(true)}>
+            Add photo
+          </Button>
+          <Button size="touch" variant="outline" onClick={triggerResearch}>
+            Research with AI
+          </Button>
+        </div>
+      ) : null}
 
       <section className="px-4 sm:px-0">
-        <button
-          type="button"
-          onClick={() => setNoteOpen(true)}
-          className="w-full rounded-xl border border-border bg-card p-4 text-left transition-colors active:bg-muted/50"
-        >
-          <p className="mb-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-            Personal note
-          </p>
-          <p className="text-base leading-relaxed">
-            {artwork.personal_notes?.trim()
-              ? artwork.personal_notes
-              : "Tap to jot a quick note while you're in the gallery."}
-          </p>
-        </button>
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() => setNoteOpen(true)}
+            className="w-full rounded-xl border border-border bg-card p-4 text-left transition-colors active:bg-muted/50"
+          >
+            <p className="mb-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              Personal note
+            </p>
+            <p className="text-base leading-relaxed">
+              {artwork.personal_notes?.trim()
+                ? artwork.personal_notes
+                : "Tap to jot a quick note while you're in the gallery."}
+            </p>
+          </button>
+        ) : (
+          <div className="rounded-xl border border-border bg-card p-4">
+            <p className="mb-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              Personal note
+            </p>
+            <p className="text-base leading-relaxed">
+              {artwork.personal_notes?.trim() || "No note recorded yet."}
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="space-y-3 px-4 sm:px-0">
@@ -185,9 +201,16 @@ export function ArtworkDetailClient({
         )}
       </section>
 
+      {!canEdit ? (
+        <div className="px-4 sm:px-0">
+          <SignInPrompt compact />
+        </div>
+      ) : null}
+
       <div ref={researchRef} className="px-4 sm:px-0">
         <ResearchPanel
           artworkId={artwork.id}
+          canEdit={canEdit}
           onReady={(generate) => {
             generateResearchRef.current = generate;
           }}
@@ -195,35 +218,27 @@ export function ArtworkDetailClient({
       </div>
     </div>
 
-    <div
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background md:hidden"
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-    >
-      <div className="mx-auto grid max-w-lg grid-cols-4 gap-1 px-2 py-2">
-        <ActionButton
-          icon={Pencil}
-          label="Note"
-          onClick={() => setNoteOpen(true)}
-        />
-        <ActionButton
-          icon={MapPin}
-          label="Annotate"
-          href={`/artworks/${artwork.id}/annotate`}
-        />
-        <ActionButton
-          icon={Camera}
-          label="Photo"
-          onClick={() => setPhotoOpen(true)}
-        />
-        <ActionButton
-          icon={Sparkles}
-          label="AI"
-          onClick={triggerResearch}
-        />
+    {canEdit ? (
+      <div
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      >
+        <div className="mx-auto grid max-w-lg grid-cols-4 gap-1 px-2 py-2">
+          <ActionButton icon={Pencil} label="Note" onClick={() => setNoteOpen(true)} />
+          <ActionButton
+            icon={MapPin}
+            label="Annotate"
+            href={`/artworks/${artwork.id}/annotate`}
+          />
+          <ActionButton icon={Camera} label="Photo" onClick={() => setPhotoOpen(true)} />
+          <ActionButton icon={Sparkles} label="AI" onClick={triggerResearch} />
+        </div>
       </div>
-    </div>
+    ) : null}
 
-    <BottomSheet
+    {canEdit ? (
+      <>
+        <BottomSheet
       open={noteOpen}
       onOpenChange={setNoteOpen}
       title="Personal note"
@@ -269,6 +284,8 @@ export function ArtworkDetailClient({
         </Button>
       </div>
     </BottomSheet>
+      </>
+    ) : null}
   </>
   );
 }

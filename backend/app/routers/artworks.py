@@ -1,9 +1,12 @@
 import os
 import uuid
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
+
+from app.auth.dependencies import require_admin_user
 
 from app.config import settings
 from app.database import get_db
@@ -29,7 +32,11 @@ def list_artworks(visit_id: int | None = None, db: Session = Depends(get_db)) ->
 
 
 @router.post("", response_model=ArtworkRead, status_code=status.HTTP_201_CREATED)
-def create_artwork(payload: ArtworkCreate, db: Session = Depends(get_db)) -> Artwork:
+def create_artwork(
+    payload: ArtworkCreate,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
+) -> Artwork:
     if payload.visit_id is not None and not db.get(Visit, payload.visit_id):
         raise HTTPException(status_code=400, detail="Visit not found")
 
@@ -47,7 +54,10 @@ def get_artwork(artwork_id: int, db: Session = Depends(get_db)) -> Artwork:
 
 @router.put("/{artwork_id}", response_model=ArtworkRead)
 def update_artwork(
-    artwork_id: int, payload: ArtworkUpdate, db: Session = Depends(get_db)
+    artwork_id: int,
+    payload: ArtworkUpdate,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
 ) -> Artwork:
     artwork = _get_artwork_or_404(db, artwork_id)
 
@@ -65,7 +75,11 @@ def update_artwork(
 
 
 @router.delete("/{artwork_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_artwork(artwork_id: int, db: Session = Depends(get_db)) -> None:
+def delete_artwork(
+    artwork_id: int,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
+) -> None:
     artwork = _get_artwork_or_404(db, artwork_id)
     db.delete(artwork)
     db.commit()
@@ -74,6 +88,7 @@ def delete_artwork(artwork_id: int, db: Session = Depends(get_db)) -> None:
 @router.post("/{artwork_id}/image", response_model=ArtworkRead)
 async def upload_artwork_image(
     artwork_id: int,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> Artwork:

@@ -46,11 +46,29 @@ cp frontend/.env.example frontend/.env.local
 # Edit backend/.env — add ANTHROPIC_API_KEY if using Claude research
 ```
 
-**Backend only:** `DATABASE_URL`, `CORS_ORIGINS`, `ANTHROPIC_API_KEY`, etc. belong in `backend/.env`.
+**Backend only:** `DATABASE_URL`, `CORS_ORIGINS`, `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`, `ADMIN_EMAILS`, `JWT_SECRET`, etc. belong in `backend/.env`.
 
-**Frontend only:** `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SITE_URL`, `WEB_PORT` belong in `frontend/.env.local`.
+**Frontend only:** `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `WEB_PORT` belong in `frontend/.env.local`.
 
-Never put `ANTHROPIC_API_KEY` in the frontend env — it must stay on the API service.
+Never put `ANTHROPIC_API_KEY`, `JWT_SECRET`, or `ADMIN_EMAILS` in the frontend env — they must stay on the API service.
+
+## Public read / private write
+
+CultureGraph is **public to browse** and **private to edit**:
+
+- **Anyone** can view visits, artworks, annotations, and research notes without signing in.
+- **Approved Google accounts** (listed in `ADMIN_EMAILS`) can create, edit, upload, import notes, annotate, and run AI research.
+
+Local auth setup:
+
+1. Create a [Google OAuth client](https://console.cloud.google.com/apis/credentials) (Web application).
+2. Add authorized JavaScript origins: `http://localhost:3000` (and your Railway web URL in production).
+3. Set the same client ID on **both** services:
+   - Backend: `GOOGLE_CLIENT_ID`
+   - Frontend: `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+4. Backend only: set `ADMIN_EMAILS=you@gmail.com` (comma-separated allowlist) and a long random `JWT_SECRET`.
+
+Sign in uses Google ID tokens verified server-side; the API returns an app JWT stored in `localStorage`. All write endpoints require `Authorization: Bearer …`.
 
 ## Quick start (Docker)
 
@@ -93,6 +111,9 @@ Deploy as **two services** from this monorepo. Configure variables in each servi
 |----------|----------|-------|
 | `DATABASE_URL` | Yes | From Postgres plugin |
 | `CORS_ORIGINS` | Yes | Your Railway web service URL |
+| `GOOGLE_CLIENT_ID` | Yes | Same Web client ID as frontend |
+| `ADMIN_EMAILS` | Yes | Comma-separated allowlist of editor emails |
+| `JWT_SECRET` | Yes | Long random string for app JWT signing |
 | `ANTHROPIC_API_KEY` | No | Enables Claude research; API service only |
 | `UPLOAD_DIR` | No | Default `uploads` |
 
@@ -108,9 +129,10 @@ Do **not** set `NEXT_PUBLIC_*` variables on the API service.
 | Variable | Required | Notes |
 |----------|----------|-------|
 | `NEXT_PUBLIC_API_URL` | Yes | Public API URL; web service only |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Yes | Same OAuth client ID as backend |
 | `NEXT_PUBLIC_SITE_URL` | No | Canonical URL for OpenGraph metadata |
 
-Do **not** set `ANTHROPIC_API_KEY` on the Web service.
+Do **not** set `ANTHROPIC_API_KEY`, `JWT_SECRET`, or `ADMIN_EMAILS` on the Web service.
 
 See `backend/Procfile`, `backend/railway.toml`, and `frontend/railway.toml` for start/build commands.
 

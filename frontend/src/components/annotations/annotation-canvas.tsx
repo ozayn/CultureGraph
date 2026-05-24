@@ -4,12 +4,14 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CATEGORY_COLORS } from "@/components/annotations/konva-canvas-stage";
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Badge } from "@/components/ui/badge";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
 import {
   ANNOTATION_CATEGORIES,
@@ -44,6 +46,7 @@ export function AnnotationCanvas({
   initialAnnotations,
 }: AnnotationCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { canEdit } = useAuth();
   const [annotations, setAnnotations] = useState(initialAnnotations);
   const [size, setSize] = useState({ width: 320, height: 240 });
   const [image, setImage] = useState<HTMLImageElement | null>(null);
@@ -89,6 +92,7 @@ export function AnnotationCanvas({
 
   const placePin = useCallback(
     (x: number, y: number) => {
+      if (!canEdit) return;
       setPendingPin({
         x_percent: Number(((x / size.width) * 100).toFixed(2)),
         y_percent: Number(((y / size.height) * 100).toFixed(2)),
@@ -97,7 +101,7 @@ export function AnnotationCanvas({
       setCategory("observation");
       setError(null);
     },
-    [size.height, size.width]
+    [canEdit, size.height, size.width]
   );
 
   const handleStageTap = useCallback(
@@ -154,8 +158,12 @@ export function AnnotationCanvas({
 
   return (
     <div className="space-y-5">
+      {!canEdit ? <SignInPrompt compact /> : null}
+
       <p className="text-base text-muted-foreground">
-        Tap the image to place a pin. Pins save as percentage coordinates.
+        {canEdit
+          ? "Tap the image to place a pin. Pins save as percentage coordinates."
+          : "Viewing annotations on this artwork."}
       </p>
 
       <div

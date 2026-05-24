@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import annotations, artworks, import_notes, museums, research, visits
+from app.routers import annotations, artworks, auth, import_notes, museums, research, visits
 
 app = FastAPI(title="CultureGraph API", version="0.1.0")
 
@@ -22,6 +22,7 @@ upload_path.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(upload_path)), name="uploads")
 
 app.include_router(visits.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
 app.include_router(museums.router, prefix="/api")
 app.include_router(artworks.router, prefix="/api")
 app.include_router(annotations.router, prefix="/api")

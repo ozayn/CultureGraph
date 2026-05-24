@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { format } from "date-fns";
 
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { VisitForm } from "@/components/visits/visit-form";
+import { useAuth } from "@/contexts/auth-context";
 import type { Visit } from "@/lib/types";
 
 interface VisitsPageClientProps {
@@ -13,6 +15,8 @@ interface VisitsPageClientProps {
 }
 
 export function VisitsPageClient({ visits, showForm, error }: VisitsPageClientProps) {
+  const { canEdit } = useAuth();
+
   return (
     <div className="space-y-8 sm:space-y-10">
       <section className="space-y-2">
@@ -25,7 +29,7 @@ export function VisitsPageClient({ visits, showForm, error }: VisitsPageClientPr
       {showForm !== false ? (
         <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
           <h3 className="mb-4 font-heading text-xl">Log a visit</h3>
-          <VisitForm compact />
+          {canEdit ? <VisitForm compact /> : <SignInPrompt compact />}
         </section>
       ) : null}
 

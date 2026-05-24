@@ -1,5 +1,9 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+from app.auth.dependencies import require_admin_user
 
 from app.database import get_db
 from app.models import Artwork, ResearchNote
@@ -15,7 +19,11 @@ router = APIRouter(prefix="/artworks", tags=["research"])
 
 
 @router.post("/{artwork_id}/research", response_model=ResearchDraft)
-async def generate_research(artwork_id: int, db: Session = Depends(get_db)) -> ResearchDraft:
+async def generate_research(
+    artwork_id: int,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
+) -> ResearchDraft:
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         raise HTTPException(status_code=404, detail="Artwork not found")

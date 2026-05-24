@@ -188,3 +188,17 @@ class MuseumNotesImportResponse(BaseModel):
     artworks: list[ArtworkImportDraft]
     concept_links: list[ConceptLinkDraft] = Field(default_factory=list)
     source: str = "mock"
+
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str = Field(min_length=1)
+
+
+class AuthUserRead(BaseModel):
+    email: str
+
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: AuthUserRead

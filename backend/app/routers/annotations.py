@@ -1,5 +1,9 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
+from app.auth.dependencies import require_admin_user
 
 from app.database import get_db
 from app.models import Annotation, Artwork
@@ -32,7 +36,10 @@ def list_annotations(artwork_id: int, db: Session = Depends(get_db)) -> list[Ann
     status_code=status.HTTP_201_CREATED,
 )
 def create_annotation(
-    artwork_id: int, payload: AnnotationCreate, db: Session = Depends(get_db)
+    artwork_id: int,
+    payload: AnnotationCreate,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
 ) -> Annotation:
     _get_artwork_or_404(db, artwork_id)
     annotation = Annotation(artwork_id=artwork_id, **payload.model_dump())
@@ -44,7 +51,10 @@ def create_annotation(
 
 @router.put("/annotations/{annotation_id}", response_model=AnnotationRead)
 def update_annotation(
-    annotation_id: int, payload: AnnotationUpdate, db: Session = Depends(get_db)
+    annotation_id: int,
+    payload: AnnotationUpdate,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
 ) -> Annotation:
     annotation = db.get(Annotation, annotation_id)
     if not annotation:
@@ -59,7 +69,11 @@ def update_annotation(
 
 
 @router.delete("/annotations/{annotation_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_annotation(annotation_id: int, db: Session = Depends(get_db)) -> None:
+def delete_annotation(
+    annotation_id: int,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
+) -> None:
     annotation = db.get(Annotation, annotation_id)
     if not annotation:
         raise HTTPException(status_code=404, detail="Annotation not found")

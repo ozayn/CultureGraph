@@ -6,8 +6,10 @@ import { format } from "date-fns";
 import { Plus } from "lucide-react";
 
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { ButtonLink } from "@/components/ui/button-link";
+import { useAuth } from "@/contexts/auth-context";
 import type { Artwork, Visit } from "@/lib/types";
 
 interface VisitDetailClientProps {
@@ -17,6 +19,7 @@ interface VisitDetailClientProps {
 
 export function VisitDetailClient({ visit, artworks }: VisitDetailClientProps) {
   const [addOpen, setAddOpen] = useState(false);
+  const { canEdit } = useAuth();
 
   return (
   <>
@@ -64,36 +67,44 @@ export function VisitDetailClient({ visit, artworks }: VisitDetailClientProps) {
 
       <section className="hidden rounded-xl border border-border bg-card p-5 md:block">
         <h3 className="mb-4 font-heading text-xl">Add artwork</h3>
-        <ProgressiveArtworkForm visitId={visit.id} compact />
+        {canEdit ? (
+          <ProgressiveArtworkForm visitId={visit.id} compact />
+        ) : (
+          <SignInPrompt compact />
+        )}
       </section>
     </div>
 
-    <div
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background p-3 md:hidden"
-      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
-    >
-      <button
-        type="button"
-        onClick={() => setAddOpen(true)}
-        className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-base font-medium text-primary-foreground active:opacity-90"
+    {canEdit ? (
+      <div
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background p-3 md:hidden"
+        style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
       >
-        <Plus className="size-5" />
-        Add artwork
-      </button>
-    </div>
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-base font-medium text-primary-foreground active:opacity-90"
+        >
+          <Plus className="size-5" />
+          Add artwork
+        </button>
+      </div>
+    ) : null}
 
-    <BottomSheet
-      open={addOpen}
-      onOpenChange={setAddOpen}
-      title="Add artwork"
-      description="Start with a title and photo — details can wait."
-    >
-      <ProgressiveArtworkForm
-        visitId={visit.id}
-        compact
-        onComplete={() => setAddOpen(false)}
-      />
-    </BottomSheet>
+    {canEdit ? (
+      <BottomSheet
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        title="Add artwork"
+        description="Start with a title and photo — details can wait."
+      >
+        <ProgressiveArtworkForm
+          visitId={visit.id}
+          compact
+          onComplete={() => setAddOpen(false)}
+        />
+      </BottomSheet>
+    ) : null}
   </>
   );
 }

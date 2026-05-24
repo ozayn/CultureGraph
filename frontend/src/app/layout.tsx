@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Source_Serif_4 } from "next/font/google";
 
-import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
-import { SiteHeader } from "@/components/layout/site-header";
+import { AppChrome } from "@/components/layout/app-chrome";
+import { AppProviders } from "@/components/providers/app-providers";
 
 import "./globals.css";
 
@@ -82,11 +82,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${sourceSerif.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground">
-        <SiteHeader />
-        <main className="mx-auto w-full max-w-3xl px-4 pb-24 pt-4 sm:px-6 sm:py-8 md:pb-10">
-          {children}
-        </main>
-        <MobileBottomNav />
+        <AppProviders>
+          <AppChrome>{children}</AppChrome>
+        </AppProviders>
       </body>
     </html>
   );

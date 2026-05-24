@@ -4,12 +4,14 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { MuseumAutocomplete } from "@/components/museums/museum-autocomplete";
+import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/auth-context";
 import {
   CATEGORY_LABELS,
   type ArtworkImportDraft,
@@ -54,6 +56,7 @@ function formatConceptLinks(links: MuseumNotesImportResponse["concept_links"]): 
 
 export function ImportPageClient() {
   const router = useRouter();
+  const { canEdit } = useAuth();
   const [step, setStep] = useState<ImportStep>("paste");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -73,6 +76,10 @@ export function ImportPageClient() {
   const [source, setSource] = useState<string>("mock");
 
   async function extractEntries() {
+    if (!canEdit) {
+      setError("Sign in to edit CultureGraph.");
+      return;
+    }
     if (!notesText.trim()) {
       setError("Paste your museum notes first.");
       return;
@@ -117,6 +124,10 @@ export function ImportPageClient() {
   }
 
   async function saveSelected() {
+    if (!canEdit) {
+      setError("Sign in to edit CultureGraph.");
+      return;
+    }
     const selectedArtworks = artworks.filter((artwork) => artwork.selected);
     if (!saveVisit && selectedArtworks.length === 0) {
       setError("Select a visit and/or at least one artwork to save.");
@@ -198,6 +209,8 @@ export function ImportPageClient() {
         </p>
       </section>
 
+      {!canEdit ? <SignInPrompt /> : null}
+
       {step === "paste" ? (
         <section className="space-y-5 rounded-xl border border-border bg-card p-4 sm:p-5">
           <p className="text-sm text-muted-foreground">Step 1 of 2 · Paste notes</p>
@@ -255,7 +268,7 @@ export function ImportPageClient() {
             type="button"
             size="touch"
             className="w-full sm:w-auto"
-            disabled={loading}
+            disabled={loading || !canEdit}
             onClick={() => void extractEntries()}
           >
             {loading ? "Extracting…" : "Extract entries"}
@@ -490,7 +503,7 @@ export function ImportPageClient() {
               type="button"
               size="touch"
               className="sm:flex-1"
-              disabled={saving}
+              disabled={saving || !canEdit}
               onClick={() => void saveSelected()}
             >
               {saving ? "Saving…" : "Save selected entries"}

@@ -1,7 +1,10 @@
+"use client";
+
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ImportPageClient } from "@/components/import/import-page-client";
+import { AuthProvider } from "@/contexts/auth-context";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -11,7 +14,11 @@ vi.mock("next/navigation", () => ({
 
 describe("ImportPageClient", () => {
   it("renders the paste step without crashing", () => {
-    render(<ImportPageClient />);
+    render(
+      <AuthProvider googleConfigured={false}>
+        <ImportPageClient />
+      </AuthProvider>
+    );
 
     expect(
       screen.getByRole("heading", {

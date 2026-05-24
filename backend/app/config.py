@@ -14,6 +14,18 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-4-20250514"
     anthropic_timeout_seconds: float = 60.0
     anthropic_max_tokens: int = 2048
+    jwt_secret: str | None = None
+    jwt_expiration_days: int = 7
+    google_client_id: str | None = None
+    admin_emails: str = ""
+
+    @property
+    def admin_email_set(self) -> set[str]:
+        return {
+            email.strip().lower()
+            for email in self.admin_emails.split(",")
+            if email.strip()
+        }
 
     @field_validator("database_url", mode="before")
     @classmethod

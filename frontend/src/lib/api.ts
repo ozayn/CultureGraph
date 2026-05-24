@@ -1,3 +1,5 @@
+import { getAuthToken } from "@/lib/auth-storage";
+
 const DEFAULT_API_BASE = "http://localhost:8000";
 
 function normalizeApiBase(raw: string | undefined): string {
@@ -33,12 +35,14 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const token = getAuthToken();
   const response = await fetch(apiUrl(path), {
     ...options,
     headers: {
       ...(options.body instanceof FormData
         ? {}
         : { "Content-Type": "application/json" }),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
     cache: "no-store",
