@@ -2,6 +2,5 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
-releaseCommand = "PYTHONPATH=. alembic upgrade head"
+startCommand = "bash scripts/start_server.sh"
 restartPolicyType = "ON_FAILURE"

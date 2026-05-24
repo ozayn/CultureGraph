@@ -1,4 +1,4 @@
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-4-20250514"
     anthropic_timeout_seconds: float = 60.0
     anthropic_max_tokens: int = 2048
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: object) -> object:
+        if isinstance(value, str) and value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql://", 1)
+        return value
 
 
 settings = Settings()
