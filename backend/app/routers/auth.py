@@ -26,7 +26,7 @@ def google_login(payload: GoogleAuthRequest) -> AuthTokenResponse:
         )
 
     try:
-        email = verify_google_id_token(payload.id_token)
+        profile = verify_google_id_token(payload.id_token)
     except GoogleAuthConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -35,14 +35,18 @@ def google_login(payload: GoogleAuthRequest) -> AuthTokenResponse:
     except GoogleAuthError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
-    if email not in settings.admin_email_set:
+    if profile.email not in settings.admin_email_set:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This Google account is not authorized to edit CultureGraph.",
         )
 
     try:
-        access_token = create_access_token(email)
+        access_token = create_access_token(
+            profile.email,
+            name=profile.name,
+            picture=profile.picture,
+        )
     except AuthConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -51,10 +55,18 @@ def google_login(payload: GoogleAuthRequest) -> AuthTokenResponse:
 
     return AuthTokenResponse(
         access_token=access_token,
-        user=AuthUserRead(email=email),
+        user=AuthUserRead(
+            email=profile.email,
+            name=profile.name,
+            picture=profile.picture,
+        ),
     )
 
 
 @router.get("/me", response_model=AuthUserRead)
-def auth_me(user: Annotated[dict[str, str], Depends(require_admin_user)]) -> AuthUserRead:
-    return AuthUserRead(email=user["email"])
+def auth_me(user: Annotated[dict[str, str | None], Depends(require_admin_user)]) -> AuthUserRead:
+    return AuthUserRead(
+        email=user["email"] or "",
+        name=user.get("name"),
+        picture=user.get("picture"),
+    )

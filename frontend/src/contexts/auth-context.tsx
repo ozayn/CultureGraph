@@ -15,6 +15,8 @@ import { getAuthToken, setAuthToken } from "@/lib/auth-storage";
 
 export interface AuthUser {
   email: string;
+  name?: string | null;
+  picture?: string | null;
 }
 
 interface AuthContextValue {

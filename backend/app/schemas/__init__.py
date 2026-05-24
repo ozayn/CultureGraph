@@ -197,6 +197,8 @@ class GoogleAuthRequest(BaseModel):
 
 class AuthUserRead(BaseModel):
     email: str
+    name: str | None = None
+    picture: str | None = None
 
 
 class AuthTokenResponse(BaseModel):

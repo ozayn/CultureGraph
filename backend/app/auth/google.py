@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from google.auth.transport import requests
 from google.oauth2 import id_token
 
@@ -12,7 +14,14 @@ class GoogleAuthError(Exception):
     """Raised when a Google ID token cannot be verified."""
 
 
-def verify_google_id_token(token: str) -> str:
+@dataclass(frozen=True)
+class GoogleProfile:
+    email: str
+    name: str | None = None
+    picture: str | None = None
+
+
+def verify_google_id_token(token: str) -> GoogleProfile:
     if not settings.google_client_id or not settings.google_client_id.strip():
         raise GoogleAuthConfigurationError("GOOGLE_CLIENT_ID is not configured.")
 
@@ -32,4 +41,11 @@ def verify_google_id_token(token: str) -> str:
     if not payload.get("email_verified", False):
         raise GoogleAuthError("Google account email is not verified.")
 
-    return email.strip().lower()
+    name = payload.get("name")
+    picture = payload.get("picture")
+
+    return GoogleProfile(
+        email=email.strip().lower(),
+        name=name.strip() if isinstance(name, str) and name.strip() else None,
+        picture=picture.strip() if isinstance(picture, str) and picture.strip() else None,
+    )

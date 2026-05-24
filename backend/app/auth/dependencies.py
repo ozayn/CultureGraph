@@ -14,7 +14,7 @@ def require_admin_user(
     credentials: Annotated[
         HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
     ] = None,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     if not settings.jwt_secret or not settings.jwt_secret.strip():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
