@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { MuseumAutocomplete } from "@/components/museums/museum-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,23 +65,22 @@ export function VisitForm({ visit, onSuccess, compact }: VisitFormProps) {
 
       {step === 1 ? (
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="museum_name">Museum</Label>
-            <Input
-              id="museum_name"
-              value={museumName}
-              onChange={(event) => setMuseumName(event.target.value)}
-              placeholder="Metropolitan Museum of Art"
-              autoFocus
-            />
-          </div>
+          <MuseumAutocomplete
+            id="museum_name"
+            label="Museum"
+            value={museumName}
+            onValueChange={setMuseumName}
+            onMuseumSelect={(museum) => setCity(museum.city)}
+            placeholder="National Gallery of Art"
+            autoFocus
+          />
           <div className="space-y-2">
             <Label htmlFor="city">City</Label>
             <Input
               id="city"
               value={city}
               onChange={(event) => setCity(event.target.value)}
-              placeholder="New York"
+              placeholder="Washington, DC"
             />
           </div>
           <div className="space-y-2">

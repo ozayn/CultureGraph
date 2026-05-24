@@ -14,6 +14,14 @@ export interface Visit {
   created_at: string;
 }
 
+export interface Museum {
+  name: string;
+  city: string;
+  neighborhood: string | null;
+  website: string | null;
+  type: string | null;
+}
+
 export interface Artwork {
   id: number;
   visit_id: number | null;

@@ -37,6 +37,14 @@ class VisitRead(VisitBase):
     created_at: datetime
 
 
+class MuseumRead(BaseModel):
+    name: str
+    city: str
+    neighborhood: str | None = None
+    website: str | None = None
+    type: str | None = None
+
+
 class ArtworkBase(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     artist: str | None = None

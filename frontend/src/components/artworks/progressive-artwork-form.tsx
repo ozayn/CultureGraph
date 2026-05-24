@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { MuseumAutocomplete } from "@/components/museums/museum-autocomplete";
 import { CameraUpload } from "@/components/ui/camera-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ export function ProgressiveArtworkForm({
   const [title, setTitle] = useState(artwork?.title ?? "");
   const [artist, setArtist] = useState(artwork?.artist ?? "");
   const [yearPeriod, setYearPeriod] = useState(artwork?.year_period ?? "");
+  const [museumGallery, setMuseumGallery] = useState(artwork?.museum_gallery ?? "");
   const [photo, setPhoto] = useState<File | null>(null);
   const previewUrl = useMemo(
     () => (photo ? URL.createObjectURL(photo) : null),
@@ -56,7 +58,7 @@ export function ProgressiveArtworkForm({
       artist: includeDetails && artist.trim() ? artist.trim() : null,
       year_period: includeDetails && yearPeriod.trim() ? yearPeriod.trim() : null,
       medium: artwork?.medium ?? null,
-      museum_gallery: artwork?.museum_gallery ?? null,
+      museum_gallery: includeDetails && museumGallery.trim() ? museumGallery.trim() : null,
       personal_notes: artwork?.personal_notes ?? null,
       visit_id: visitId ?? artwork?.visit_id ?? null,
     };
@@ -125,6 +127,13 @@ export function ProgressiveArtworkForm({
               placeholder="Optional"
             />
           </div>
+          <MuseumAutocomplete
+            id="artwork-museum"
+            label="Museum / gallery"
+            value={museumGallery}
+            onValueChange={setMuseumGallery}
+            placeholder="Optional — e.g. West Building"
+          />
         </div>
       )}
 
