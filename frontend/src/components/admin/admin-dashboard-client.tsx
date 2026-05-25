@@ -13,10 +13,12 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
 import {
+  ADMIN_TAB_BULK_DELETE_PATHS,
   ADMIN_TAB_LABELS,
   ADMIN_TAB_PATHS,
   type AdminAnnotationRecord,
   type AdminArtworkRecord,
+  type AdminBulkDeleteResponse,
   type AdminEntityRecord,
   type AdminPaginated,
   type AdminResearchNoteRecord,
@@ -71,6 +73,12 @@ export function AdminDashboardClient() {
   const [unauthorized, setUnauthorized] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [selectionState, setSelectionState] = useState<{
+    scope: string;
+    ids: Set<number>;
+  }>(() => ({ scope: "", ids: new Set() }));
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -79,6 +87,16 @@ export function AdminDashboardClient() {
     }, 300);
     return () => window.clearTimeout(timeoutId);
   }, [searchInput]);
+
+  const selectionScope = `${activeTab}:${offset}:${search}`;
+  const selectedIds =
+    selectionState.scope === selectionScope ? selectionState.ids : new Set<number>();
+
+  const visibleIds = useMemo(() => records.map((record) => record.id), [records]);
+  const selectedCount = selectedIds.size;
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected = visibleIds.some((id) => selectedIds.has(id));
 
   const fetchDashboardData = useCallback(async () => {
     const params = new URLSearchParams({
@@ -159,6 +177,28 @@ export function AdminDashboardClient() {
   );
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
 
+  function updateSelectedIds(next: Set<number>) {
+    setSelectionState({ scope: selectionScope, ids: next });
+  }
+
+  function toggleSelected(id: number) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    updateSelectedIds(next);
+  }
+
+  function selectAllVisible() {
+    updateSelectedIds(new Set(visibleIds));
+  }
+
+  function clearSelection() {
+    updateSelectedIds(new Set());
+  }
+
   async function confirmDelete() {
     if (!deleteTarget) return;
     setDeleteLoading(true);
@@ -189,6 +229,24 @@ export function AdminDashboardClient() {
       setError(e instanceof Error ? e.message : "Could not delete record.");
     } finally {
       setDeleteLoading(false);
+    }
+  }
+
+  async function confirmBulkDelete() {
+    if (selectedCount === 0) return;
+    setBulkDeleteLoading(true);
+    setError(null);
+    try {
+      await api.post<AdminBulkDeleteResponse>(ADMIN_TAB_BULK_DELETE_PATHS[activeTab], {
+        ids: Array.from(selectedIds),
+      });
+      setBulkDeleteOpen(false);
+      clearSelection();
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete selected records.");
+    } finally {
+      setBulkDeleteLoading(false);
     }
   }
 
@@ -293,12 +351,37 @@ export function AdminDashboardClient() {
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
 
+      {!loading && records.length > 0 ? (
+        <AdminSelectionBar
+          selectedCount={selectedCount}
+          allVisibleSelected={allVisibleSelected}
+          someVisibleSelected={someVisibleSelected}
+          onSelectAllVisible={selectAllVisible}
+          onClearSelection={clearSelection}
+          onDeleteSelected={() => setBulkDeleteOpen(true)}
+        />
+      ) : null}
+
       {!loading ? (
         <>
           <div className="hidden overflow-x-auto rounded-xl border border-border md:block">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="border-b border-border bg-muted/30 text-xs uppercase tracking-[0.12em] text-muted-foreground">
                 <tr>
+                  <th className="w-10 px-4 py-3 font-medium">
+                    <span className="sr-only">Select</span>
+                    <AdminSelectAllCheckbox
+                      checked={allVisibleSelected}
+                      indeterminate={someVisibleSelected && !allVisibleSelected}
+                      onChange={() => {
+                        if (allVisibleSelected) {
+                          clearSelection();
+                        } else {
+                          selectAllVisible();
+                        }
+                      }}
+                    />
+                  </th>
                   <th className="px-4 py-3 font-medium">ID</th>
                   {activeTab === "visits" ? (
                     <>
@@ -344,7 +427,7 @@ export function AdminDashboardClient() {
               <tbody>
                 {records.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                       No records found.
                     </td>
                   </tr>
@@ -354,6 +437,8 @@ export function AdminDashboardClient() {
                       key={`${activeTab}-${record.id}`}
                       tab={activeTab}
                       record={record}
+                      selected={selectedIds.has(record.id)}
+                      onToggleSelected={() => toggleSelected(record.id)}
                       onDelete={setDeleteTarget}
                     />
                   ))
@@ -373,6 +458,8 @@ export function AdminDashboardClient() {
                   key={`${activeTab}-${record.id}-mobile`}
                   tab={activeTab}
                   record={record}
+                  selected={selectedIds.has(record.id)}
+                  onToggleSelected={() => toggleSelected(record.id)}
                   onDelete={setDeleteTarget}
                 />
               ))
@@ -425,17 +512,139 @@ export function AdminDashboardClient() {
         loading={deleteLoading}
         onConfirm={confirmDelete}
       />
+
+      <ConfirmDeleteDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedCount} selected record${selectedCount === 1 ? "" : "s"}?`}
+        description={getBulkDeleteDescription(activeTab, selectedCount)}
+        loading={bulkDeleteLoading}
+        onConfirm={confirmBulkDelete}
+      />
     </div>
+  );
+}
+
+function getBulkDeleteDescription(tab: AdminTab, count: number): string {
+  const base = `Delete ${count} selected record${count === 1 ? "" : "s"}? This cannot be undone.`;
+  if (tab === "visits") {
+    return `${base} Deleting visits also removes their artworks, annotations, research notes, and cultural entities.`;
+  }
+  if (tab === "artworks") {
+    return `${base} Deleting artworks also removes their annotations and research notes.`;
+  }
+  return base;
+}
+
+function AdminSelectionBar({
+  selectedCount,
+  allVisibleSelected,
+  someVisibleSelected,
+  onSelectAllVisible,
+  onClearSelection,
+  onDeleteSelected,
+}: {
+  selectedCount: number;
+  allVisibleSelected: boolean;
+  someVisibleSelected: boolean;
+  onSelectAllVisible: () => void;
+  onClearSelection: () => void;
+  onDeleteSelected: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onSelectAllVisible}
+          disabled={allVisibleSelected}
+        >
+          Select all visible
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onClearSelection}
+          disabled={!someVisibleSelected && selectedCount === 0}
+        >
+          Clear selection
+        </Button>
+        {selectedCount > 0 ? (
+          <span className="text-sm text-muted-foreground">
+            {selectedCount} selected
+          </span>
+        ) : null}
+      </div>
+      <Button
+        type="button"
+        variant="destructive"
+        size="sm"
+        disabled={selectedCount === 0}
+        onClick={onDeleteSelected}
+      >
+        Delete selected
+      </Button>
+    </div>
+  );
+}
+
+function AdminSelectAllCheckbox({
+  checked,
+  indeterminate,
+  onChange,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <input
+      type="checkbox"
+      className="size-4 accent-foreground"
+      checked={checked}
+      ref={(element) => {
+        if (element) element.indeterminate = indeterminate;
+      }}
+      onChange={onChange}
+      aria-label="Select all visible records"
+    />
+  );
+}
+
+function AdminRowCheckbox({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  return (
+    <input
+      type="checkbox"
+      className="size-4 accent-foreground"
+      checked={checked}
+      onChange={onChange}
+      aria-label={label}
+    />
   );
 }
 
 function AdminTableRow({
   tab,
   record,
+  selected,
+  onToggleSelected,
   onDelete,
 }: {
   tab: AdminTab;
   record: AdminRecord;
+  selected: boolean;
+  onToggleSelected: () => void;
   onDelete: (target: DeleteTarget) => void;
 }) {
   const detailLink = getDetailLink(tab, record);
@@ -443,6 +652,13 @@ function AdminTableRow({
 
   return (
     <tr className="border-b border-border/70 last:border-b-0">
+      <td className="px-4 py-3">
+        <AdminRowCheckbox
+          checked={selected}
+          onChange={onToggleSelected}
+          label={`Select record ${record.id}`}
+        />
+      </td>
       <td className="px-4 py-3 tabular-nums">{record.id}</td>
       {tab === "visits" ? (
         <>
@@ -526,10 +742,14 @@ function AdminTableRow({
 function AdminMobileCard({
   tab,
   record,
+  selected,
+  onToggleSelected,
   onDelete,
 }: {
   tab: AdminTab;
   record: AdminRecord;
+  selected: boolean;
+  onToggleSelected: () => void;
   onDelete: (target: DeleteTarget) => void;
 }) {
   const detailLink = getDetailLink(tab, record);
@@ -550,6 +770,11 @@ function AdminMobileCard({
     <li className="rounded-xl border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
+          <AdminRowCheckbox
+            checked={selected}
+            onChange={onToggleSelected}
+            label={`Select record ${record.id}`}
+          />
           {tab === "artworks" || tab === "entities" ? (
             <EntryThumbnail
               imageUrl={thumbnailUrl}

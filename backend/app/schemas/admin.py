@@ -102,3 +102,11 @@ class AdminEntityListResponse(BaseModel):
 class AdminResearchNoteListResponse(BaseModel):
     records: list[AdminResearchNoteRecord]
     meta: AdminListMeta
+
+
+class AdminBulkDeleteRequest(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=200)
+
+
+class AdminBulkDeleteResponse(BaseModel):
+    deleted_count: int

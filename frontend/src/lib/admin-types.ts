@@ -89,3 +89,15 @@ export const ADMIN_TAB_PATHS: Record<AdminTab, string> = {
   entities: "/api/admin/entities",
   "research-notes": "/api/admin/research-notes",
 };
+
+export const ADMIN_TAB_BULK_DELETE_PATHS: Record<AdminTab, string> = {
+  visits: "/api/admin/visits/bulk-delete",
+  artworks: "/api/admin/artworks/bulk-delete",
+  annotations: "/api/admin/annotations/bulk-delete",
+  entities: "/api/admin/entities/bulk-delete",
+  "research-notes": "/api/admin/research-notes/bulk-delete",
+};
+
+export interface AdminBulkDeleteResponse {
+  deleted_count: number;
+}

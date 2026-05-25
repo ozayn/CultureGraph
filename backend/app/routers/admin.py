@@ -11,6 +11,8 @@ from app.schemas.admin import (
     AdminAnnotationRecord,
     AdminArtworkListResponse,
     AdminArtworkRecord,
+    AdminBulkDeleteRequest,
+    AdminBulkDeleteResponse,
     AdminEntityListResponse,
     AdminEntityRecord,
     AdminListMeta,
@@ -19,6 +21,13 @@ from app.schemas.admin import (
     AdminSummaryRead,
     AdminVisitListResponse,
     AdminVisitRecord,
+)
+from app.services.admin_bulk_delete import (
+    bulk_delete_annotations,
+    bulk_delete_artworks,
+    bulk_delete_entities,
+    bulk_delete_research_notes,
+    bulk_delete_visits,
 )
 from app.services.admin_queries import (
     clamp_limit,
@@ -151,3 +160,53 @@ def admin_list_research_notes(
         records=[AdminResearchNoteRecord.model_validate(item) for item in records],
         meta=_list_meta(total=total, limit=safe_limit, offset=safe_offset, search=cleaned_search),
     )
+
+
+@router.post("/visits/bulk-delete", response_model=AdminBulkDeleteResponse)
+def admin_bulk_delete_visits(
+    payload: AdminBulkDeleteRequest,
+    _user: Annotated[dict[str, str | None], Depends(require_listed_admin_user)],
+    db: Session = Depends(get_db),
+) -> AdminBulkDeleteResponse:
+    deleted_count = bulk_delete_visits(db, payload.ids)
+    return AdminBulkDeleteResponse(deleted_count=deleted_count)
+
+
+@router.post("/artworks/bulk-delete", response_model=AdminBulkDeleteResponse)
+def admin_bulk_delete_artworks(
+    payload: AdminBulkDeleteRequest,
+    _user: Annotated[dict[str, str | None], Depends(require_listed_admin_user)],
+    db: Session = Depends(get_db),
+) -> AdminBulkDeleteResponse:
+    deleted_count = bulk_delete_artworks(db, payload.ids)
+    return AdminBulkDeleteResponse(deleted_count=deleted_count)
+
+
+@router.post("/annotations/bulk-delete", response_model=AdminBulkDeleteResponse)
+def admin_bulk_delete_annotations(
+    payload: AdminBulkDeleteRequest,
+    _user: Annotated[dict[str, str | None], Depends(require_listed_admin_user)],
+    db: Session = Depends(get_db),
+) -> AdminBulkDeleteResponse:
+    deleted_count = bulk_delete_annotations(db, payload.ids)
+    return AdminBulkDeleteResponse(deleted_count=deleted_count)
+
+
+@router.post("/entities/bulk-delete", response_model=AdminBulkDeleteResponse)
+def admin_bulk_delete_entities(
+    payload: AdminBulkDeleteRequest,
+    _user: Annotated[dict[str, str | None], Depends(require_listed_admin_user)],
+    db: Session = Depends(get_db),
+) -> AdminBulkDeleteResponse:
+    deleted_count = bulk_delete_entities(db, payload.ids)
+    return AdminBulkDeleteResponse(deleted_count=deleted_count)
+
+
+@router.post("/research-notes/bulk-delete", response_model=AdminBulkDeleteResponse)
+def admin_bulk_delete_research_notes(
+    payload: AdminBulkDeleteRequest,
+    _user: Annotated[dict[str, str | None], Depends(require_listed_admin_user)],
+    db: Session = Depends(get_db),
+) -> AdminBulkDeleteResponse:
+    deleted_count = bulk_delete_research_notes(db, payload.ids)
+    return AdminBulkDeleteResponse(deleted_count=deleted_count)
