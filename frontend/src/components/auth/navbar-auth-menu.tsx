@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { UserAvatar } from "@/components/auth/user-avatar";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +12,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/auth-context";
+import {
+  headerProfileButtonClass,
+  headerSignInClass,
+} from "@/lib/header-nav-styles";
 import { getUserDisplayName } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
 
@@ -49,21 +52,19 @@ export function NavbarAuthMenu() {
   }, [menuOpen]);
 
   if (loading) {
-    return <div className="size-11 shrink-0" aria-hidden />;
+    return <div className="h-11 w-11 shrink-0" aria-hidden />;
   }
 
   if (!canEdit || !user) {
     return (
       <>
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
-          className="min-h-11 px-3 text-sm text-muted-foreground hover:text-foreground"
+          className={headerSignInClass()}
           onClick={() => setSignInOpen(true)}
         >
           Sign in
-        </Button>
+        </button>
 
         <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
           <DialogContent showCloseButton className="sm:max-w-sm">
@@ -87,7 +88,7 @@ export function NavbarAuthMenu() {
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         aria-label="Account menu"
-        className="flex size-11 items-center justify-center rounded-full transition-colors hover:bg-muted/60"
+        className={headerProfileButtonClass()}
         onClick={() => setMenuOpen((open) => !open)}
       >
         <UserAvatar user={user} />
