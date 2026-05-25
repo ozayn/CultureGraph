@@ -2,7 +2,9 @@ import { getAuthToken } from "@/lib/auth-storage";
 import { mapGoogleSignInError, parseApiErrorDetail } from "@/lib/auth-errors";
 
 const DEFAULT_API_BASE = "http://localhost:8000";
-const REQUEST_TIMEOUT_MS = 20_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
+/** Museum-note import can call Claude and needs a longer client timeout than CRUD. */
+export const IMPORT_REQUEST_TIMEOUT_MS = 120_000;
 
 function normalizeApiBase(raw: string | undefined): string {
   const value = raw?.trim();
@@ -33,25 +35,30 @@ export function mediaUrl(path: string | null | undefined): string | null {
   return apiUrl(path);
 }
 
+type ApiRequestOptions = Omit<RequestInit, "signal"> & {
+  timeoutMs?: number;
+};
+
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: ApiRequestOptions = {}
 ): Promise<T> {
+  const { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...fetchOptions } = options;
   const token = getAuthToken();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;
   try {
     response = await fetch(apiUrl(path), {
-      ...options,
+      ...fetchOptions,
       signal: controller.signal,
       headers: {
-        ...(options.body instanceof FormData
+        ...(fetchOptions.body instanceof FormData
           ? {}
           : { "Content-Type": "application/json" }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers,
+        ...fetchOptions.headers,
       },
       cache: "no-store",
     });
@@ -85,10 +92,15 @@ async function request<T>(
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
+  post: <T>(
+    path: string,
+    body?: unknown,
+    options?: Pick<ApiRequestOptions, "timeoutMs">
+  ) =>
     request<T>(path, {
       method: "POST",
       body: body ? JSON.stringify(body) : undefined,
+      timeoutMs: options?.timeoutMs,
     }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),

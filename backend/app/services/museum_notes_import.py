@@ -41,6 +41,7 @@ IMPORT_TOOL_NAME = "submit_museum_notes_import"
 IMPORT_FALLBACK_WARNING = (
     "Claude response could not be parsed; used local fallback extraction."
 )
+IMPORT_TIMEOUT_WARNING = "Claude timed out; used local fallback extraction."
 IMPORT_SCHEMA_MISMATCH_MESSAGE = (
     "AI extraction returned an unexpected shape. Try again or use local fallback."
 )
@@ -612,12 +613,17 @@ def _parse_claude_import_payload(
     )
 
 
-async def _fallback_to_mock_import(request: MuseumNotesImportRequest) -> MuseumNotesImportResponse:
+async def _fallback_to_mock_import(
+    request: MuseumNotesImportRequest,
+    *,
+    ai_warning: str = IMPORT_FALLBACK_WARNING,
+) -> MuseumNotesImportResponse:
+    logger.info("museum-notes import using mock fallback parser")
     fallback = await MockMuseumNotesImportProvider().extract(request)
     return fallback.model_copy(
         update={
             "source": "mock",
-            "ai_warning": IMPORT_FALLBACK_WARNING,
+            "ai_warning": ai_warning,
         }
     )
 
@@ -637,6 +643,7 @@ class ClaudeMuseumNotesImportProvider:
 
     async def extract(self, request: MuseumNotesImportRequest) -> MuseumNotesImportResponse:
         visit_date = _default_visit_date(request)
+        logger.info("Claude museum-notes import request started visit_date=%s", visit_date)
         prompt = "\n".join(
             [
                 "Convert the following rough museum notes into structured CultureGraph draft data.",
@@ -675,9 +682,11 @@ class ClaudeMuseumNotesImportProvider:
                 "ANTHROPIC_API_KEY is invalid or unauthorized. Check the key in your environment."
             ) from exc
         except APITimeoutError as exc:
-            raise ResearchProviderError(
-                f"Claude request timed out after {settings.anthropic_timeout_seconds:g}s."
-            ) from exc
+            logger.warning(
+                "Claude import timed out after %ss; using mock fallback",
+                settings.anthropic_timeout_seconds,
+            )
+            return await _fallback_to_mock_import(request, ai_warning=IMPORT_TIMEOUT_WARNING)
         except RateLimitError as exc:
             raise ResearchProviderError(
                 "Claude rate limit reached. Wait a moment and try again."
@@ -705,6 +714,10 @@ class ClaudeMuseumNotesImportProvider:
                 f"{IMPORT_SCHEMA_MISMATCH_MESSAGE} ({summary})"
             ) from exc
 
+        logger.info(
+            "Claude museum-notes import finished entities=%d",
+            len(parsed.entities),
+        )
         return MuseumNotesImportResponse(
             visit=parsed.visit,
             entities=parsed.entities,

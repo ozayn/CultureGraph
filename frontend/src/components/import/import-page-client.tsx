@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { api } from "@/lib/api";
+import { api, IMPORT_REQUEST_TIMEOUT_MS } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
+import { mapImportRequestError } from "@/lib/import-errors";
 import {
   ENTITY_TYPE_ICONS,
   ENTITY_TYPE_LABELS,
@@ -126,12 +127,16 @@ export function ImportPageClient() {
     setError(null);
 
     try {
-      const result = await api.post<MuseumNotesImportResponse>("/api/import/museum-notes", {
-        text: notesText.trim(),
-        default_museum: museumName.trim() || "Smithsonian American Art Museum",
-        default_city: city.trim() || "Washington, DC",
-        visit_date: visitDate || null,
-      });
+      const result = await api.post<MuseumNotesImportResponse>(
+        "/api/import/museum-notes",
+        {
+          text: notesText.trim(),
+          default_museum: museumName.trim() || "Smithsonian American Art Museum",
+          default_city: city.trim() || "Washington, DC",
+          visit_date: visitDate || null,
+        },
+        { timeoutMs: IMPORT_REQUEST_TIMEOUT_MS }
+      );
 
       setVisitSummary(result.visit.summary);
       setConceptLinks(result.concept_links);
@@ -149,14 +154,7 @@ export function ImportPageClient() {
       setVisitDate(result.visit.visit_date);
       setStep("review");
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not extract entries.";
-      if (message.includes("unexpected shape") || message.includes("could not be parsed")) {
-        setError(
-          "AI extraction returned an unexpected shape. Try again or use local fallback."
-        );
-      } else {
-        setError(message);
-      }
+      setError(mapImportRequestError(e));
     } finally {
       setLoading(false);
     }
@@ -270,10 +268,12 @@ export function ImportPageClient() {
               onChange={(event) => setNotesText(event.target.value)}
               placeholder="Paste rough notes from your visit or a museum tour outline…"
               className="min-h-[220px] text-base leading-relaxed"
+              disabled={loading}
             />
             <button
               type="button"
-              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
+              disabled={loading}
               onClick={() => setNotesText(SAMPLE_NOTES)}
             >
               Load sample notes
@@ -310,6 +310,12 @@ export function ImportPageClient() {
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
+          {loading ? (
+            <p className="text-sm text-muted-foreground">
+              Extracting notes… this may take up to a minute.
+            </p>
+          ) : null}
+
           <Button
             type="button"
             size="touch"
@@ -317,7 +323,7 @@ export function ImportPageClient() {
             disabled={loading || !canEdit}
             onClick={() => void extractEntries()}
           >
-            {loading ? "Extracting…" : "Extract entries"}
+            {loading ? "Extracting notes…" : "Extract entries"}
           </Button>
         </section>
       ) : (

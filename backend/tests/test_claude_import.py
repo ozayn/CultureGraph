@@ -9,11 +9,13 @@ from app.services.museum_notes_import import (
     ClaudeMuseumNotesImportProvider,
     IMPORT_FALLBACK_WARNING,
     IMPORT_SCHEMA_MISMATCH_MESSAGE,
+    IMPORT_TIMEOUT_WARNING,
     IMPORT_TOOL_NAME,
     _parse_claude_import_payload,
     _read_claude_import_payload,
 )
 from app.services.research import ResearchProviderError
+from anthropic import APITimeoutError
 
 
 def test_read_claude_import_payload_from_tool_use() -> None:
@@ -223,3 +225,27 @@ async def test_claude_import_accepts_current_entities_tool_input(
     assert result.source == "claude"
     assert len(result.entities) == 2
     assert result.ai_warning is None
+
+
+@pytest.mark.asyncio
+async def test_claude_import_timeout_falls_back_to_mock() -> None:
+    provider = ClaudeMuseumNotesImportProvider("test-api-key")
+
+    async def fake_create(**kwargs: object) -> SimpleNamespace:
+        raise APITimeoutError(request=SimpleNamespace())
+
+    provider._client = SimpleNamespace(messages=SimpleNamespace(create=fake_create))
+
+    request = MuseumNotesImportRequest(
+        text="Thomas Moran and Manifest Destiny — dramatic western landscape",
+        default_museum="Smithsonian American Art Museum",
+        default_city="Washington, DC",
+        visit_date=date(2026, 5, 24),
+    )
+
+    result = await provider.extract(request)
+
+    assert result.source == "mock"
+    assert result.ai_warning == IMPORT_TIMEOUT_WARNING
+    assert result.entities
+

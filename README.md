@@ -128,6 +128,7 @@ Deploy as **two services** from this monorepo. Configure variables in each servi
 | `ADMIN_EMAILS` | Yes | Comma-separated allowlist of editor emails |
 | `JWT_SECRET` | Yes | Long random string for app JWT signing |
 | `ANTHROPIC_API_KEY` | No | Enables Claude research; API service only |
+| `ANTHROPIC_TIMEOUT_SECONDS` | No | Default `90`; museum-note import can take up to ~2 minutes end-to-end |
 | `UPLOAD_DIR` | No | Default `uploads` |
 
 Do **not** set `NEXT_PUBLIC_*` variables on the API service.

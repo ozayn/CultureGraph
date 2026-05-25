@@ -8,4 +8,4 @@ export PYTHONPATH=.
 
 python -c "from app.db_startup import prepare_database; prepare_database()"
 
-exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --timeout-keep-alive 120
