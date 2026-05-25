@@ -74,6 +74,17 @@ class CulturalEntityRead(CulturalEntityBase):
     created_at: datetime
 
 
+class CulturalEntityUpdate(BaseModel):
+    entity_type: CulturalEntityType | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+    themes: list[str] | None = None
+    concepts: list[str] | None = None
+    movements: list[str] | None = None
+    historical_events: list[str] | None = None
+    related_entities: list[str] | None = None
+
+
 class MuseumRead(BaseModel):
     name: str
     city: str

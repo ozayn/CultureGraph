@@ -14,9 +14,15 @@ interface VisitFormProps {
   visit?: Visit;
   onSuccess?: (visit: Visit) => void;
   compact?: boolean;
+  redirectOnSave?: boolean;
 }
 
-export function VisitForm({ visit, onSuccess, compact }: VisitFormProps) {
+export function VisitForm({
+  visit,
+  onSuccess,
+  compact,
+  redirectOnSave = !visit,
+}: VisitFormProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +55,9 @@ export function VisitForm({ visit, onSuccess, compact }: VisitFormProps) {
         : await api.post<Visit>("/api/visits", payload);
 
       onSuccess?.(saved);
-      window.location.href = `/visits/${saved.id}`;
+      if (redirectOnSave) {
+        window.location.href = `/visits/${saved.id}`;
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save visit.");
     } finally {

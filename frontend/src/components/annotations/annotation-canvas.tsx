@@ -4,6 +4,8 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CATEGORY_COLORS } from "@/components/annotations/konva-canvas-stage";
+import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
+import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Badge } from "@/components/ui/badge";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
@@ -59,6 +61,9 @@ export function AnnotationCanvas({
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingAnnotation, setEditingAnnotation] = useState<Annotation | null>(null);
+  const [deletingAnnotation, setDeletingAnnotation] = useState<Annotation | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -207,6 +212,56 @@ export function AnnotationCanvas({
     }
   }
 
+  function openAnnotationEditor(annotation: Annotation) {
+    setEditingAnnotation(annotation);
+    setCategory(annotation.category);
+    setNote(annotation.text);
+    setError(null);
+  }
+
+  async function saveAnnotationEdit() {
+    if (!editingAnnotation || !note.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.patch<Annotation>(
+        `/api/artworks/${artworkId}/annotations/${editingAnnotation.id}`,
+        {
+          category,
+          text: note.trim(),
+        }
+      );
+      setAnnotations((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item))
+      );
+      setEditingAnnotation(null);
+      setNote("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save annotation.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteAnnotation() {
+    if (!deletingAnnotation) return;
+    setDeleteLoading(true);
+    setError(null);
+    try {
+      await api.delete(
+        `/api/artworks/${artworkId}/annotations/${deletingAnnotation.id}`
+      );
+      setAnnotations((current) =>
+        current.filter((item) => item.id !== deletingAnnotation.id)
+      );
+      setDeletingAnnotation(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete annotation.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
   const canvasReady = size.width > 0 && size.height > 0;
   const activeImage = imageUrl ? image : null;
   const activeImageLoadFailed = imageUrl ? imageLoadFailed : false;
@@ -276,13 +331,22 @@ export function AnnotationCanvas({
               key={annotation.id}
               className="rounded-xl border border-border bg-card p-4"
             >
-              <div className="mb-2 flex items-center gap-2">
-                <span className="inline-flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                  {index + 1}
-                </span>
-                <Badge variant="secondary">
-                  {CATEGORY_LABELS[annotation.category]}
-                </Badge>
+              <div className="mb-2 flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                    {index + 1}
+                  </span>
+                  <Badge variant="secondary">
+                    {CATEGORY_LABELS[annotation.category]}
+                  </Badge>
+                </div>
+                {canEdit ? (
+                  <AdminActionsMenu
+                    label={`Actions for annotation ${index + 1}`}
+                    onEdit={() => openAnnotationEditor(annotation)}
+                    onDelete={() => setDeletingAnnotation(annotation)}
+                  />
+                ) : null}
               </div>
               <p className="text-base leading-relaxed">{annotation.text}</p>
             </li>
@@ -341,6 +405,68 @@ export function AnnotationCanvas({
           </Button>
         </div>
       </BottomSheet>
+
+      <BottomSheet
+        open={editingAnnotation !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingAnnotation(null);
+        }}
+        title="Edit annotation"
+        description="Update category or note text."
+      >
+        <div className="space-y-4 pb-2">
+          <div className="space-y-2">
+            <Label>Category</Label>
+            <div className="flex flex-wrap gap-2">
+              {ANNOTATION_CATEGORIES.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setCategory(item)}
+                  className={cn(
+                    "min-h-11 rounded-full border px-4 py-2 text-sm transition-colors",
+                    category === item
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border bg-background text-foreground active:bg-muted"
+                  )}
+                >
+                  {CATEGORY_LABELS[item]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-annotation-note">Note</Label>
+            <Textarea
+              id="edit-annotation-note"
+              rows={4}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </div>
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          <Button
+            type="button"
+            size="touch"
+            className="w-full"
+            onClick={() => void saveAnnotationEdit()}
+            disabled={saving || !note.trim() || !canEdit}
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </div>
+      </BottomSheet>
+
+      <ConfirmDeleteDialog
+        open={deletingAnnotation !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingAnnotation(null);
+        }}
+        title="Delete annotation?"
+        description="This pin and its note will be removed permanently."
+        loading={deleteLoading}
+        onConfirm={deleteAnnotation}
+      />
     </div>
   );
 }

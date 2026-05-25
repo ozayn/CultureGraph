@@ -1,15 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { Plus } from "lucide-react";
 
+import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
+import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
+import { CulturalEntityForm } from "@/components/cultural-entities/cultural-entity-form";
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { ButtonLink } from "@/components/ui/button-link";
+import { VisitForm } from "@/components/visits/visit-form";
 import { useAuth } from "@/contexts/auth-context";
+import { api } from "@/lib/api";
 import {
   ENTITY_TYPE_ICONS,
   ENTITY_TYPE_LABELS,
@@ -23,7 +29,14 @@ interface VisitDetailClientProps {
   culturalEntities: CulturalEntity[];
 }
 
-function CulturalEntityCard({ entity }: { entity: CulturalEntity }) {
+interface CulturalEntityCardProps {
+  entity: CulturalEntity;
+  canEdit: boolean;
+  onEdit: (entity: CulturalEntity) => void;
+  onDelete: (entity: CulturalEntity) => void;
+}
+
+function CulturalEntityCard({ entity, canEdit, onEdit, onDelete }: CulturalEntityCardProps) {
   const Icon = ENTITY_TYPE_ICONS[entity.entity_type];
   const tagLine = [
     ...entity.themes,
@@ -36,11 +49,20 @@ function CulturalEntityCard({ entity }: { entity: CulturalEntity }) {
 
   return (
     <li className="rounded-xl border border-border bg-card p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
-          <Icon className="size-3" strokeWidth={1.75} />
-          {ENTITY_TYPE_LABELS[entity.entity_type]}
-        </span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+            <Icon className="size-3" strokeWidth={1.75} />
+            {ENTITY_TYPE_LABELS[entity.entity_type]}
+          </span>
+        </div>
+        {canEdit ? (
+          <AdminActionsMenu
+            label={`Actions for ${entity.name}`}
+            onEdit={() => onEdit(entity)}
+            onDelete={() => onDelete(entity)}
+          />
+        ) : null}
       </div>
       <p className="mt-2 text-base font-medium">{entity.name}</p>
       {entity.description ? (
@@ -59,25 +81,77 @@ function CulturalEntityCard({ entity }: { entity: CulturalEntity }) {
 }
 
 export function VisitDetailClient({
-  visit,
-  artworks,
-  culturalEntities,
+  visit: initialVisit,
+  artworks: initialArtworks,
+  culturalEntities: initialCulturalEntities,
 }: VisitDetailClientProps) {
+  const router = useRouter();
+  const [visit, setVisit] = useState(initialVisit);
+  const [artworks, setArtworks] = useState(initialArtworks);
+  const [culturalEntities, setCulturalEntities] = useState(initialCulturalEntities);
   const [addOpen, setAddOpen] = useState(false);
+  const [editVisitOpen, setEditVisitOpen] = useState(false);
+  const [deleteVisitOpen, setDeleteVisitOpen] = useState(false);
+  const [deleteVisitLoading, setDeleteVisitLoading] = useState(false);
+  const [deleteVisitError, setDeleteVisitError] = useState<string | null>(null);
+  const [editingEntity, setEditingEntity] = useState<CulturalEntity | null>(null);
+  const [deletingEntity, setDeletingEntity] = useState<CulturalEntity | null>(null);
+  const [deleteEntityLoading, setDeleteEntityLoading] = useState(false);
   const { canEdit } = useAuth();
   const groupedEntities = useMemo(
     () => groupVisitDetailEntities(culturalEntities),
     [culturalEntities]
   );
 
+  async function deleteVisit() {
+    setDeleteVisitLoading(true);
+    setDeleteVisitError(null);
+    try {
+      await api.delete(`/api/visits/${visit.id}`);
+      router.push("/visits");
+      router.refresh();
+    } catch (e) {
+      setDeleteVisitError(e instanceof Error ? e.message : "Could not delete visit.");
+      setDeleteVisitLoading(false);
+    }
+  }
+
+  async function deleteEntity() {
+    if (!deletingEntity) return;
+    setDeleteEntityLoading(true);
+    try {
+      await api.delete(`/api/cultural-entities/${deletingEntity.id}`);
+      setCulturalEntities((current) =>
+        current.filter((entity) => entity.id !== deletingEntity.id)
+      );
+      setDeletingEntity(null);
+      router.refresh();
+    } catch (e) {
+      setDeleteVisitError(e instanceof Error ? e.message : "Could not delete entity.");
+    } finally {
+      setDeleteEntityLoading(false);
+    }
+  }
+
   return (
     <>
       <div className="space-y-6 pb-24 sm:space-y-8 sm:pb-10">
         <section className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            {format(new Date(visit.visit_date), "MMMM d, yyyy")} · {visit.city}
-          </p>
-          <h1 className="font-heading text-2xl font-normal sm:text-3xl">{visit.museum_name}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                {format(new Date(visit.visit_date), "MMMM d, yyyy")} · {visit.city}
+              </p>
+              <h1 className="font-heading text-2xl font-normal sm:text-3xl">{visit.museum_name}</h1>
+            </div>
+            {canEdit ? (
+              <AdminActionsMenu
+                label="Visit actions"
+                onEdit={() => setEditVisitOpen(true)}
+                onDelete={() => setDeleteVisitOpen(true)}
+              />
+            ) : null}
+          </div>
           {visit.notes ? (
             <p className="whitespace-pre-line text-base leading-relaxed text-muted-foreground">
               {visit.notes}
@@ -121,7 +195,13 @@ export function VisitDetailClient({
             <h2 className="font-heading text-xl">{section.label}</h2>
             <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {items.map((entity) => (
-                <CulturalEntityCard key={entity.id} entity={entity} />
+                <CulturalEntityCard
+                  key={entity.id}
+                  entity={entity}
+                  canEdit={canEdit}
+                  onEdit={setEditingEntity}
+                  onDelete={setDeletingEntity}
+                />
               ))}
             </ul>
           </section>
@@ -154,18 +234,94 @@ export function VisitDetailClient({
       ) : null}
 
       {canEdit ? (
-        <BottomSheet
-          open={addOpen}
-          onOpenChange={setAddOpen}
-          title="Add artwork"
-          description="Start with a title and photo — details can wait."
-        >
-          <ProgressiveArtworkForm
-            visitId={visit.id}
-            compact
-            onComplete={() => setAddOpen(false)}
-          />
-        </BottomSheet>
+        <>
+          <BottomSheet
+            open={addOpen}
+            onOpenChange={setAddOpen}
+            title="Add artwork"
+            description="Start with a title and photo — details can wait."
+          >
+            <ProgressiveArtworkForm
+              visitId={visit.id}
+              compact
+              onComplete={() => {
+                setAddOpen(false);
+                router.refresh();
+              }}
+            />
+          </BottomSheet>
+
+          <BottomSheet
+            open={editVisitOpen}
+            onOpenChange={setEditVisitOpen}
+            title="Edit visit"
+            description="Update museum, date, or notes."
+          >
+            <VisitForm
+              visit={visit}
+              compact
+              redirectOnSave={false}
+              onSuccess={(updated) => {
+                setVisit(updated);
+                setEditVisitOpen(false);
+                router.refresh();
+              }}
+            />
+          </BottomSheet>
+
+          <BottomSheet
+            open={editingEntity !== null}
+            onOpenChange={(open) => {
+              if (!open) setEditingEntity(null);
+            }}
+            title="Edit entry"
+            description="Update this imported cultural entity."
+          >
+            {editingEntity ? (
+              <CulturalEntityForm
+                entity={editingEntity}
+                onCancel={() => setEditingEntity(null)}
+                onSuccess={(updated) => {
+                  setCulturalEntities((current) =>
+                    current.map((entity) => (entity.id === updated.id ? updated : entity))
+                  );
+                  setEditingEntity(null);
+                  router.refresh();
+                }}
+              />
+            ) : null}
+          </BottomSheet>
+        </>
+      ) : null}
+
+      <ConfirmDeleteDialog
+        open={deleteVisitOpen}
+        onOpenChange={setDeleteVisitOpen}
+        title="Delete visit?"
+        description="This permanently removes the visit, its artworks, annotations, research notes, and imported entries. Uploaded images are removed from disk when possible."
+        loading={deleteVisitLoading}
+        onConfirm={deleteVisit}
+      />
+
+      <ConfirmDeleteDialog
+        open={deletingEntity !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingEntity(null);
+        }}
+        title="Delete entry?"
+        description={
+          deletingEntity
+            ? `Remove “${deletingEntity.name}” from this visit?`
+            : "Remove this entry from the visit?"
+        }
+        loading={deleteEntityLoading}
+        onConfirm={deleteEntity}
+      />
+
+      {deleteVisitError ? (
+        <p className="fixed bottom-24 left-4 right-4 z-50 rounded-lg border border-destructive/30 bg-background px-3 py-2 text-sm text-destructive md:bottom-4">
+          {deleteVisitError}
+        </p>
       ) : null}
     </>
   );

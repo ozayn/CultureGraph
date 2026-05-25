@@ -66,20 +66,53 @@ def create_annotation(
     return annotation
 
 
+def _get_annotation_or_404(db: Session, annotation_id: int, artwork_id: int | None = None) -> Annotation:
+    annotation = db.get(Annotation, annotation_id)
+    if not annotation:
+        raise HTTPException(status_code=404, detail="Annotation not found")
+    if artwork_id is not None and annotation.artwork_id != artwork_id:
+        raise HTTPException(status_code=404, detail="Annotation not found for this artwork")
+    return annotation
+
+
+def _apply_annotation_update(annotation: Annotation, payload: AnnotationUpdate) -> None:
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(annotation, key, value)
+
+
 @router.put("/annotations/{annotation_id}", response_model=AnnotationRead)
+@router.patch("/annotations/{annotation_id}", response_model=AnnotationRead)
 def update_annotation(
     annotation_id: int,
     payload: AnnotationUpdate,
     _user: Annotated[dict[str, str], Depends(require_admin_user)],
     db: Session = Depends(get_db),
 ) -> Annotation:
-    annotation = db.get(Annotation, annotation_id)
-    if not annotation:
-        raise HTTPException(status_code=404, detail="Annotation not found")
+    annotation = _get_annotation_or_404(db, annotation_id)
+    _apply_annotation_update(annotation, payload)
+    db.commit()
+    db.refresh(annotation)
+    return annotation
 
-    for key, value in payload.model_dump(exclude_unset=True).items():
-        setattr(annotation, key, value)
 
+@router.put(
+    "/artworks/{artwork_id}/annotations/{annotation_id}",
+    response_model=AnnotationRead,
+)
+@router.patch(
+    "/artworks/{artwork_id}/annotations/{annotation_id}",
+    response_model=AnnotationRead,
+)
+def update_artwork_annotation(
+    artwork_id: int,
+    annotation_id: int,
+    payload: AnnotationUpdate,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
+) -> Annotation:
+    _get_artwork_or_404(db, artwork_id)
+    annotation = _get_annotation_or_404(db, annotation_id, artwork_id)
+    _apply_annotation_update(annotation, payload)
     db.commit()
     db.refresh(annotation)
     return annotation
@@ -91,8 +124,22 @@ def delete_annotation(
     _user: Annotated[dict[str, str], Depends(require_admin_user)],
     db: Session = Depends(get_db),
 ) -> None:
-    annotation = db.get(Annotation, annotation_id)
-    if not annotation:
-        raise HTTPException(status_code=404, detail="Annotation not found")
+    annotation = _get_annotation_or_404(db, annotation_id)
+    db.delete(annotation)
+    db.commit()
+
+
+@router.delete(
+    "/artworks/{artwork_id}/annotations/{annotation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_artwork_annotation(
+    artwork_id: int,
+    annotation_id: int,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
+) -> None:
+    _get_artwork_or_404(db, artwork_id)
+    annotation = _get_annotation_or_404(db, annotation_id, artwork_id)
     db.delete(annotation)
     db.commit()

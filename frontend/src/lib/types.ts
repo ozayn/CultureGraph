@@ -82,6 +82,17 @@ export interface ResearchDraft {
   suggested_annotations: Array<{ category: string; text: string }>;
 }
 
+export interface ResearchNote {
+  id: number;
+  artwork_id: number;
+  short_summary: string;
+  historical_context: string;
+  visual_elements_to_notice: string;
+  related_questions: string;
+  suggested_annotations: string;
+  created_at: string;
+}
+
 export const ANNOTATION_CATEGORIES: AnnotationCategory[] = [
   "observation",
   "symbol",

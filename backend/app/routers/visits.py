@@ -7,6 +7,7 @@ from app.auth.dependencies import require_admin_user
 from app.database import get_db
 from app.models import Visit
 from app.schemas import VisitCreate, VisitRead, VisitUpdate
+from app.services.record_cleanup import delete_visit as delete_visit_record
 
 router = APIRouter(prefix="/visits", tags=["visits"])
 
@@ -38,6 +39,7 @@ def get_visit(visit_id: int, db: Session = Depends(get_db)) -> Visit:
 
 
 @router.put("/{visit_id}", response_model=VisitRead)
+@router.patch("/{visit_id}", response_model=VisitRead)
 def update_visit(
     visit_id: int,
     payload: VisitUpdate,
@@ -65,5 +67,6 @@ def delete_visit(
     visit = db.get(Visit, visit_id)
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
-    db.delete(visit)
+
+    delete_visit_record(db, visit)
     db.commit()

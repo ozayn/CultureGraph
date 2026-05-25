@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import require_admin_user
@@ -68,3 +68,25 @@ def list_research_notes(artwork_id: int, db: Session = Depends(get_db)) -> list[
         .order_by(ResearchNote.created_at.desc())
         .all()
     )
+
+
+@router.delete(
+    "/{artwork_id}/research/{note_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_research_note(
+    artwork_id: int,
+    note_id: int,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
+) -> None:
+    artwork = db.get(Artwork, artwork_id)
+    if not artwork:
+        raise HTTPException(status_code=404, detail="Artwork not found")
+
+    note = db.get(ResearchNote, note_id)
+    if not note or note.artwork_id != artwork_id:
+        raise HTTPException(status_code=404, detail="Research note not found")
+
+    db.delete(note)
+    db.commit()

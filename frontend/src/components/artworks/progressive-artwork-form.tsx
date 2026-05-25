@@ -15,8 +15,9 @@ import type { Artwork } from "@/lib/types";
 interface ProgressiveArtworkFormProps {
   visitId?: number;
   artwork?: Artwork;
-  onComplete?: () => void;
+  onComplete?: (artwork?: Artwork) => void;
   compact?: boolean;
+  redirectOnSave?: boolean;
 }
 
 export function ProgressiveArtworkForm({
@@ -24,6 +25,7 @@ export function ProgressiveArtworkForm({
   artwork,
   onComplete,
   compact,
+  redirectOnSave = !artwork,
 }: ProgressiveArtworkFormProps) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
@@ -82,9 +84,11 @@ export function ProgressiveArtworkForm({
         await api.upload<Artwork>(`/api/artworks/${saved.id}/image`, photo);
       }
 
-      onComplete?.();
-      router.push(`/artworks/${saved.id}`);
-      router.refresh();
+      onComplete?.(saved);
+      if (redirectOnSave) {
+        router.push(`/artworks/${saved.id}`);
+        router.refresh();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save artwork.");
     } finally {

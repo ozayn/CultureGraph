@@ -21,6 +21,7 @@ from app.services.image_upload import (
     read_upload_with_limit,
     remove_artwork_image_files,
 )
+from app.services.record_cleanup import delete_artwork as delete_artwork_record
 from app.sources.base import ArtworkLookupQuery
 from app.sources.nga import NGA_SOURCE_NAME, is_nga_museum, should_search_nga
 
@@ -95,6 +96,7 @@ def lookup_artwork_image(
 
 
 @router.put("/{artwork_id}", response_model=ArtworkRead)
+@router.patch("/{artwork_id}", response_model=ArtworkRead)
 def update_artwork(
     artwork_id: int,
     payload: ArtworkUpdate,
@@ -123,7 +125,7 @@ def delete_artwork(
     db: Session = Depends(get_db),
 ) -> None:
     artwork = _get_artwork_or_404(db, artwork_id)
-    db.delete(artwork)
+    delete_artwork_record(db, artwork)
     db.commit()
 
 
