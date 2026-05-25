@@ -77,24 +77,35 @@ export function ResearchPanel({ artworkId, canEdit = true, onReady }: ResearchPa
   const [deletingNote, setDeletingNote] = useState<ResearchNote | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const loadNotes = useCallback(async () => {
-    setLoadingNotes(true);
-    try {
-      const result = await api.get<ResearchNote[]>(`/api/artworks/${artworkId}/research`);
-      setNotes(result);
-      if (result.length > 0) {
-        setDraft(parseResearchNote(result[0]));
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load research notes.");
-    } finally {
-      setLoadingNotes(false);
-    }
-  }, [artworkId]);
-
   useEffect(() => {
-    void loadNotes();
-  }, [loadNotes]);
+    let cancelled = false;
+
+    async function fetchNotes() {
+      setLoadingNotes(true);
+      try {
+        const result = await api.get<ResearchNote[]>(`/api/artworks/${artworkId}/research`);
+        if (cancelled) return;
+        setNotes(result);
+        if (result.length > 0) {
+          setDraft(parseResearchNote(result[0]));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Could not load research notes.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingNotes(false);
+        }
+      }
+    }
+
+    void fetchNotes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [artworkId]);
 
   const generateDraft = useCallback(async () => {
     setLoading(true);
@@ -104,13 +115,14 @@ export function ResearchPanel({ artworkId, canEdit = true, onReady }: ResearchPa
         `/api/artworks/${artworkId}/research`
       );
       setDraft(result);
-      await loadNotes();
+      const saved = await api.get<ResearchNote[]>(`/api/artworks/${artworkId}/research`);
+      setNotes(saved);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not generate research.");
     } finally {
       setLoading(false);
     }
-  }, [artworkId, loadNotes]);
+  }, [artworkId]);
 
   useEffect(() => {
     onReady?.(generateDraft);

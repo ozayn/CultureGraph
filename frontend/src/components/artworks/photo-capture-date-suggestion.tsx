@@ -51,7 +51,7 @@ export function PhotoCaptureDateSuggestion({
     onDismiss?.();
   }
 
-  async function usePhotoDate() {
+  async function applyPhotoDate() {
     if (!artwork.captured_at || !artwork.visit_id) return;
 
     setLoading(true);
@@ -86,7 +86,7 @@ export function PhotoCaptureDateSuggestion({
             type="button"
             size="sm"
             disabled={loading}
-            onClick={() => void usePhotoDate()}
+            onClick={() => void applyPhotoDate()}
           >
             {loading ? "Updating…" : "Use photo date"}
           </Button>

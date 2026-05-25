@@ -125,6 +125,7 @@ class ArtworkUpdate(BaseModel):
     year_period: str | None = None
     medium: str | None = None
     museum_gallery: str | None = None
+    image_url: str | None = None
     catalog_source: str | None = None
     catalog_object_url: str | None = None
     catalog_accession_number: str | None = None

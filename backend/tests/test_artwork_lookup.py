@@ -1,5 +1,7 @@
 import pytest
+from httpx import ASGITransport, AsyncClient
 
+from app.main import app
 from app.sources.base import ArtworkLookupQuery
 from app.sources.nga import is_nga_museum, search_nga_collection
 
@@ -48,3 +50,148 @@ def test_search_nga_explicit_source_overrides_museum() -> None:
         limit=3,
     )
     assert results
+
+
+@pytest.mark.asyncio
+async def test_lookup_image_endpoint_requires_auth() -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/artworks/1/lookup-image")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_lookup_image_endpoint_returns_nga_candidates(
+    auth_headers: dict[str, str],
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        visit_response = await client.post(
+            "/api/visits",
+            headers=auth_headers,
+            json={
+                "museum_name": "National Gallery of Art",
+                "city": "Washington, DC",
+                "visit_date": "2026-05-25",
+            },
+        )
+        assert visit_response.status_code == 201
+        visit_id = visit_response.json()["id"]
+
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={
+                "title": "The Adoration of the Magi",
+                "artist": "Botticelli",
+                "visit_id": visit_id,
+            },
+        )
+        assert artwork_response.status_code == 201
+        artwork_id = artwork_response.json()["id"]
+
+        lookup_response = await client.get(
+            f"/api/artworks/{artwork_id}/lookup-image",
+            headers=auth_headers,
+        )
+
+    assert lookup_response.status_code == 200
+    payload = lookup_response.json()
+    assert payload["candidates"]
+    assert "National Gallery of Art" in payload["sources_searched"]
+    candidate = payload["candidates"][0]
+    assert candidate["image_url"]
+    assert candidate["source_name"] == "National Gallery of Art"
+    assert candidate["confidence"] > 0
+
+
+@pytest.mark.asyncio
+async def test_apply_official_image_persists_url_and_catalog_metadata(
+    auth_headers: dict[str, str],
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        visit_response = await client.post(
+            "/api/visits",
+            headers=auth_headers,
+            json={
+                "museum_name": "National Gallery of Art",
+                "city": "Washington, DC",
+                "visit_date": "2026-05-25",
+            },
+        )
+        visit_id = visit_response.json()["id"]
+
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={
+                "title": "The Adoration of the Magi",
+                "artist": "Botticelli",
+                "visit_id": visit_id,
+            },
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        lookup_response = await client.get(
+            f"/api/artworks/{artwork_id}/lookup-image",
+            headers=auth_headers,
+        )
+        candidate = lookup_response.json()["candidates"][0]
+
+        update_response = await client.put(
+            f"/api/artworks/{artwork_id}",
+            headers=auth_headers,
+            json={
+                "image_url": candidate["image_url"],
+                "catalog_source": candidate["source_name"],
+                "catalog_object_url": candidate["object_url"],
+                "catalog_accession_number": candidate["accession_number"],
+                "catalog_rights_label": candidate["rights_label"],
+            },
+        )
+        assert update_response.status_code == 200
+        updated = update_response.json()
+
+        get_response = await client.get(f"/api/artworks/{artwork_id}")
+
+    assert updated["image_url"] == candidate["image_url"]
+    assert updated["catalog_source"] == candidate["source_name"]
+    assert updated["catalog_object_url"] == candidate["object_url"]
+    assert get_response.json()["image_url"] == candidate["image_url"]
+
+
+@pytest.mark.asyncio
+async def test_lookup_image_unsupported_museum_returns_empty(
+    auth_headers: dict[str, str],
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        visit_response = await client.post(
+            "/api/visits",
+            headers=auth_headers,
+            json={
+                "museum_name": "Smithsonian American Art Museum",
+                "city": "Washington, DC",
+                "visit_date": "2026-05-25",
+            },
+        )
+        visit_id = visit_response.json()["id"]
+
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={"title": "Some artwork", "visit_id": visit_id},
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        lookup_response = await client.get(
+            f"/api/artworks/{artwork_id}/lookup-image",
+            headers=auth_headers,
+        )
+
+    assert lookup_response.status_code == 200
+    payload = lookup_response.json()
+    assert payload["candidates"] == []
+    assert payload["sources_searched"] == []

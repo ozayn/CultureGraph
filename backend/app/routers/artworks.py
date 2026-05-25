@@ -69,6 +69,7 @@ def get_artwork(artwork_id: int, db: Session = Depends(get_db)) -> Artwork:
 @router.get("/{artwork_id}/lookup-image", response_model=ArtworkLookupResponse)
 def lookup_artwork_image(
     artwork_id: int,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
     db: Session = Depends(get_db),
     source: str | None = Query(default=None, description="Explicit source, e.g. nga"),
 ) -> ArtworkLookupResponse:
@@ -90,7 +91,10 @@ def lookup_artwork_image(
     sources_searched = [NGA_SOURCE_NAME] if should_search_nga(query) else []
 
     return ArtworkLookupResponse(
-        candidates=[ArtworkLookupCandidateRead.model_validate(item) for item in candidates],
+        candidates=[
+            ArtworkLookupCandidateRead.model_validate(item, from_attributes=True)
+            for item in candidates
+        ],
         sources_searched=sources_searched,
     )
 

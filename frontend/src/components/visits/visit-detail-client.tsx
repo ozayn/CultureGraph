@@ -82,12 +82,11 @@ function CulturalEntityCard({ entity, canEdit, onEdit, onDelete }: CulturalEntit
 
 export function VisitDetailClient({
   visit: initialVisit,
-  artworks: initialArtworks,
+  artworks,
   culturalEntities: initialCulturalEntities,
 }: VisitDetailClientProps) {
   const router = useRouter();
   const [visit, setVisit] = useState(initialVisit);
-  const [artworks, setArtworks] = useState(initialArtworks);
   const [culturalEntities, setCulturalEntities] = useState(initialCulturalEntities);
   const [addOpen, setAddOpen] = useState(false);
   const [editVisitOpen, setEditVisitOpen] = useState(false);

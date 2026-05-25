@@ -76,8 +76,16 @@ export function ArtworkImageLookupPanel({
     }
   }
 
-  if (!canEdit || !ngaMuseum) {
+  if (!canEdit) {
     return null;
+  }
+
+  if (!ngaMuseum) {
+    return (
+      <p className="px-4 text-xs leading-relaxed text-muted-foreground sm:px-0">
+        Official image lookup is available for National Gallery of Art visits.
+      </p>
+    );
   }
 
   return (
