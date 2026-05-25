@@ -21,8 +21,15 @@ import {
 import { buildAnnotationTagSuggestions } from "@/lib/annotation-suggestions";
 import { logAnnotationRequest } from "@/lib/annotation-debug";
 import { api } from "@/lib/api";
+import { consumePendingAiAnnotation } from "@/lib/pending-ai-annotation";
+import { suggestedAnnotationToFormValues } from "@/lib/research-suggestions";
 import { useAuth } from "@/contexts/auth-context";
-import { CATEGORY_LABELS, type Annotation, type CulturalEntity } from "@/lib/types";
+import {
+  CATEGORY_LABELS,
+  type AiSuggestedAnnotation,
+  type Annotation,
+  type CulturalEntity,
+} from "@/lib/types";
 
 const KonvaCanvasStage = dynamic(() => import("@/components/annotations/konva-canvas-stage"), {
   ssr: false,
@@ -68,6 +75,9 @@ export function AnnotationCanvas({
   const [editingAnnotation, setEditingAnnotation] = useState<Annotation | null>(null);
   const [deletingAnnotation, setDeletingAnnotation] = useState<Annotation | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingAiSuggestion, setPendingAiSuggestion] = useState<AiSuggestedAnnotation | null>(
+    () => (typeof window !== "undefined" ? consumePendingAiAnnotation(artworkId) : null)
+  );
 
   const tagSuggestions = useMemo(
     () => buildAnnotationTagSuggestions(culturalEntities),
@@ -132,14 +142,17 @@ export function AnnotationCanvas({
     };
   }, [imageUrl]);
 
-  const openPinForm = useCallback((xPercent: number, yPercent: number) => {
-    setPendingPin({
-      x_percent: Number(xPercent.toFixed(2)),
-      y_percent: Number(yPercent.toFixed(2)),
-    });
-    setFormValues(emptyAnnotationPinFormValues());
-    setError(null);
-  }, []);
+  const openPinForm = useCallback(
+    (xPercent: number, yPercent: number, prefill?: AnnotationPinFormValues) => {
+      setPendingPin({
+        x_percent: Number(xPercent.toFixed(2)),
+        y_percent: Number(yPercent.toFixed(2)),
+      });
+      setFormValues(prefill ?? emptyAnnotationPinFormValues());
+      setError(null);
+    },
+    []
+  );
 
   const placePin = useCallback(
     (x: number, y: number) => {
@@ -156,9 +169,13 @@ export function AnnotationCanvas({
         return;
       }
 
-      openPinForm((x / size.width) * 100, (y / size.height) * 100);
+      openPinForm(
+        (x / size.width) * 100,
+        (y / size.height) * 100,
+        pendingAiSuggestion ? suggestedAnnotationToFormValues(pendingAiSuggestion) : undefined
+      );
     },
-    [authLoading, canEdit, openPinForm, size.height, size.width]
+    [authLoading, canEdit, openPinForm, pendingAiSuggestion, size.height, size.width]
   );
 
   const handleStagePointer = useCallback(
@@ -211,6 +228,7 @@ export function AnnotationCanvas({
       setAnnotations((current) => [...current, created]);
       setPendingPin(null);
       setFormValues(emptyAnnotationPinFormValues());
+      setPendingAiSuggestion(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save annotation.");
     } finally {
@@ -272,6 +290,14 @@ export function AnnotationCanvas({
   return (
     <div className="space-y-5">
       {!canEdit && !authLoading ? <SignInPrompt compact /> : null}
+
+      {pendingAiSuggestion ? (
+        <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Place AI suggestion on the image</p>
+          <p className="mt-1">{pendingAiSuggestion.note}</p>
+          <p className="mt-2 text-xs">Tap the artwork to choose where this pin should go.</p>
+        </div>
+      ) : null}
 
       <p className="text-base text-muted-foreground">
         {authLoading

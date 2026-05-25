@@ -13,6 +13,7 @@ export const CATEGORY_COLORS: Record<AnnotationCategory, string> = {
   history: "#4a5d4a",
   question: "#5a4a6a",
   composition: "#3d4a5c",
+  material: "#6b5a4a",
 };
 
 export interface PinView {

@@ -13,6 +13,7 @@ class AnnotationCategory(str, enum.Enum):
     history = "history"
     question = "question"
     composition = "composition"
+    material = "material"
 
 
 class CulturalEntityType(str, enum.Enum):

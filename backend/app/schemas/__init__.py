@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class CulturalEntityType(str, Enum):
@@ -24,6 +24,7 @@ class AnnotationCategory(str, Enum):
     history = "history"
     question = "question"
     composition = "composition"
+    material = "material"
 
 
 class VisitBase(BaseModel):
@@ -184,12 +185,71 @@ class AnnotationRead(AnnotationBase):
     created_at: datetime
 
 
+class SuggestedAnnotationPosition(BaseModel):
+    x_percent: float | None = Field(default=None, ge=0, le=100)
+    y_percent: float | None = Field(default=None, ge=0, le=100)
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def validate_coordinate_pair(self) -> "SuggestedAnnotationPosition":
+        if (self.x_percent is None) ^ (self.y_percent is None):
+            return SuggestedAnnotationPosition(
+                x_percent=None,
+                y_percent=None,
+                reason=self.reason,
+            )
+        return self
+
+
+class AiSuggestedAnnotation(BaseModel):
+    category: AnnotationCategory
+    note: str = Field(min_length=1)
+    tags: list[str] = Field(default_factory=list)
+    linked_concept_names: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    suggested_position: SuggestedAnnotationPosition = Field(
+        default_factory=SuggestedAnnotationPosition
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_payload(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+        if "note" not in normalized and "text" in normalized:
+            normalized["note"] = normalized.pop("text")
+
+        position = normalized.get("suggested_position")
+        if not isinstance(position, dict):
+            x_val = normalized.pop("x_percent", None)
+            y_val = normalized.pop("y_percent", None)
+            if x_val is not None or y_val is not None:
+                normalized["suggested_position"] = {
+                    "x_percent": x_val,
+                    "y_percent": y_val,
+                    "reason": normalized.pop("position_reason", None),
+                }
+        elif position.get("x_percent") is None or position.get("y_percent") is None:
+            normalized["suggested_position"] = {
+                **position,
+                "x_percent": None,
+                "y_percent": None,
+            }
+
+        normalized.setdefault("tags", [])
+        normalized.setdefault("linked_concept_names", [])
+        normalized.setdefault("confidence", 0.5)
+        return normalized
+
+
 class ResearchDraft(BaseModel):
     short_summary: str
     historical_context: str
     visual_elements_to_notice: list[str]
     related_questions: list[str]
-    suggested_annotations: list[dict[str, str]]
+    suggested_annotations: list[AiSuggestedAnnotation] = Field(default_factory=list)
     possible_title: str | None = None
     possible_artist: str | None = None
     period_or_movement: str | None = None
@@ -198,9 +258,8 @@ class ResearchDraft(BaseModel):
     source: str = "mock"
 
 
-class ClaudeSuggestedAnnotation(BaseModel):
-    category: AnnotationCategory
-    text: str = Field(min_length=1)
+class ClaudeSuggestedAnnotation(AiSuggestedAnnotation):
+    pass
 
 
 class ClaudeResearchResponse(BaseModel):
@@ -211,7 +270,7 @@ class ClaudeResearchResponse(BaseModel):
     ocr_label_text: str | None = None
     historical_context: str = Field(min_length=1)
     confidence: float = Field(ge=0.0, le=1.0)
-    suggested_annotations: list[ClaudeSuggestedAnnotation] = Field(min_length=1)
+    suggested_annotations: list[ClaudeSuggestedAnnotation] = Field(default_factory=list)
 
 
 class ResearchNoteRead(BaseModel):

@@ -2,16 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { AiSuggestedAnnotations } from "@/components/artworks/ai-suggested-annotations";
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import type { ResearchDraft, ResearchNote } from "@/lib/types";
+import { parseSuggestedAnnotations } from "@/lib/research-suggestions";
+import type { AiSuggestedAnnotation, CulturalEntity, ResearchDraft, ResearchNote } from "@/lib/types";
 
 interface ResearchPanelProps {
   artworkId: number;
   canEdit?: boolean;
+  hasImage?: boolean;
+  culturalEntities?: CulturalEntity[];
   onReady?: (generate: () => Promise<void>) => void;
 }
 
@@ -28,54 +32,35 @@ function parseResearchNote(note: ResearchNote): ResearchDraft {
     }
   }
 
-  function parseSuggested(value: string): ResearchDraft["suggested_annotations"] {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      if (Array.isArray(parsed)) {
-        return parsed.map((item) => {
-          if (typeof item === "object" && item !== null && "category" in item && "text" in item) {
-            return {
-              category: String((item as { category: unknown }).category),
-              text: String((item as { text: unknown }).text),
-            };
-          }
-          return { category: "observation", text: String(item) };
-        });
-      }
-    } catch {
-      // fall through to line parsing
-    }
-
-    return value
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const [category, ...rest] = line.split(" — ");
-        return {
-          category: category || "observation",
-          text: rest.join(" — ") || line,
-        };
-      });
-  }
-
   return {
     short_summary: note.short_summary,
     historical_context: note.historical_context,
     visual_elements_to_notice: parseJsonList(note.visual_elements_to_notice),
     related_questions: parseJsonList(note.related_questions),
-    suggested_annotations: parseSuggested(note.suggested_annotations),
+    suggested_annotations: parseSuggestedAnnotations(note.suggested_annotations),
   };
 }
 
-export function ResearchPanel({ artworkId, canEdit = true, onReady }: ResearchPanelProps) {
+export function ResearchPanel({
+  artworkId,
+  canEdit = true,
+  hasImage = false,
+  culturalEntities = [],
+  onReady,
+}: ResearchPanelProps) {
   const [notes, setNotes] = useState<ResearchNote[]>([]);
   const [draft, setDraft] = useState<ResearchDraft | null>(null);
+  const [visibleSuggestions, setVisibleSuggestions] = useState<AiSuggestedAnnotation[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingNote, setDeletingNote] = useState<ResearchNote | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  function loadDraft(nextDraft: ResearchDraft) {
+    setDraft(nextDraft);
+    setVisibleSuggestions(nextDraft.suggested_annotations ?? []);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -87,7 +72,7 @@ export function ResearchPanel({ artworkId, canEdit = true, onReady }: ResearchPa
         if (cancelled) return;
         setNotes(result);
         if (result.length > 0) {
-          setDraft(parseResearchNote(result[0]));
+          loadDraft(parseResearchNote(result[0]));
         }
       } catch (e) {
         if (!cancelled) {
@@ -111,10 +96,8 @@ export function ResearchPanel({ artworkId, canEdit = true, onReady }: ResearchPa
     setLoading(true);
     setError(null);
     try {
-      const result = await api.post<ResearchDraft>(
-        `/api/artworks/${artworkId}/research`
-      );
-      setDraft(result);
+      const result = await api.post<ResearchDraft>(`/api/artworks/${artworkId}/research`);
+      loadDraft(result);
       const saved = await api.get<ResearchNote[]>(`/api/artworks/${artworkId}/research`);
       setNotes(saved);
     } catch (e) {
@@ -137,7 +120,12 @@ export function ResearchPanel({ artworkId, canEdit = true, onReady }: ResearchPa
       setNotes((current) => current.filter((note) => note.id !== deletingNote.id));
       if (notes[0]?.id === deletingNote.id) {
         const remaining = notes.filter((note) => note.id !== deletingNote.id);
-        setDraft(remaining[0] ? parseResearchNote(remaining[0]) : null);
+        if (remaining[0]) {
+          loadDraft(parseResearchNote(remaining[0]));
+        } else {
+          setDraft(null);
+          setVisibleSuggestions([]);
+        }
       }
       setDeletingNote(null);
     } catch (e) {
@@ -153,7 +141,7 @@ export function ResearchPanel({ artworkId, canEdit = true, onReady }: ResearchPa
         <div>
           <h3 className="font-heading text-lg">Research draft</h3>
           <p className="text-sm text-muted-foreground">
-            AI-assisted context (mocked for now).
+            AI-assisted context and reviewable annotation suggestions.
           </p>
         </div>
         <Button
@@ -183,7 +171,7 @@ export function ResearchPanel({ artworkId, canEdit = true, onReady }: ResearchPa
               <button
                 type="button"
                 className="min-w-0 flex-1 text-left"
-                onClick={() => setDraft(parseResearchNote(note))}
+                onClick={() => loadDraft(parseResearchNote(note))}
               >
                 <span className="block truncate font-medium">{note.short_summary}</span>
                 <span className="text-xs text-muted-foreground">
@@ -227,21 +215,14 @@ export function ResearchPanel({ artworkId, canEdit = true, onReady }: ResearchPa
               ))}
             </ul>
           </div>
-          <div>
-            <h4 className="mb-1 font-medium">Suggested annotations</h4>
-            <ul className="space-y-2">
-              {draft.suggested_annotations.map((item) => (
-                <li
-                  key={`${item.category}-${item.text}`}
-                  className="rounded-lg bg-muted/50 px-3 py-3 text-muted-foreground"
-                >
-                  <span className="font-medium text-foreground">{item.category}</span>
-                  {" — "}
-                  {item.text}
-                </li>
-              ))}
-            </ul>
-          </div>
+
+          <AiSuggestedAnnotations
+            artworkId={artworkId}
+            suggestions={visibleSuggestions}
+            culturalEntities={culturalEntities}
+            hasImage={hasImage}
+            onSuggestionsChange={setVisibleSuggestions}
+          />
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
@@ -262,3 +243,4 @@ export function ResearchPanel({ artworkId, canEdit = true, onReady }: ResearchPa
     </section>
   );
 }
+

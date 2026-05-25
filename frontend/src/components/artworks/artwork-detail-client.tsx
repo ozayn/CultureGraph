@@ -381,6 +381,8 @@ export function ArtworkDetailClient({
         <ResearchPanel
           artworkId={artwork.id}
           canEdit={canEdit}
+          hasImage={Boolean(imageSrc)}
+          culturalEntities={culturalEntities}
           onReady={(generate) => {
             generateResearchRef.current = generate;
           }}

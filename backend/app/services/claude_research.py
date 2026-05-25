@@ -27,7 +27,18 @@ Return ONLY a single JSON object (no markdown fences, no commentary) with this e
   "historical_context": string,
   "confidence": number between 0 and 1,
   "suggested_annotations": [
-    {"category": "observation" | "symbol" | "history" | "question" | "composition", "text": string}
+    {
+      "category": "observation" | "symbol" | "history" | "question" | "composition" | "material",
+      "note": string,
+      "tags": [string, ...],
+      "linked_concept_names": [string, ...],
+      "confidence": number between 0 and 1,
+      "suggested_position": {
+        "x_percent": number or null,
+        "y_percent": number or null,
+        "reason": string or null
+      }
+    }
   ]
 }
 
@@ -35,7 +46,13 @@ Rules:
 - Base visual analysis on the image when provided; use metadata as hints, not facts.
 - Read any visible wall labels, captions, or placards into ocr_label_text when legible.
 - confidence reflects how certain you are about identification (0=guess, 1=very confident).
-- suggested_annotations: 2–5 specific, tappable pin ideas tied to visible details.
+- suggested_annotations: 2–5 specific pin ideas tied to visible details, themes, or historical context.
+- tags: short freeform labels (e.g. composition, gesture, colonialism, material).
+- linked_concept_names: optional related concepts/movements/themes as plain strings.
+- suggested_position.x_percent and suggested_position.y_percent must BOTH be null unless you can
+  confidently locate a region from image analysis. Never invent precise coordinates.
+- When coordinates are null, set suggested_position.reason to explain what the viewer should look for.
+- If no image is provided or the region is uncertain, keep both coordinates null.
 - If uncertain about title/artist, set those fields to null and lower confidence.
 """
 
@@ -78,10 +95,7 @@ def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
         historical_context=claude.historical_context,
         visual_elements_to_notice=claude.visible_elements,
         related_questions=related_questions,
-        suggested_annotations=[
-            {"category": item.category, "text": item.text}
-            for item in claude.suggested_annotations
-        ],
+        suggested_annotations=list(claude.suggested_annotations),
         possible_title=claude.possible_title,
         possible_artist=claude.possible_artist,
         period_or_movement=claude.period_or_movement,

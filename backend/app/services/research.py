@@ -2,7 +2,7 @@ import json
 from typing import Protocol
 
 from app.config import settings
-from app.schemas import ResearchDraft
+from app.schemas import AiSuggestedAnnotation, ResearchDraft, SuggestedAnnotationPosition
 
 
 class ResearchConfigurationError(Exception):
@@ -47,18 +47,42 @@ class MockLLMProvider:
                 "What might contemporary viewers have understood differently?",
             ],
             suggested_annotations=[
-                {
-                    "category": "composition",
-                    "text": "Note the central axis and how the eye is guided through the scene.",
-                },
-                {
-                    "category": "symbol",
-                    "text": "Identify recurring motifs that may carry allegorical meaning.",
-                },
-                {
-                    "category": "history",
-                    "text": "Research the patron or institution associated with this work.",
-                },
+                AiSuggestedAnnotation(
+                    category="composition",
+                    note="Note the central axis and how the eye is guided through the scene.",
+                    tags=["composition", "gesture"],
+                    linked_concept_names=["American identity"],
+                    confidence=0.72,
+                    suggested_position=SuggestedAnnotationPosition(
+                        x_percent=None,
+                        y_percent=None,
+                        reason="Place on the main focal area where sight lines converge.",
+                    ),
+                ),
+                AiSuggestedAnnotation(
+                    category="symbol",
+                    note="Identify recurring motifs that may carry allegorical meaning.",
+                    tags=["symbol"],
+                    linked_concept_names=["migration"],
+                    confidence=0.68,
+                    suggested_position=SuggestedAnnotationPosition(
+                        x_percent=42.0,
+                        y_percent=38.0,
+                        reason="Mock provider example pin near the upper-center motif.",
+                    ),
+                ),
+                AiSuggestedAnnotation(
+                    category="history",
+                    note="Research the patron or institution associated with this work.",
+                    tags=["colonialism", "labor"],
+                    linked_concept_names=["Manifest Destiny"],
+                    confidence=0.61,
+                    suggested_position=SuggestedAnnotationPosition(
+                        x_percent=None,
+                        y_percent=None,
+                        reason="Historical context applies to the whole composition.",
+                    ),
+                ),
             ],
             source="mock",
         )
@@ -70,7 +94,9 @@ def serialize_research_draft(draft: ResearchDraft) -> dict[str, str]:
         "historical_context": draft.historical_context,
         "visual_elements_to_notice": json.dumps(draft.visual_elements_to_notice),
         "related_questions": json.dumps(draft.related_questions),
-        "suggested_annotations": json.dumps(draft.suggested_annotations),
+        "suggested_annotations": json.dumps(
+            [item.model_dump(mode="json") for item in draft.suggested_annotations]
+        ),
     }
 
 

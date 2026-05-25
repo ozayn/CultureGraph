@@ -3,7 +3,23 @@ export type AnnotationCategory =
   | "symbol"
   | "history"
   | "question"
-  | "composition";
+  | "composition"
+  | "material";
+
+export interface SuggestedAnnotationPosition {
+  x_percent: number | null;
+  y_percent: number | null;
+  reason: string | null;
+}
+
+export interface AiSuggestedAnnotation {
+  category: AnnotationCategory;
+  note: string;
+  tags: string[];
+  linked_concept_names: string[];
+  confidence: number;
+  suggested_position: SuggestedAnnotationPosition;
+}
 
 export interface Visit {
   id: number;
@@ -85,7 +101,13 @@ export interface ResearchDraft {
   historical_context: string;
   visual_elements_to_notice: string[];
   related_questions: string[];
-  suggested_annotations: Array<{ category: string; text: string }>;
+  suggested_annotations: AiSuggestedAnnotation[];
+  possible_title?: string | null;
+  possible_artist?: string | null;
+  period_or_movement?: string | null;
+  ocr_label_text?: string | null;
+  confidence?: number | null;
+  source?: string;
 }
 
 export interface ResearchNote {
@@ -105,6 +127,7 @@ export const ANNOTATION_CATEGORIES: AnnotationCategory[] = [
   "history",
   "question",
   "composition",
+  "material",
 ];
 
 export const CATEGORY_LABELS: Record<AnnotationCategory, string> = {
@@ -113,6 +136,7 @@ export const CATEGORY_LABELS: Record<AnnotationCategory, string> = {
   history: "History",
   question: "Question",
   composition: "Composition",
+  material: "Material",
 };
 
 export interface SuggestedAnnotationDraft {
