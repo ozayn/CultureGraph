@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { api } from "@/lib/api";
+import { GOOGLE_SESSION_ERROR, mapSignInTransportError } from "@/lib/auth-errors";
 import { getAuthToken, setAuthToken } from "@/lib/auth-storage";
 
 export interface AuthUser {
@@ -24,7 +25,10 @@ interface AuthContextValue {
   loading: boolean;
   canEdit: boolean;
   googleConfigured: boolean;
+  signInLoading: boolean;
+  signInError: string | null;
   signInWithGoogleToken: (idToken: string) => Promise<void>;
+  clearSignInError: () => void;
   signOut: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -39,6 +43,8 @@ interface AuthProviderProps {
 export function AuthProvider({ children, googleConfigured }: AuthProviderProps) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [signInLoading, setSignInLoading] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   const refreshUser = useCallback(async () => {
     const token = getAuthToken();
@@ -66,18 +72,34 @@ export function AuthProvider({ children, googleConfigured }: AuthProviderProps) 
     })();
   }, [refreshUser]);
 
+  const clearSignInError = useCallback(() => {
+    setSignInError(null);
+  }, []);
+
   const signInWithGoogleToken = useCallback(async (idToken: string) => {
-    const response = await api.post<{ access_token: string; user: AuthUser }>(
-      "/api/auth/google",
-      { id_token: idToken }
-    );
-    setAuthToken(response.access_token);
-    setUser(response.user);
+    setSignInLoading(true);
+    setSignInError(null);
+
+    try {
+      const response = await api.post<{ access_token: string; user: AuthUser }>(
+        "/api/auth/google",
+        { id_token: idToken }
+      );
+      setAuthToken(response.access_token);
+      setUser(response.user);
+    } catch (error) {
+      const detail = mapSignInTransportError(error);
+      setSignInError(`${GOOGLE_SESSION_ERROR} ${detail}`);
+      throw error;
+    } finally {
+      setSignInLoading(false);
+    }
   }, []);
 
   const signOut = useCallback(() => {
     setAuthToken(null);
     setUser(null);
+    setSignInError(null);
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -86,11 +108,24 @@ export function AuthProvider({ children, googleConfigured }: AuthProviderProps) 
       loading,
       canEdit: Boolean(user),
       googleConfigured,
+      signInLoading,
+      signInError,
       signInWithGoogleToken,
+      clearSignInError,
       signOut,
       refreshUser,
     }),
-    [googleConfigured, loading, refreshUser, signInWithGoogleToken, signOut, user]
+    [
+      clearSignInError,
+      googleConfigured,
+      loading,
+      refreshUser,
+      signInError,
+      signInLoading,
+      signInWithGoogleToken,
+      signOut,
+      user,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

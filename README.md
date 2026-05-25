@@ -62,13 +62,26 @@ CultureGraph is **public to browse** and **private to edit**:
 Local auth setup:
 
 1. Create a [Google OAuth client](https://console.cloud.google.com/apis/credentials) (Web application).
-2. Add authorized JavaScript origins: `http://localhost:3000` (and your Railway web URL in production).
+2. Add **Authorized JavaScript origins** (exact origins, no trailing slash):
+   - `http://localhost:3000`
+   - `https://your-deployed-frontend-url` (Railway web service URL)
 3. Set the same client ID on **both** services:
    - Backend: `GOOGLE_CLIENT_ID`
    - Frontend: `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
-4. Backend only: set `ADMIN_EMAILS=you@gmail.com` (comma-separated allowlist) and a long random `JWT_SECRET`.
+4. Backend only:
+   - `ADMIN_EMAILS=you@gmail.com` (comma-separated allowlist; use your exact Google email)
+   - `JWT_SECRET` — long random secret
+   - `CORS_ORIGINS=https://your-deployed-frontend-url` (and `http://localhost:3000` for local API)
+5. Frontend only:
+   - `NEXT_PUBLIC_API_URL=https://your-deployed-api-url` — must point to the **API** service, not the web app
 
-Sign in uses Google ID tokens verified server-side; the API returns an app JWT stored in `localStorage`. All write endpoints require `Authorization: Bearer …`.
+Deployed sign-in flow: Google returns a credential → browser `POST`s to `${NEXT_PUBLIC_API_URL}/api/auth/google` → API verifies the Google token, checks `ADMIN_EMAILS`, issues an app JWT.
+
+If sign-in hangs after Google, open DevTools → Network and confirm that POST status. Common fixes:
+- `NEXT_PUBLIC_API_URL` pointing at the frontend URL instead of the API
+- missing `CORS_ORIGINS` entry for the frontend origin
+- `GOOGLE_CLIENT_ID` mismatch between frontend and backend
+- your Google email missing from `ADMIN_EMAILS`
 
 ## Quick start (Docker)
 

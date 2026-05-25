@@ -73,7 +73,7 @@ export function NavbarAuthMenu() {
                 Sign in with Google to edit visits, artworks, and notes.
               </DialogDescription>
             </DialogHeader>
-            <GoogleSignInButton />
+            <GoogleSignInButton onSignedIn={() => setSignInOpen(false)} />
           </DialogContent>
         </Dialog>
       </>

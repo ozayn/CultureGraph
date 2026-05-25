@@ -42,7 +42,9 @@ export function GoogleIdentityProvider({ clientId, children }: GoogleIdentityPro
     let cancelled = false;
 
     setGoogleCredentialHandler((credential) => {
-      void signInRef.current(credential);
+      void signInRef.current(credential).catch(() => {
+        // AuthProvider stores the user-visible sign-in error.
+      });
     });
 
     void (async () => {
