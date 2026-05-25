@@ -5,12 +5,22 @@ from httpx import ASGITransport, AsyncClient
 from PIL import Image
 
 from app.main import app
+from app.services.image_upload import extract_capture_datetime
 
 
 def _make_png_bytes(width: int = 2400, height: int = 1800) -> bytes:
     image = Image.new("RGB", (width, height), color=(120, 80, 40))
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _make_jpeg_with_exif(*, exif_date: str) -> bytes:
+    image = Image.new("RGB", (800, 600), color=(90, 120, 150))
+    exif = image.getexif()
+    exif[36867] = exif_date
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", exif=exif.tobytes())
     return buffer.getvalue()
 
 
@@ -51,6 +61,65 @@ async def test_upload_normalizes_artwork_image(auth_headers: dict[str, str]) -> 
     assert payload["image_width"] <= 1600
     assert payload["image_height"] <= 1600
     assert payload["image_file_size"] > 0
+    assert payload["captured_at"] is None
+    assert payload["captured_date_source"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_upload_extracts_exif_datetime_original(auth_headers: dict[str, str]) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={"title": "EXIF upload"},
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        upload_response = await client.post(
+            f"/api/artworks/{artwork_id}/image",
+            headers=auth_headers,
+            files={
+                "file": (
+                    "photo.jpg",
+                    _make_jpeg_with_exif(exif_date="2026:05:23 14:30:00"),
+                    "image/jpeg",
+                )
+            },
+        )
+
+    assert upload_response.status_code == 200
+    payload = upload_response.json()
+    assert payload["captured_date_source"] == "exif"
+    assert payload["captured_at"] is not None
+    assert payload["captured_at"][:10] == "2026-05-23"
+
+
+def test_extract_capture_datetime_reads_exif_original() -> None:
+    captured_at, source = extract_capture_datetime(
+        _make_jpeg_with_exif(exif_date="2026:05:23 14:30:00")
+    )
+    assert source == "exif"
+    assert captured_at is not None
+    assert captured_at.year == 2026
+    assert captured_at.month == 5
+    assert captured_at.day == 23
+    assert captured_at.hour == 14
+    assert captured_at.minute == 30
+
+
+def test_extract_capture_datetime_without_exif() -> None:
+    captured_at, source = extract_capture_datetime(_make_png_bytes())
+    assert captured_at is None
+    assert source == "none"
+
+
+def test_extract_capture_datetime_ignores_invalid_exif_date() -> None:
+    captured_at, source = extract_capture_datetime(
+        _make_jpeg_with_exif(exif_date="not-a-real-date")
+    )
+    assert captured_at is None
+    assert source == "none"
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,7 @@ import { CameraUpload } from "@/components/ui/camera-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { api } from "@/lib/api";
 import { validateArtworkUploadFile } from "@/lib/upload-validation";
 import type { Artwork } from "@/lib/types";
@@ -36,6 +37,7 @@ export function ProgressiveArtworkForm({
   const [yearPeriod, setYearPeriod] = useState(artwork?.year_period ?? "");
   const [museumGallery, setMuseumGallery] = useState(artwork?.museum_gallery ?? "");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [savedArtwork, setSavedArtwork] = useState<Artwork | null>(null);
   const previewUrl = useMemo(
     () => (photo ? URL.createObjectURL(photo) : null),
     [photo]
@@ -76,18 +78,24 @@ export function ProgressiveArtworkForm({
     }
 
     try {
-      const saved = artwork
+      let saved = artwork
         ? await api.put<Artwork>(`/api/artworks/${artwork.id}`, payload)
         : await api.post<Artwork>("/api/artworks", payload);
 
       if (photo) {
-        await api.upload<Artwork>(`/api/artworks/${saved.id}/image`, photo);
+        saved = await api.upload<Artwork>(`/api/artworks/${saved.id}/image`, photo);
       }
 
-      onComplete?.(saved);
+      setSavedArtwork(saved);
+
       if (redirectOnSave) {
         router.push(`/artworks/${saved.id}`);
         router.refresh();
+        return;
+      }
+
+      if (saved.captured_date_source !== "exif" || !saved.captured_at) {
+        onComplete?.(saved);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save artwork.");
@@ -163,6 +171,14 @@ export function ProgressiveArtworkForm({
       )}
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+      {savedArtwork && !redirectOnSave ? (
+        <PhotoCaptureDateSuggestion
+          artwork={savedArtwork}
+          onDismiss={() => onComplete?.(savedArtwork)}
+          onVisitUpdated={() => onComplete?.(savedArtwork)}
+        />
+      ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row">
         {step === 2 ? (

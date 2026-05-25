@@ -8,6 +8,7 @@ import { useRef, useState } from "react";
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { ArtworkImageLookupPanel } from "@/components/artworks/artwork-image-lookup-panel";
+import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
 import { ResearchPanel } from "@/components/artworks/research-panel";
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
@@ -214,6 +215,15 @@ export function ArtworkDetailClient({
             router.refresh();
           }}
         />
+      ) : null}
+
+      {canEdit ? (
+        <div className="px-4 sm:px-0">
+          <PhotoCaptureDateSuggestion
+            artwork={artwork}
+            onVisitUpdated={() => router.refresh()}
+          />
+        </div>
       ) : null}
 
       <section className="space-y-3 px-4 sm:px-0">

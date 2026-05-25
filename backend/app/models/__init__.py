@@ -63,6 +63,8 @@ class Artwork(Base):
     image_height: Mapped[int | None] = mapped_column()
     image_mime_type: Mapped[str | None] = mapped_column(String(64))
     image_file_size: Mapped[int | None] = mapped_column()
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    captured_date_source: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
     catalog_source: Mapped[str | None] = mapped_column(String(128))
     catalog_object_url: Mapped[str | None] = mapped_column(String(512))
     catalog_accession_number: Mapped[str | None] = mapped_column(String(64))

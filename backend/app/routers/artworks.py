@@ -163,6 +163,8 @@ async def upload_artwork_image(
     artwork.image_height = saved.image_height
     artwork.image_mime_type = saved.image_mime_type
     artwork.image_file_size = saved.image_file_size
+    artwork.captured_at = saved.captured_at
+    artwork.captured_date_source = saved.captured_date_source
     db.commit()
     db.refresh(artwork)
 

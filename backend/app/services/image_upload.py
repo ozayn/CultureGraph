@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import io
+import logging
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
@@ -12,7 +14,20 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 ACCEPTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+ACCEPTED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MASTER_MAX_EDGE = 2000
+DISPLAY_MAX_EDGE = 1600
+THUMBNAIL_MAX_EDGE = 400
+WEBP_QUALITY = 85
+THUMB_WEBP_QUALITY = 80
+
+EXIF_DATETIME_ORIGINAL = 36867
+EXIF_DATETIME_DIGITIZED = 36868
+EXIF_DATETIME = 306
+EXIF_DATE_TAGS = (EXIF_DATETIME_ORIGINAL, EXIF_DATETIME_DIGITIZED, EXIF_DATETIME)
 ACCEPTED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MASTER_MAX_EDGE = 2000
 DISPLAY_MAX_EDGE = 1600
@@ -29,6 +44,8 @@ class SavedArtworkImages:
     image_height: int
     image_mime_type: str
     image_file_size: int
+    captured_at: datetime | None
+    captured_date_source: str
 
 
 async def read_upload_with_limit(file: UploadFile, max_bytes: int | None = None) -> bytes:
@@ -67,6 +84,38 @@ def _validate_upload_metadata(filename: str | None, content_type: str | None) ->
             status_code=415,
             detail="Unsupported image type. Upload JPEG, PNG, or WebP.",
         )
+
+
+def _parse_exif_datetime(value: str) -> datetime | None:
+    cleaned = value.strip()
+    for fmt in ("%Y:%m:%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            parsed = datetime.strptime(cleaned, fmt)
+            return parsed.replace(tzinfo=UTC)
+        except ValueError:
+            continue
+    return None
+
+
+def extract_capture_datetime(data: bytes) -> tuple[datetime | None, str]:
+    """Read capture date from EXIF only. GPS and other metadata are ignored."""
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            exif = image.getexif()
+            if not exif:
+                return None, "none"
+
+            for tag in EXIF_DATE_TAGS:
+                raw_value = exif.get(tag)
+                if raw_value is None:
+                    continue
+                parsed = _parse_exif_datetime(str(raw_value))
+                if parsed is not None:
+                    return parsed, "exif"
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        logger.debug("Could not read EXIF capture date: %s", exc)
+
+    return None, "none"
 
 
 def _prepare_image(data: bytes) -> Image.Image:
@@ -132,6 +181,7 @@ def process_and_store_artwork_image(
     content_type: str | None,
 ) -> SavedArtworkImages:
     _validate_upload_metadata(filename, content_type)
+    captured_at, captured_date_source = extract_capture_datetime(data)
     source = _prepare_image(data)
 
     master = _resize_max_edge(source, MASTER_MAX_EDGE)
@@ -157,6 +207,8 @@ def process_and_store_artwork_image(
         image_height=display_height,
         image_mime_type="image/webp",
         image_file_size=display_size,
+        captured_at=captured_at,
+        captured_date_source=captured_date_source,
     )
 
 

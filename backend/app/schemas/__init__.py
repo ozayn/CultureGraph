@@ -105,6 +105,8 @@ class ArtworkBase(BaseModel):
     image_height: int | None = None
     image_mime_type: str | None = None
     image_file_size: int | None = None
+    captured_at: datetime | None = None
+    captured_date_source: str = "none"
     catalog_source: str | None = None
     catalog_object_url: str | None = None
     catalog_accession_number: str | None = None

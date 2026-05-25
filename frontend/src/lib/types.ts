@@ -36,6 +36,8 @@ export interface Artwork {
   image_height: number | null;
   image_mime_type: string | null;
   image_file_size: number | null;
+  captured_at: string | null;
+  captured_date_source: "exif" | "none";
   catalog_source: string | null;
   catalog_object_url: string | null;
   catalog_accession_number: string | null;
