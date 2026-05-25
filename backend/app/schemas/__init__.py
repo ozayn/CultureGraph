@@ -89,6 +89,11 @@ class ArtworkBase(BaseModel):
     medium: str | None = None
     museum_gallery: str | None = None
     image_url: str | None = None
+    image_thumbnail_url: str | None = None
+    image_width: int | None = None
+    image_height: int | None = None
+    image_mime_type: str | None = None
+    image_file_size: int | None = None
     catalog_source: str | None = None
     catalog_object_url: str | None = None
     catalog_accession_number: str | None = None
@@ -107,7 +112,6 @@ class ArtworkUpdate(BaseModel):
     year_period: str | None = None
     medium: str | None = None
     museum_gallery: str | None = None
-    image_url: str | None = None
     catalog_source: str | None = None
     catalog_object_url: str | None = None
     catalog_accession_number: str | None = None

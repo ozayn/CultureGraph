@@ -16,6 +16,7 @@ import { CameraUpload } from "@/components/ui/camera-upload";
 import { Textarea } from "@/components/ui/textarea";
 import { api, mediaUrl } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
+import { validateArtworkUploadFile } from "@/lib/upload-validation";
 import {
   CATEGORY_LABELS,
   type Annotation,
@@ -70,6 +71,13 @@ export function ArtworkDetailClient({
 
   async function uploadPhoto() {
     if (!photo) return;
+
+    const uploadError = validateArtworkUploadFile(photo);
+    if (uploadError) {
+      setError(uploadError);
+      return;
+    }
+
     setUploadingPhoto(true);
     setError(null);
     try {
@@ -304,8 +312,18 @@ export function ArtworkDetailClient({
       <div className="space-y-4 pb-2">
         <CameraUpload
           previewUrl={previewUrl ?? imageSrc}
+          selectedFile={photo}
           disabled={uploadingPhoto}
+          error={error}
           onSelect={(file) => {
+            const validationError = validateArtworkUploadFile(file);
+            if (validationError) {
+              setError(validationError);
+              setPhoto(null);
+              setPreviewUrl(null);
+              return;
+            }
+            setError(null);
             setPhoto(file);
             setPreviewUrl(URL.createObjectURL(file));
           }}

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
+import { validateArtworkUploadFile } from "@/lib/upload-validation";
 import type { Artwork } from "@/lib/types";
 
 interface ProgressiveArtworkFormProps {
@@ -63,6 +64,15 @@ export function ProgressiveArtworkForm({
       visit_id: visitId ?? artwork?.visit_id ?? null,
     };
 
+    if (photo) {
+      const uploadError = validateArtworkUploadFile(photo);
+      if (uploadError) {
+        setError(uploadError);
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       const saved = artwork
         ? await api.put<Artwork>(`/api/artworks/${artwork.id}`, payload)
@@ -103,8 +113,19 @@ export function ProgressiveArtworkForm({
 
           <CameraUpload
             previewUrl={previewUrl}
+            selectedFile={photo}
+            error={error}
             disabled={loading}
-            onSelect={setPhoto}
+            onSelect={(file) => {
+              const uploadError = validateArtworkUploadFile(file);
+              if (uploadError) {
+                setError(uploadError);
+                setPhoto(null);
+                return;
+              }
+              setError(null);
+              setPhoto(file);
+            }}
           />
         </div>
       ) : (

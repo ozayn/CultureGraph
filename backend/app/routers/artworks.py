@@ -1,6 +1,4 @@
-import os
-import uuid
-from pathlib import Path
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -8,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import require_admin_user
 
-from app.config import settings
 from app.database import get_db
 from app.models import Artwork, Visit
 from app.schemas import (
@@ -19,8 +16,15 @@ from app.schemas import (
     ArtworkUpdate,
 )
 from app.services.artwork_lookup import lookup_artwork_candidates
+from app.services.image_upload import (
+    process_and_store_artwork_image,
+    read_upload_with_limit,
+    remove_artwork_image_files,
+)
 from app.sources.base import ArtworkLookupQuery
 from app.sources.nga import NGA_SOURCE_NAME, is_nga_museum, should_search_nga
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/artworks", tags=["artworks"])
 
@@ -126,23 +130,44 @@ def delete_artwork(
 @router.post("/{artwork_id}/image", response_model=ArtworkRead)
 async def upload_artwork_image(
     artwork_id: int,
-    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    user: Annotated[dict[str, str], Depends(require_admin_user)],
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> Artwork:
     artwork = _get_artwork_or_404(db, artwork_id)
+    logger.info(
+        "artwork image upload requested artwork_id=%s user=%s content_type=%s",
+        artwork_id,
+        user.get("email"),
+        file.content_type,
+    )
 
-    upload_dir = Path(settings.upload_dir)
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    remove_artwork_image_files(
+        image_url=artwork.image_url,
+        image_thumbnail_url=artwork.image_thumbnail_url,
+    )
 
-    suffix = Path(file.filename or "image.jpg").suffix or ".jpg"
-    filename = f"{uuid.uuid4().hex}{suffix}"
-    filepath = upload_dir / filename
+    data = await read_upload_with_limit(file)
+    saved = process_and_store_artwork_image(
+        artwork_id=artwork_id,
+        data=data,
+        filename=file.filename,
+        content_type=file.content_type,
+    )
 
-    content = await file.read()
-    filepath.write_bytes(content)
-
-    artwork.image_url = f"/uploads/{filename}"
+    artwork.image_url = saved.image_url
+    artwork.image_thumbnail_url = saved.image_thumbnail_url
+    artwork.image_width = saved.image_width
+    artwork.image_height = saved.image_height
+    artwork.image_mime_type = saved.image_mime_type
+    artwork.image_file_size = saved.image_file_size
     db.commit()
     db.refresh(artwork)
+
+    logger.info(
+        "artwork image stored artwork_id=%s url=%s bytes=%s",
+        artwork_id,
+        saved.image_url,
+        saved.image_file_size,
+    )
     return artwork

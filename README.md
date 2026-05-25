@@ -129,7 +129,8 @@ Deploy as **two services** from this monorepo. Configure variables in each servi
 | `JWT_SECRET` | Yes | Long random string for app JWT signing |
 | `ANTHROPIC_API_KEY` | No | Enables Claude research; API service only |
 | `ANTHROPIC_TIMEOUT_SECONDS` | No | Default `90`; museum-note import can take up to ~2 minutes end-to-end |
-| `UPLOAD_DIR` | No | Default `uploads` |
+| `UPLOAD_DIR` | No | Default `uploads`; local folder served at `/uploads` |
+| `UPLOAD_MAX_BYTES` | No | Default `10485760` (10 MB) for artwork photo uploads |
 
 Do **not** set `NEXT_PUBLIC_*` variables on the API service.
 
@@ -149,6 +150,25 @@ Do **not** set `NEXT_PUBLIC_*` variables on the API service.
 Do **not** set `ANTHROPIC_API_KEY`, `JWT_SECRET`, or `ADMIN_EMAILS` on the Web service.
 
 See `backend/Procfile`, `backend/railway.toml`, and `frontend/railway.toml` for start/build commands.
+
+## Uploaded artwork images
+
+### Current behavior
+
+1. **Are uploads saved?** Yes. `POST /api/artworks/{id}/image` writes normalized files to disk and stores URLs on the artwork row.
+2. **Local path:** `backend/uploads/artworks/{artwork_id}/{uuid}_display.webp` (plus `_master.webp` and `_thumb.webp` variants).
+3. **Database:** `image_url` points at the web display copy; metadata columns store width, height, mime type, and file size.
+4. **Railway redeploy:** The default `uploads/` folder is **ephemeral**. Redeploys/restarts wipe uploaded files unless you attach persistent storage.
+5. **Validation:** JPEG/PNG/WebP only, max 10 MB, resized with Pillow (master 2000px, display 1600px, thumb 400px), metadata stripped, saved as WebP.
+
+### Production storage recommendation
+
+For Railway production, choose one of:
+
+- **Railway Volume** mounted at `UPLOAD_DIR` (simplest path for the current filesystem-based API)
+- **Object storage** (S3, Cloudflare R2, Supabase Storage) for durable media — recommended long term, but not wired in this repo yet
+
+Until persistent storage is configured, treat uploaded artwork photos as **best-effort** on Railway.
 
 ## Features
 

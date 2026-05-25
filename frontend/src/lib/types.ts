@@ -31,6 +31,11 @@ export interface Artwork {
   medium: string | null;
   museum_gallery: string | null;
   image_url: string | null;
+  image_thumbnail_url: string | null;
+  image_width: number | null;
+  image_height: number | null;
+  image_mime_type: string | null;
+  image_file_size: number | null;
   catalog_source: string | null;
   catalog_object_url: string | null;
   catalog_accession_number: string | null;
