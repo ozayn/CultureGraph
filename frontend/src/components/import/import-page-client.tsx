@@ -7,6 +7,7 @@ import { MuseumAutocomplete } from "@/components/museums/museum-autocomplete";
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +19,7 @@ import {
   ENTITY_TYPE_LABELS,
   groupEntities,
 } from "@/lib/entity-types";
+import { importDraftThumbnailUrl } from "@/lib/thumbnails";
 import {
   CATEGORY_LABELS,
   type ImportedEntityDraft,
@@ -87,6 +89,11 @@ function buildCulturalEntityPayload(entity: ReviewEntity, visitId: number) {
     movements: entity.movements,
     historical_events: entity.historical_events,
     related_entities: entity.related_entities,
+    image_url: entity.image_url ?? null,
+    thumbnail_url: entity.thumbnail_url ?? null,
+    image_source_name: entity.image_source_name ?? null,
+    image_source_url: entity.image_source_url ?? null,
+    image_rights_label: entity.image_rights_label ?? null,
   };
 }
 
@@ -458,6 +465,13 @@ export function ImportPageClient() {
                           onChange={(event) =>
                             updateEntity(index, { selected: event.target.checked })
                           }
+                        />
+                        <EntryThumbnail
+                          imageUrl={importDraftThumbnailUrl(entity)}
+                          alt={entity.name}
+                          entityType={entity.entity_type}
+                          size="md"
+                          className="mt-0.5"
                         />
                         <span className="min-w-0 flex-1 space-y-2">
                           <span className="flex flex-wrap items-center gap-2">

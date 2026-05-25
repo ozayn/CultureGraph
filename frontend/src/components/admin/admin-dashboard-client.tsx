@@ -8,6 +8,7 @@ import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { Button } from "@/components/ui/button";
+import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
@@ -23,6 +24,8 @@ import {
   type AdminTab,
   type AdminVisitRecord,
 } from "@/lib/admin-types";
+import { artworkThumbnailUrl, entityThumbnailUrl } from "@/lib/thumbnails";
+import type { CulturalEntityType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
@@ -307,10 +310,10 @@ export function AdminDashboardClient() {
                   ) : null}
                   {activeTab === "artworks" ? (
                     <>
+                      <th className="px-4 py-3 font-medium">Thumb</th>
                       <th className="px-4 py-3 font-medium">Title</th>
                       <th className="px-4 py-3 font-medium">Artist</th>
                       <th className="px-4 py-3 font-medium">Visit</th>
-                      <th className="px-4 py-3 font-medium">Image</th>
                     </>
                   ) : null}
                   {activeTab === "annotations" ? (
@@ -322,6 +325,7 @@ export function AdminDashboardClient() {
                   ) : null}
                   {activeTab === "entities" ? (
                     <>
+                      <th className="px-4 py-3 font-medium">Thumb</th>
                       <th className="px-4 py-3 font-medium">Name</th>
                       <th className="px-4 py-3 font-medium">Type</th>
                       <th className="px-4 py-3 font-medium">Visit</th>
@@ -450,13 +454,18 @@ function AdminTableRow({
       ) : null}
       {tab === "artworks" ? (
         <>
+          <td className="px-4 py-3">
+            <EntryThumbnail
+              imageUrl={artworkThumbnailUrl(record as AdminArtworkRecord)}
+              alt={(record as AdminArtworkRecord).title}
+              entityType="artwork"
+              size="sm"
+            />
+          </td>
           <td className="px-4 py-3">{(record as AdminArtworkRecord).title}</td>
           <td className="px-4 py-3">{truncate((record as AdminArtworkRecord).artist, 40)}</td>
           <td className="px-4 py-3 tabular-nums">
             {(record as AdminArtworkRecord).visit_id ?? "—"}
-          </td>
-          <td className="px-4 py-3">
-            {(record as AdminArtworkRecord).image_url ? "Yes" : "No"}
           </td>
         </>
       ) : null}
@@ -471,6 +480,14 @@ function AdminTableRow({
       ) : null}
       {tab === "entities" ? (
         <>
+          <td className="px-4 py-3">
+            <EntryThumbnail
+              imageUrl={entityThumbnailUrl(record as AdminEntityRecord)}
+              alt={(record as AdminEntityRecord).name}
+              entityType={(record as AdminEntityRecord).entity_type as CulturalEntityType}
+              size="sm"
+            />
+          </td>
           <td className="px-4 py-3">{(record as AdminEntityRecord).name}</td>
           <td className="px-4 py-3">{(record as AdminEntityRecord).entity_type}</td>
           <td className="px-4 py-3 tabular-nums">{(record as AdminEntityRecord).visit_id}</td>
@@ -518,14 +535,34 @@ function AdminMobileCard({
   const detailLink = getDetailLink(tab, record);
   const deleteTarget = getDeleteTarget(tab, record);
   const title = getRecordTitle(tab, record);
+  const thumbnailUrl =
+    tab === "artworks"
+      ? artworkThumbnailUrl(record as AdminArtworkRecord)
+      : tab === "entities"
+        ? entityThumbnailUrl(record as AdminEntityRecord)
+        : null;
+  const thumbnailType: CulturalEntityType | "artwork" =
+    tab === "entities"
+      ? ((record as AdminEntityRecord).entity_type as CulturalEntityType)
+      : "artwork";
 
   return (
     <li className="rounded-xl border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs text-muted-foreground">#{record.id}</p>
-          <p className="mt-1 text-base font-medium">{title}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{formatDate(record.created_at)}</p>
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          {tab === "artworks" || tab === "entities" ? (
+            <EntryThumbnail
+              imageUrl={thumbnailUrl}
+              alt={title}
+              entityType={thumbnailType}
+              size="md"
+            />
+          ) : null}
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">#{record.id}</p>
+            <p className="mt-1 text-base font-medium">{title}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{formatDate(record.created_at)}</p>
+          </div>
         </div>
         {deleteTarget ? <AdminActionsMenu onDelete={() => onDelete(deleteTarget)} /> : null}
       </div>

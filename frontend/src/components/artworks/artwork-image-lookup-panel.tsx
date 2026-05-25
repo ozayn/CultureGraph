@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ImageIcon, Loader2 } from "lucide-react";
 
+import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { Artwork, ArtworkLookupCandidate, ArtworkLookupResponse } from "@/lib/types";
@@ -60,6 +61,7 @@ export function ArtworkImageLookupPanel({
     try {
       const updated = await api.put<Artwork>(`/api/artworks/${artwork.id}`, {
         image_url: candidate.image_url,
+        image_thumbnail_url: candidate.image_thumbnail_url ?? candidate.image_url,
         catalog_source: candidate.source_name,
         catalog_object_url: candidate.object_url,
         catalog_accession_number: candidate.accession_number,
@@ -144,18 +146,12 @@ export function ArtworkImageLookupPanel({
                     key={key}
                     className="flex gap-3 rounded-lg border border-border p-3"
                   >
-                    {candidate.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={candidate.image_url}
-                        alt=""
-                        className="size-16 shrink-0 rounded-md object-cover ring-1 ring-border"
-                      />
-                    ) : (
-                      <div className="flex size-16 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                        No image
-                      </div>
-                    )}
+                    <EntryThumbnail
+                      imageUrl={candidate.image_thumbnail_url ?? candidate.image_url}
+                      alt={candidate.title}
+                      entityType="artwork"
+                      size="lg"
+                    />
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="truncate text-sm font-medium">{candidate.title}</p>
                       <p className="truncate text-xs text-muted-foreground">

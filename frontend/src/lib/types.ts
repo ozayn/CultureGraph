@@ -52,6 +52,7 @@ export interface ArtworkLookupCandidate {
   date: string | null;
   medium: string | null;
   image_url: string | null;
+  image_thumbnail_url: string | null;
   object_url: string | null;
   accession_number: string | null;
   source_name: string;
@@ -140,6 +141,11 @@ export interface CulturalEntity {
   movements: string[];
   historical_events: string[];
   related_entities: string[];
+  image_url: string | null;
+  thumbnail_url: string | null;
+  image_source_name: string | null;
+  image_source_url: string | null;
+  image_rights_label: string | null;
   created_at: string;
 }
 
@@ -159,6 +165,11 @@ export interface ImportedEntityDraft {
   movements: string[];
   historical_events: string[];
   suggested_annotations: SuggestedAnnotationDraft[];
+  image_url?: string | null;
+  thumbnail_url?: string | null;
+  image_source_name?: string | null;
+  image_source_url?: string | null;
+  image_rights_label?: string | null;
 }
 
 export interface ArtworkImportDraft {

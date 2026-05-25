@@ -60,6 +60,11 @@ class CulturalEntityBase(BaseModel):
     movements: list[str] = Field(default_factory=list)
     historical_events: list[str] = Field(default_factory=list)
     related_entities: list[str] = Field(default_factory=list)
+    image_url: str | None = None
+    thumbnail_url: str | None = None
+    image_source_name: str | None = None
+    image_source_url: str | None = None
+    image_rights_label: str | None = None
     visit_id: int
 
 
@@ -83,6 +88,11 @@ class CulturalEntityUpdate(BaseModel):
     movements: list[str] | None = None
     historical_events: list[str] | None = None
     related_entities: list[str] | None = None
+    image_url: str | None = None
+    thumbnail_url: str | None = None
+    image_source_name: str | None = None
+    image_source_url: str | None = None
+    image_rights_label: str | None = None
 
 
 class MuseumRead(BaseModel):
@@ -126,6 +136,7 @@ class ArtworkUpdate(BaseModel):
     medium: str | None = None
     museum_gallery: str | None = None
     image_url: str | None = None
+    image_thumbnail_url: str | None = None
     catalog_source: str | None = None
     catalog_object_url: str | None = None
     catalog_accession_number: str | None = None
@@ -231,6 +242,11 @@ class ImportedEntityDraft(BaseModel):
     movements: list[str] = Field(default_factory=list)
     historical_events: list[str] = Field(default_factory=list)
     suggested_annotations: list[SuggestedAnnotationDraft] = Field(default_factory=list)
+    image_url: str | None = None
+    thumbnail_url: str | None = None
+    image_source_name: str | None = None
+    image_source_url: str | None = None
+    image_rights_label: str | None = None
 
 
 class ArtworkImportDraft(BaseModel):
@@ -295,6 +311,7 @@ class ArtworkLookupCandidateRead(BaseModel):
     date: str | None = None
     medium: str | None = None
     image_url: str | None = None
+    image_thumbnail_url: str | None = None
     object_url: str | None = None
     accession_number: str | None = None
     source_name: str

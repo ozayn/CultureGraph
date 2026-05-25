@@ -102,6 +102,7 @@ async def test_lookup_image_endpoint_returns_nga_candidates(
     assert "National Gallery of Art" in payload["sources_searched"]
     candidate = payload["candidates"][0]
     assert candidate["image_url"]
+    assert candidate.get("image_thumbnail_url")
     assert candidate["source_name"] == "National Gallery of Art"
     assert candidate["confidence"] > 0
 
@@ -145,6 +146,8 @@ async def test_apply_official_image_persists_url_and_catalog_metadata(
             headers=auth_headers,
             json={
                 "image_url": candidate["image_url"],
+                "image_thumbnail_url": candidate.get("image_thumbnail_url")
+                or candidate["image_url"],
                 "catalog_source": candidate["source_name"],
                 "catalog_object_url": candidate["object_url"],
                 "catalog_accession_number": candidate["accession_number"],
@@ -157,9 +160,12 @@ async def test_apply_official_image_persists_url_and_catalog_metadata(
         get_response = await client.get(f"/api/artworks/{artwork_id}")
 
     assert updated["image_url"] == candidate["image_url"]
+    assert updated["image_thumbnail_url"] == (
+        candidate.get("image_thumbnail_url") or candidate["image_url"]
+    )
     assert updated["catalog_source"] == candidate["source_name"]
     assert updated["catalog_object_url"] == candidate["object_url"]
-    assert get_response.json()["image_url"] == candidate["image_url"]
+    assert get_response.json()["image_thumbnail_url"] == updated["image_thumbnail_url"]
 
 
 @pytest.mark.asyncio

@@ -34,6 +34,7 @@ export interface AdminArtworkRecord {
   artist: string | null;
   year_period: string | null;
   image_url: string | null;
+  image_thumbnail_url: string | null;
   catalog_source: string | null;
   created_at: string;
 }
@@ -54,6 +55,8 @@ export interface AdminEntityRecord {
   entity_type: string;
   name: string;
   description: string | null;
+  image_url: string | null;
+  thumbnail_url: string | null;
   created_at: string;
 }
 

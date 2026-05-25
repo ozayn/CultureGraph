@@ -40,6 +40,7 @@ class AdminArtworkRecord(BaseModel):
     artist: str | None
     year_period: str | None
     image_url: str | None
+    image_thumbnail_url: str | None
     catalog_source: str | None
     created_at: datetime
 
@@ -64,6 +65,8 @@ class AdminEntityRecord(BaseModel):
     entity_type: CulturalEntityType
     name: str
     description: str | None
+    image_url: str | None
+    thumbnail_url: str | None
     created_at: datetime
 
 

@@ -13,6 +13,7 @@ import { CulturalEntityForm } from "@/components/cultural-entities/cultural-enti
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { ButtonLink } from "@/components/ui/button-link";
+import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
 import { VisitForm } from "@/components/visits/visit-form";
 import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
@@ -21,6 +22,7 @@ import {
   ENTITY_TYPE_LABELS,
   groupVisitDetailEntities,
 } from "@/lib/entity-types";
+import { artworkThumbnailUrl, entityThumbnailUrl } from "@/lib/thumbnails";
 import type { Artwork, CulturalEntity, Visit } from "@/lib/types";
 
 interface VisitDetailClientProps {
@@ -49,33 +51,45 @@ function CulturalEntityCard({ entity, canEdit, onEdit, onDelete }: CulturalEntit
 
   return (
     <li className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
-            <Icon className="size-3" strokeWidth={1.75} />
-            {ENTITY_TYPE_LABELS[entity.entity_type]}
-          </span>
+      <div className="flex items-start gap-3">
+        <EntryThumbnail
+          imageUrl={entityThumbnailUrl(entity)}
+          alt={entity.name}
+          entityType={entity.entity_type}
+          size="md"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+                <Icon className="size-3" strokeWidth={1.75} />
+                {ENTITY_TYPE_LABELS[entity.entity_type]}
+              </span>
+            </div>
+            {canEdit ? (
+              <AdminActionsMenu
+                label={`Actions for ${entity.name}`}
+                onEdit={() => onEdit(entity)}
+                onDelete={() => onDelete(entity)}
+              />
+            ) : null}
+          </div>
+          <p className="mt-2 text-base font-medium">{entity.name}</p>
+          {entity.description ? (
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              {entity.description}
+            </p>
+          ) : null}
+          {entity.related_entities.length > 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Related: {entity.related_entities.join(", ")}
+            </p>
+          ) : null}
+          {tagLine.length > 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">{tagLine.join(" · ")}</p>
+          ) : null}
         </div>
-        {canEdit ? (
-          <AdminActionsMenu
-            label={`Actions for ${entity.name}`}
-            onEdit={() => onEdit(entity)}
-            onDelete={() => onDelete(entity)}
-          />
-        ) : null}
       </div>
-      <p className="mt-2 text-base font-medium">{entity.name}</p>
-      {entity.description ? (
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{entity.description}</p>
-      ) : null}
-      {entity.related_entities.length > 0 ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Related: {entity.related_entities.join(", ")}
-        </p>
-      ) : null}
-      {tagLine.length > 0 ? (
-        <p className="mt-2 text-xs text-muted-foreground">{tagLine.join(" · ")}</p>
-      ) : null}
     </li>
   );
 }
@@ -176,12 +190,20 @@ export function VisitDetailClient({
                 <li key={artwork.id}>
                   <Link
                     href={`/artworks/${artwork.id}`}
-                    className="block min-h-11 rounded-xl border border-border bg-card p-4 transition-colors active:bg-muted/50"
+                    className="flex min-h-11 items-center gap-3 rounded-xl border border-border bg-card p-4 transition-colors active:bg-muted/50"
                   >
-                    <p className="text-base font-medium">{artwork.title}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {[artwork.artist, artwork.year_period].filter(Boolean).join(" · ")}
-                    </p>
+                    <EntryThumbnail
+                      imageUrl={artworkThumbnailUrl(artwork)}
+                      alt={artwork.title}
+                      entityType="artwork"
+                      size="md"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-medium">{artwork.title}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {[artwork.artist, artwork.year_period].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
                   </Link>
                 </li>
               ))}

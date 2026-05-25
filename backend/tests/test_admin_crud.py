@@ -221,10 +221,19 @@ async def test_cultural_entity_patch_and_delete(auth_headers: dict[str, str]) ->
         patch_response = await client.patch(
             f"/api/cultural-entities/{entity_id}",
             headers=auth_headers,
-            json={"name": "Michelangelo Merisi da Caravaggio"},
+            json={
+                "name": "Michelangelo Merisi da Caravaggio",
+                "thumbnail_url": "https://example.com/caravaggio-thumb.jpg",
+                "image_source_name": "Wikimedia Commons",
+                "image_source_url": "https://commons.wikimedia.org/wiki/File:Example.jpg",
+                "image_rights_label": "Public domain",
+            },
         )
         assert patch_response.status_code == 200
-        assert patch_response.json()["name"] == "Michelangelo Merisi da Caravaggio"
+        payload = patch_response.json()
+        assert payload["name"] == "Michelangelo Merisi da Caravaggio"
+        assert payload["thumbnail_url"] == "https://example.com/caravaggio-thumb.jpg"
+        assert payload["image_source_name"] == "Wikimedia Commons"
 
         delete_response = await client.delete(
             f"/api/cultural-entities/{entity_id}", headers=auth_headers

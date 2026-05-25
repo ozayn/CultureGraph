@@ -15,6 +15,7 @@ from app.schemas import (
     ArtworkRead,
     ArtworkUpdate,
 )
+from app.services.artwork_images import normalize_artwork_image_update
 from app.services.artwork_lookup import lookup_artwork_candidates
 from app.services.image_upload import (
     process_and_store_artwork_image,
@@ -113,6 +114,8 @@ def update_artwork(
     if "visit_id" in data and data["visit_id"] is not None:
         if not db.get(Visit, data["visit_id"]):
             raise HTTPException(status_code=400, detail="Visit not found")
+
+    data = normalize_artwork_image_update(data)
 
     for key, value in data.items():
         setattr(artwork, key, value)

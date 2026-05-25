@@ -24,3 +24,4 @@ class ArtworkLookupCandidate:
     confidence: float
     rights_label: str | None
     external_id: str | None = None
+    image_thumbnail_url: str | None = None

@@ -60,6 +60,7 @@ def search_nga_collection(
                 date=entry.get("date"),
                 medium=entry.get("medium"),
                 image_url=entry.get("image_url"),
+                image_thumbnail_url=entry.get("image_url"),
                 object_url=entry.get("object_url"),
                 accession_number=entry.get("accession_number"),
                 source_name=NGA_SOURCE_NAME,

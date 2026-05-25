@@ -133,6 +133,11 @@ class CulturalEntity(Base):
     movements: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     historical_events: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     related_entities: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    image_url: Mapped[str | None] = mapped_column(String(512))
+    thumbnail_url: Mapped[str | None] = mapped_column(String(512))
+    image_source_name: Mapped[str | None] = mapped_column(String(128))
+    image_source_url: Mapped[str | None] = mapped_column(String(512))
+    image_rights_label: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
