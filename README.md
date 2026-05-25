@@ -17,7 +17,7 @@ backend/          FastAPI API
 frontend/         Next.js web app
 scripts/dev.sh    Full local stack: Docker Postgres, migrate, seed, both servers
 scripts/start.sh  Start API + web with env loading (no Docker)
-DESIGN.md         Interaction philosophy and future Story Mode notes
+DESIGN.md         Interaction philosophy, Story Mode notes, and product direction
 ```
 
 ## Environment files (local)
@@ -189,6 +189,36 @@ Until persistent storage is configured, treat uploaded artwork photos as **best-
 6. Confirm the pin appears immediately on the canvas and in the list below.
 7. Refresh the page — the pin should still be there.
 8. Log out and confirm the annotate page shows **Sign in to add annotations.**
+
+## Roadmap / future work
+
+CultureGraph is intentionally small today. This list tracks what exists, what needs hardening, and what comes next.
+
+### Shipped (baseline in repo)
+
+| Area | Status | Notes |
+|------|--------|--------|
+| Admin database dashboard | Done | `/admin` — summary counts, tabbed tables, search, pagination; API at `/api/admin/*` |
+| Image storage + normalization | Done (local) | Pillow pipeline, WebP variants, 10 MB limit; Railway needs a volume or object storage for durability |
+| Cultural entity model (beyond artworks) | Done | `CulturalEntity` types (artist, concept, movement, etc.) saved separately from visit notes |
+| Official artwork image lookup | Done (NGA first) | “Find official image” on artwork detail when no photo; NGA open-data index; more museums later |
+
+### Next up
+
+| Area | Goal |
+|------|------|
+| Visit detail redesign | Clearer grouping of artworks vs imported entities, lighter hierarchy, better scan on mobile |
+| Better import review | Richer preview before save — edit entity type/name, merge duplicates, drop low-confidence rows |
+| Search | Cross-visit search over museums, artworks, notes, entities (admin + public read paths) |
+| Tags / themes | First-class tagging across visits and artworks; reuse entity themes beyond import-only fields |
+| Graph-lite related entries | Surface `related_entities` and cross-links between visits, artworks, and concepts without a full graph DB |
+| Mobile capture mode | Fast path: camera → artwork stub → optional pin → minimal fields; optimized for in-gallery use |
+
+### Infrastructure follow-ups
+
+- **Persistent image storage** on Railway (volume or S3/R2) — uploads are normalized but disk is ephemeral by default
+- **Additional museum lookup sources** beyond National Gallery of Art (Smithsonian, Met, etc.)
+- **Story Mode** — scene-by-scene artwork explainer (see [DESIGN.md](DESIGN.md))
 
 ## License
 
