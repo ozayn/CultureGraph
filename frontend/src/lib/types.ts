@@ -74,6 +74,9 @@ export interface Annotation {
   y_percent: number;
   category: AnnotationCategory;
   text: string;
+  tags: string[];
+  linked_entity_ids: number[];
+  linked_concept_names: string[];
   created_at: string;
 }
 

@@ -3,6 +3,8 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { AnnotationPinForm } from "@/components/annotations/annotation-pin-form";
+import { AnnotationPinMeta } from "@/components/annotations/annotation-pin-meta";
 import { CATEGORY_COLORS } from "@/components/annotations/konva-canvas-stage";
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
@@ -10,18 +12,17 @@ import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Badge } from "@/components/ui/badge";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  annotationToFormValues,
+  emptyAnnotationPinFormValues,
+  formValuesToAnnotationPayload,
+  type AnnotationPinFormValues,
+} from "@/lib/annotation-form";
+import { buildAnnotationTagSuggestions } from "@/lib/annotation-suggestions";
 import { logAnnotationRequest } from "@/lib/annotation-debug";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
-import { cn } from "@/lib/utils";
-import {
-  ANNOTATION_CATEGORIES,
-  CATEGORY_LABELS,
-  type Annotation,
-  type AnnotationCategory,
-} from "@/lib/types";
+import { CATEGORY_LABELS, type Annotation, type CulturalEntity } from "@/lib/types";
 
 const KonvaCanvasStage = dynamic(() => import("@/components/annotations/konva-canvas-stage"), {
   ssr: false,
@@ -36,6 +37,7 @@ interface AnnotationCanvasProps {
   artworkId: number;
   imageUrl: string | null;
   initialAnnotations: Annotation[];
+  culturalEntities?: CulturalEntity[];
 }
 
 interface PendingPin {
@@ -49,6 +51,7 @@ export function AnnotationCanvas({
   artworkId,
   imageUrl,
   initialAnnotations,
+  culturalEntities = [],
 }: AnnotationCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { canEdit, loading: authLoading } = useAuth();
@@ -57,13 +60,19 @@ export function AnnotationCanvas({
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [pendingPin, setPendingPin] = useState<PendingPin | null>(null);
-  const [category, setCategory] = useState<AnnotationCategory>("observation");
-  const [note, setNote] = useState("");
+  const [formValues, setFormValues] = useState<AnnotationPinFormValues>(
+    emptyAnnotationPinFormValues()
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingAnnotation, setEditingAnnotation] = useState<Annotation | null>(null);
   const [deletingAnnotation, setDeletingAnnotation] = useState<Annotation | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const tagSuggestions = useMemo(
+    () => buildAnnotationTagSuggestions(culturalEntities),
+    [culturalEntities]
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -91,7 +100,6 @@ export function AnnotationCanvas({
     if (!src) return;
 
     let cancelled = false;
-
     const resolvedSrc = src;
 
     function loadImage(useCrossOrigin: boolean) {
@@ -129,8 +137,7 @@ export function AnnotationCanvas({
       x_percent: Number(xPercent.toFixed(2)),
       y_percent: Number(yPercent.toFixed(2)),
     });
-    setNote("");
-    setCategory("observation");
+    setFormValues(emptyAnnotationPinFormValues());
     setError(null);
   }, []);
 
@@ -187,13 +194,12 @@ export function AnnotationCanvas({
       setError(SIGN_IN_MESSAGE);
       return;
     }
-    if (!pendingPin || !note.trim()) return;
+    if (!pendingPin || !formValues.text.trim()) return;
 
     const endpoint = `/api/artworks/${artworkId}/annotations`;
     const payload = {
       ...pendingPin,
-      category,
-      text: note.trim(),
+      ...formValuesToAnnotationPayload(formValues),
     };
 
     setSaving(true);
@@ -204,7 +210,7 @@ export function AnnotationCanvas({
       const created = await api.post<Annotation>(endpoint, payload);
       setAnnotations((current) => [...current, created]);
       setPendingPin(null);
-      setNote("");
+      setFormValues(emptyAnnotationPinFormValues());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save annotation.");
     } finally {
@@ -214,28 +220,24 @@ export function AnnotationCanvas({
 
   function openAnnotationEditor(annotation: Annotation) {
     setEditingAnnotation(annotation);
-    setCategory(annotation.category);
-    setNote(annotation.text);
+    setFormValues(annotationToFormValues(annotation));
     setError(null);
   }
 
   async function saveAnnotationEdit() {
-    if (!editingAnnotation || !note.trim()) return;
+    if (!editingAnnotation || !formValues.text.trim()) return;
     setSaving(true);
     setError(null);
     try {
       const updated = await api.patch<Annotation>(
         `/api/artworks/${artworkId}/annotations/${editingAnnotation.id}`,
-        {
-          category,
-          text: note.trim(),
-        }
+        formValuesToAnnotationPayload(formValues)
       );
       setAnnotations((current) =>
         current.map((item) => (item.id === updated.id ? updated : item))
       );
       setEditingAnnotation(null);
-      setNote("");
+      setFormValues(emptyAnnotationPinFormValues());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save annotation.");
     } finally {
@@ -281,7 +283,9 @@ export function AnnotationCanvas({
             : SIGN_IN_MESSAGE}
       </p>
 
-      {error && !pendingPin ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error && !pendingPin && !editingAnnotation ? (
+        <p className="text-sm text-destructive">{error}</p>
+      ) : null}
 
       <div
         ref={containerRef}
@@ -349,6 +353,10 @@ export function AnnotationCanvas({
                 ) : null}
               </div>
               <p className="text-base leading-relaxed">{annotation.text}</p>
+              <AnnotationPinMeta
+                annotation={annotation}
+                culturalEntities={culturalEntities}
+              />
             </li>
           ))
         )}
@@ -362,48 +370,22 @@ export function AnnotationCanvas({
         title="New annotation"
         description="What did you notice at this spot?"
       >
-        <div className="space-y-4 pb-2">
-          <div className="space-y-2">
-            <Label>Category</Label>
-            <div className="flex flex-wrap gap-2">
-              {ANNOTATION_CATEGORIES.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setCategory(item)}
-                  className={cn(
-                    "min-h-11 rounded-full border px-4 py-2 text-sm transition-colors",
-                    category === item
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border bg-background text-foreground active:bg-muted"
-                  )}
-                >
-                  {CATEGORY_LABELS[item]}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="annotation-note">Note</Label>
-            <Textarea
-              id="annotation-note"
-              rows={4}
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="What did you notice here?"
-            />
-          </div>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <Button
-            type="button"
-            size="touch"
-            className="w-full"
-            onClick={() => void saveAnnotation()}
-            disabled={saving || !note.trim() || !canEdit}
-          >
-            {saving ? "Saving…" : "Save pin"}
-          </Button>
-        </div>
+        <AnnotationPinForm
+          values={formValues}
+          onChange={setFormValues}
+          culturalEntities={culturalEntities}
+          tagSuggestions={tagSuggestions}
+        />
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <Button
+          type="button"
+          size="touch"
+          className="mt-4 w-full"
+          onClick={() => void saveAnnotation()}
+          disabled={saving || !formValues.text.trim() || !canEdit}
+        >
+          {saving ? "Saving…" : "Save pin"}
+        </Button>
       </BottomSheet>
 
       <BottomSheet
@@ -412,49 +394,25 @@ export function AnnotationCanvas({
           if (!open) setEditingAnnotation(null);
         }}
         title="Edit annotation"
-        description="Update category or note text."
+        description="Update category, note, tags, or links."
       >
-        <div className="space-y-4 pb-2">
-          <div className="space-y-2">
-            <Label>Category</Label>
-            <div className="flex flex-wrap gap-2">
-              {ANNOTATION_CATEGORIES.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setCategory(item)}
-                  className={cn(
-                    "min-h-11 rounded-full border px-4 py-2 text-sm transition-colors",
-                    category === item
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border bg-background text-foreground active:bg-muted"
-                  )}
-                >
-                  {CATEGORY_LABELS[item]}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="edit-annotation-note">Note</Label>
-            <Textarea
-              id="edit-annotation-note"
-              rows={4}
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-            />
-          </div>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <Button
-            type="button"
-            size="touch"
-            className="w-full"
-            onClick={() => void saveAnnotationEdit()}
-            disabled={saving || !note.trim() || !canEdit}
-          >
-            {saving ? "Saving…" : "Save changes"}
-          </Button>
-        </div>
+        <AnnotationPinForm
+          values={formValues}
+          onChange={setFormValues}
+          culturalEntities={culturalEntities}
+          tagSuggestions={tagSuggestions}
+          noteId="edit-annotation-note"
+        />
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <Button
+          type="button"
+          size="touch"
+          className="mt-4 w-full"
+          onClick={() => void saveAnnotationEdit()}
+          disabled={saving || !formValues.text.trim() || !canEdit}
+        >
+          {saving ? "Saving…" : "Save changes"}
+        </Button>
       </BottomSheet>
 
       <ConfirmDeleteDialog

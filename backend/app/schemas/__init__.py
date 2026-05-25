@@ -157,6 +157,9 @@ class AnnotationBase(BaseModel):
     y_percent: float = Field(ge=0, le=100)
     category: AnnotationCategory
     text: str = Field(min_length=1)
+    tags: list[str] = Field(default_factory=list)
+    linked_entity_ids: list[int] = Field(default_factory=list)
+    linked_concept_names: list[str] = Field(default_factory=list)
 
 
 class AnnotationCreate(AnnotationBase):
@@ -168,6 +171,9 @@ class AnnotationUpdate(BaseModel):
     y_percent: float | None = Field(default=None, ge=0, le=100)
     category: AnnotationCategory | None = None
     text: str | None = Field(default=None, min_length=1)
+    tags: list[str] | None = None
+    linked_entity_ids: list[int] | None = None
+    linked_concept_names: list[str] | None = None
 
 
 class AnnotationRead(AnnotationBase):

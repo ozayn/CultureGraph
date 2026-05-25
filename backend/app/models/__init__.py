@@ -94,6 +94,9 @@ class Annotation(Base):
         Enum(AnnotationCategory, name="annotation_category"), nullable=False
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    linked_entity_ids: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
+    linked_concept_names: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

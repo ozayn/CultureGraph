@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Camera, MapPin, Pencil, Sparkles } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
+import { AnnotationPinForm } from "@/components/annotations/annotation-pin-form";
+import { AnnotationPinMeta } from "@/components/annotations/annotation-pin-meta";
 import { ArtworkImageLookupPanel } from "@/components/artworks/artwork-image-lookup-panel";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
@@ -17,23 +19,28 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { ButtonLink } from "@/components/ui/button-link";
 import { Button } from "@/components/ui/button";
 import { CameraUpload } from "@/components/ui/camera-upload";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, mediaUrl } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
+import {
+  annotationToFormValues,
+  emptyAnnotationPinFormValues,
+  formValuesToAnnotationPayload,
+  type AnnotationPinFormValues,
+} from "@/lib/annotation-form";
+import { buildAnnotationTagSuggestions } from "@/lib/annotation-suggestions";
 import { validateArtworkUploadFile } from "@/lib/upload-validation";
 import {
-  ANNOTATION_CATEGORIES,
   CATEGORY_LABELS,
   type Annotation,
-  type AnnotationCategory,
   type Artwork,
+  type CulturalEntity,
 } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 interface ArtworkDetailClientProps {
   artwork: Artwork;
   annotations: Annotation[];
+  culturalEntities?: CulturalEntity[];
   imageSrc: string | null;
   museumName: string | null;
 }
@@ -41,6 +48,7 @@ interface ArtworkDetailClientProps {
 export function ArtworkDetailClient({
   artwork: initialArtwork,
   annotations: initialAnnotations,
+  culturalEntities = [],
   imageSrc: initialImageSrc,
   museumName,
 }: ArtworkDetailClientProps) {
@@ -59,9 +67,15 @@ export function ArtworkDetailClient({
   const [editingAnnotation, setEditingAnnotation] = useState<Annotation | null>(null);
   const [deletingAnnotation, setDeletingAnnotation] = useState<Annotation | null>(null);
   const [deleteAnnotationLoading, setDeleteAnnotationLoading] = useState(false);
-  const [annotationCategory, setAnnotationCategory] = useState<AnnotationCategory>("observation");
-  const [annotationText, setAnnotationText] = useState("");
+  const [annotationFormValues, setAnnotationFormValues] = useState<AnnotationPinFormValues>(
+    emptyAnnotationPinFormValues()
+  );
   const [savingAnnotation, setSavingAnnotation] = useState(false);
+
+  const tagSuggestions = useMemo(
+    () => buildAnnotationTagSuggestions(culturalEntities),
+    [culturalEntities]
+  );
   const [note, setNote] = useState(artwork.personal_notes ?? "");
   const [savingNote, setSavingNote] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -122,27 +136,24 @@ export function ArtworkDetailClient({
 
   function openAnnotationEditor(annotation: Annotation) {
     setEditingAnnotation(annotation);
-    setAnnotationCategory(annotation.category);
-    setAnnotationText(annotation.text);
+    setAnnotationFormValues(annotationToFormValues(annotation));
     setError(null);
   }
 
   async function saveAnnotationEdit() {
-    if (!editingAnnotation || !annotationText.trim()) return;
+    if (!editingAnnotation || !annotationFormValues.text.trim()) return;
     setSavingAnnotation(true);
     setError(null);
     try {
       const updated = await api.patch<Annotation>(
         `/api/artworks/${artwork.id}/annotations/${editingAnnotation.id}`,
-        {
-          category: annotationCategory,
-          text: annotationText.trim(),
-        }
+        formValuesToAnnotationPayload(annotationFormValues)
       );
       setAnnotations((current) =>
         current.map((item) => (item.id === updated.id ? updated : item))
       );
       setEditingAnnotation(null);
+      setAnnotationFormValues(emptyAnnotationPinFormValues());
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save annotation.");
@@ -350,6 +361,10 @@ export function ArtworkDetailClient({
                   ) : null}
                 </div>
                 <p className="text-base leading-relaxed">{annotation.text}</p>
+                <AnnotationPinMeta
+                  annotation={annotation}
+                  culturalEntities={culturalEntities}
+                />
               </li>
             ))}
           </ul>
@@ -475,48 +490,24 @@ export function ArtworkDetailClient({
         if (!open) setEditingAnnotation(null);
       }}
       title="Edit annotation"
-      description="Update category or note text."
+      description="Update category, note, tags, or links."
     >
-      <div className="space-y-4 pb-2">
-        <div className="space-y-2">
-          <Label>Category</Label>
-          <div className="flex flex-wrap gap-2">
-            {ANNOTATION_CATEGORIES.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setAnnotationCategory(item)}
-                className={cn(
-                  "min-h-11 rounded-full border px-4 py-2 text-sm transition-colors",
-                  annotationCategory === item
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-border bg-background text-foreground active:bg-muted"
-                )}
-              >
-                {CATEGORY_LABELS[item]}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="edit-annotation-note">Note</Label>
-          <Textarea
-            id="edit-annotation-note"
-            rows={4}
-            value={annotationText}
-            onChange={(event) => setAnnotationText(event.target.value)}
-          />
-        </div>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <Button
-          size="touch"
-          className="w-full"
-          disabled={savingAnnotation || !annotationText.trim()}
-          onClick={() => void saveAnnotationEdit()}
-        >
-          {savingAnnotation ? "Saving…" : "Save changes"}
-        </Button>
-      </div>
+      <AnnotationPinForm
+        values={annotationFormValues}
+        onChange={setAnnotationFormValues}
+        culturalEntities={culturalEntities}
+        tagSuggestions={tagSuggestions}
+        noteId="edit-annotation-note"
+      />
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      <Button
+        size="touch"
+        className="mt-4 w-full"
+        disabled={savingAnnotation || !annotationFormValues.text.trim()}
+        onClick={() => void saveAnnotationEdit()}
+      >
+        {savingAnnotation ? "Saving…" : "Save changes"}
+      </Button>
     </BottomSheet>
       </>
     ) : null}

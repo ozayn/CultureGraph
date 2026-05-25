@@ -10,6 +10,7 @@ from app.auth.dependencies import require_admin_user
 from app.database import get_db
 from app.models import Annotation, Artwork
 from app.schemas import AnnotationCreate, AnnotationRead, AnnotationUpdate
+from app.services.annotation_links import apply_annotation_payload
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +52,9 @@ def create_annotation(
         user.get("email"),
         payload.category.value,
     )
-    _get_artwork_or_404(db, artwork_id)
-    annotation = Annotation(artwork_id=artwork_id, **payload.model_dump())
+    artwork = _get_artwork_or_404(db, artwork_id)
+    data = apply_annotation_payload(db, artwork, payload.model_dump())
+    annotation = Annotation(artwork_id=artwork_id, **data)
     db.add(annotation)
     db.commit()
     db.refresh(annotation)
@@ -75,8 +77,18 @@ def _get_annotation_or_404(db: Session, annotation_id: int, artwork_id: int | No
     return annotation
 
 
-def _apply_annotation_update(annotation: Annotation, payload: AnnotationUpdate) -> None:
-    for key, value in payload.model_dump(exclude_unset=True).items():
+def _apply_annotation_update(
+    db: Session,
+    artwork: Artwork,
+    annotation: Annotation,
+    payload: AnnotationUpdate,
+) -> None:
+    data = apply_annotation_payload(
+        db,
+        artwork,
+        payload.model_dump(exclude_unset=True),
+    )
+    for key, value in data.items():
         setattr(annotation, key, value)
 
 
@@ -89,7 +101,8 @@ def update_annotation(
     db: Session = Depends(get_db),
 ) -> Annotation:
     annotation = _get_annotation_or_404(db, annotation_id)
-    _apply_annotation_update(annotation, payload)
+    artwork = _get_artwork_or_404(db, annotation.artwork_id)
+    _apply_annotation_update(db, artwork, annotation, payload)
     db.commit()
     db.refresh(annotation)
     return annotation
@@ -112,7 +125,8 @@ def update_artwork_annotation(
 ) -> Annotation:
     _get_artwork_or_404(db, artwork_id)
     annotation = _get_annotation_or_404(db, annotation_id, artwork_id)
-    _apply_annotation_update(annotation, payload)
+    artwork = _get_artwork_or_404(db, artwork_id)
+    _apply_annotation_update(db, artwork, annotation, payload)
     db.commit()
     db.refresh(annotation)
     return annotation
