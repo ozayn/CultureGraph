@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
@@ -111,6 +112,14 @@ export function NavbarAuthMenu() {
               <p className="truncate text-xs text-muted-foreground">{user.email}</p>
             ) : null}
           </div>
+          <Link
+            href="/admin"
+            role="menuitem"
+            className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm text-foreground transition-colors hover:bg-muted"
+            onClick={() => setMenuOpen(false)}
+          >
+            Admin dashboard
+          </Link>
           <button
             type="button"
             role="menuitem"

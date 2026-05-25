@@ -41,3 +41,15 @@ def require_admin_user(
             detail="Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+
+def require_listed_admin_user(
+    user: Annotated[dict[str, str | None], Depends(require_admin_user)],
+) -> dict[str, str | None]:
+    email = (user.get("email") or "").strip().lower()
+    if email not in settings.admin_email_set:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required.",
+        )
+    return user
