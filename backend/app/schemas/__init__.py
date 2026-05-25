@@ -51,6 +51,29 @@ class VisitRead(VisitBase):
     created_at: datetime
 
 
+class CulturalEntityBase(BaseModel):
+    entity_type: CulturalEntityType
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = None
+    themes: list[str] = Field(default_factory=list)
+    concepts: list[str] = Field(default_factory=list)
+    movements: list[str] = Field(default_factory=list)
+    historical_events: list[str] = Field(default_factory=list)
+    related_entities: list[str] = Field(default_factory=list)
+    visit_id: int
+
+
+class CulturalEntityCreate(CulturalEntityBase):
+    pass
+
+
+class CulturalEntityRead(CulturalEntityBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+
+
 class MuseumRead(BaseModel):
     name: str
     city: str

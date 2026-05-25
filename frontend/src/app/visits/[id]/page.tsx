@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { VisitDetailClient } from "@/components/visits/visit-detail-client";
 import { api } from "@/lib/api";
-import type { Artwork, Visit } from "@/lib/types";
+import type { Artwork, CulturalEntity, Visit } from "@/lib/types";
 
 export default async function VisitDetailPage({
   params,
@@ -14,13 +14,23 @@ export default async function VisitDetailPage({
 
   let visit: Visit;
   let artworks: Artwork[] = [];
+  let culturalEntities: CulturalEntity[] = [];
 
   try {
     visit = await api.get<Visit>(`/api/visits/${visitId}`);
     artworks = await api.get<Artwork[]>(`/api/artworks?visit_id=${visitId}`);
+    culturalEntities = await api.get<CulturalEntity[]>(
+      `/api/cultural-entities?visit_id=${visitId}`
+    );
   } catch {
     notFound();
   }
 
-  return <VisitDetailClient visit={visit} artworks={artworks} />;
+  return (
+    <VisitDetailClient
+      visit={visit}
+      artworks={artworks}
+      culturalEntities={culturalEntities}
+    />
+  );
 }

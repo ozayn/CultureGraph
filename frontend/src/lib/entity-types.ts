@@ -84,3 +84,43 @@ export function groupEntities<T extends { entity_type: CulturalEntityType }>(
     return { group, items };
   }).filter(({ items }) => items.length > 0);
 }
+
+export interface VisitDetailEntitySection {
+  id: string;
+  label: string;
+  types: CulturalEntityType[];
+}
+
+export const VISIT_DETAIL_ENTITY_SECTIONS: VisitDetailEntitySection[] = [
+  {
+    id: "concepts_context",
+    label: "Concepts & context",
+    types: ["artist", "concept", "symbol", "political_idea", "movement", "architecture"],
+  },
+  {
+    id: "techniques_materials",
+    label: "Techniques & materials",
+    types: ["technique", "material"],
+  },
+  {
+    id: "historical_background",
+    label: "Historical background",
+    types: ["historical_event", "museum_space"],
+  },
+];
+
+export function groupVisitDetailEntities<T extends { entity_type: CulturalEntityType }>(
+  entities: T[]
+): Array<{ section: VisitDetailEntitySection; items: T[] }> {
+  const assigned = new Set<number>();
+
+  return VISIT_DETAIL_ENTITY_SECTIONS.map((section) => {
+    const items = entities.filter((entity, index) => {
+      if (assigned.has(index)) return false;
+      if (!section.types.includes(entity.entity_type)) return false;
+      assigned.add(index);
+      return true;
+    });
+    return { section, items };
+  }).filter(({ items }) => items.length > 0);
+}

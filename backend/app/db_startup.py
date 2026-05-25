@@ -7,7 +7,7 @@ from sqlalchemy import inspect
 from app.config import settings
 from app.database import engine
 
-REQUIRED_TABLES = ("visits", "artworks", "annotations", "research_notes")
+REQUIRED_TABLES = ("visits", "artworks", "annotations", "research_notes", "cultural_entities")
 
 
 def _log(message: str) -> None:

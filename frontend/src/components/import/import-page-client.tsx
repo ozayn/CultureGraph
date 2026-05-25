@@ -69,14 +69,25 @@ function formatConceptLinks(links: MuseumNotesImportResponse["concept_links"]): 
     .join("\n");
 }
 
-function formatEntityForVisitNotes(entity: ReviewEntity): string {
-  const label = ENTITY_TYPE_LABELS[entity.entity_type];
-  const body = entity.description?.trim() || entity.name;
-  const related =
-    entity.related_entities.length > 0
-      ? ` Related: ${entity.related_entities.join(", ")}.`
-      : "";
-  return `- [${label}] ${entity.name} — ${body}${related}`;
+function buildCulturalEntityDescription(entity: ReviewEntity): string | null {
+  const parts: string[] = [];
+  if (entity.description?.trim()) parts.push(entity.description.trim());
+  if (entity.uncertainty?.trim()) parts.push(`Uncertainty: ${entity.uncertainty.trim()}`);
+  return parts.length ? parts.join("\n\n") : null;
+}
+
+function buildCulturalEntityPayload(entity: ReviewEntity, visitId: number) {
+  return {
+    visit_id: visitId,
+    entity_type: entity.entity_type,
+    name: entity.name.trim(),
+    description: buildCulturalEntityDescription(entity),
+    themes: entity.themes,
+    concepts: entity.concepts,
+    movements: entity.movements,
+    historical_events: entity.historical_events,
+    related_entities: entity.related_entities,
+  };
 }
 
 function EntityTypeChip({ entityType }: { entityType: ReviewEntity["entity_type"] }) {
@@ -175,7 +186,12 @@ export function ImportPageClient() {
     const selectedArtworks = selectedEntities.filter((entity) => entity.entity_type === "artwork");
     const selectedOther = selectedEntities.filter((entity) => entity.entity_type !== "artwork");
 
-    if (!saveVisit && selectedArtworks.length === 0 && selectedOther.length === 0) {
+    if (!saveVisit && selectedOther.length > 0) {
+      setError("Enable visit saving to attach imported cultural entries.");
+      return;
+    }
+
+    if (!saveVisit && selectedArtworks.length === 0) {
       setError("Select a visit and/or at least one entry to save.");
       return;
     }
@@ -189,13 +205,9 @@ export function ImportPageClient() {
       if (saveVisit) {
         const conceptSection =
           conceptLinks.length > 0
-            ? `\n\nConcept links:\n${formatConceptLinks(conceptLinks)}`
+            ? `Concept links:\n${formatConceptLinks(conceptLinks)}`
             : "";
-        const culturalSection =
-          selectedOther.length > 0
-            ? `\n\nExtracted entries:\n${selectedOther.map(formatEntityForVisitNotes).join("\n")}`
-            : "";
-        const visitNotes = [visitSummary.trim(), conceptSection.trim(), culturalSection.trim()]
+        const visitNotes = [visitSummary.trim(), conceptSection.trim()]
           .filter(Boolean)
           .join("\n\n");
 
@@ -227,6 +239,12 @@ export function ImportPageClient() {
               text: annotation.note,
             });
           }
+        }
+      }
+
+      if (visitId !== null) {
+        for (const entity of selectedOther) {
+          await api.post("/api/cultural-entities", buildCulturalEntityPayload(entity, visitId));
         }
       }
 

@@ -111,6 +111,20 @@ export type CulturalEntityType =
   | "museum_space"
   | "political_idea";
 
+export interface CulturalEntity {
+  id: number;
+  visit_id: number;
+  entity_type: CulturalEntityType;
+  name: string;
+  description: string | null;
+  themes: string[];
+  concepts: string[];
+  movements: string[];
+  historical_events: string[];
+  related_entities: string[];
+  created_at: string;
+}
+
 export interface ImportedEntityDraft {
   entity_type: CulturalEntityType;
   name: string;

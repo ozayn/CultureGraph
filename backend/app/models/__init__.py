@@ -1,7 +1,7 @@
 import enum
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, String, Text, func
+from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -13,6 +13,20 @@ class AnnotationCategory(str, enum.Enum):
     history = "history"
     question = "question"
     composition = "composition"
+
+
+class CulturalEntityType(str, enum.Enum):
+    artwork = "artwork"
+    artist = "artist"
+    concept = "concept"
+    movement = "movement"
+    technique = "technique"
+    material = "material"
+    historical_event = "historical_event"
+    symbol = "symbol"
+    architecture = "architecture"
+    museum_space = "museum_space"
+    political_idea = "political_idea"
 
 
 class Visit(Base):
@@ -28,6 +42,9 @@ class Visit(Base):
     )
 
     artworks: Mapped[list["Artwork"]] = relationship(back_populates="visit")
+    cultural_entities: Mapped[list["CulturalEntity"]] = relationship(
+        back_populates="visit", cascade="all, delete-orphan"
+    )
 
 
 class Artwork(Base):
@@ -92,3 +109,25 @@ class ResearchNote(Base):
     )
 
     artwork: Mapped["Artwork"] = relationship(back_populates="research_notes")
+
+
+class CulturalEntity(Base):
+    __tablename__ = "cultural_entities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    visit_id: Mapped[int] = mapped_column(ForeignKey("visits.id"), nullable=False)
+    entity_type: Mapped[CulturalEntityType] = mapped_column(
+        Enum(CulturalEntityType, name="cultural_entity_type"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    themes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    concepts: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    movements: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    historical_events: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    related_entities: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    visit: Mapped["Visit"] = relationship(back_populates="cultural_entities")
