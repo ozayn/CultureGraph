@@ -157,6 +157,19 @@ See `backend/Procfile`, `backend/railway.toml`, and `frontend/railway.toml` for 
 - AI research drafts (Claude when configured, mock fallback otherwise)
 - Mobile-first UX: bottom nav, sticky actions, 44px tap targets
 
+## Manual QA checklist
+
+### Artwork annotations
+
+1. Sign in with an approved Google account.
+2. Create or open an artwork with a photo attached.
+3. Open **Annotate** from the artwork detail page.
+4. Click or tap the image — the new annotation sheet should open.
+5. Choose a category, enter a note, and tap **Save pin**.
+6. Confirm the pin appears immediately on the canvas and in the list below.
+7. Refresh the page — the pin should still be there.
+8. Log out and confirm the annotate page shows **Sign in to add annotations.**
+
 ## License
 
 Private / unpublished — adjust as needed.

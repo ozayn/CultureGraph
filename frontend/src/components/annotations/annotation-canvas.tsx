@@ -10,6 +10,7 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { logAnnotationRequest } from "@/lib/annotation-debug";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
@@ -40,16 +41,19 @@ interface PendingPin {
   y_percent: number;
 }
 
+const SIGN_IN_MESSAGE = "Sign in to add annotations.";
+
 export function AnnotationCanvas({
   artworkId,
   imageUrl,
   initialAnnotations,
 }: AnnotationCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { canEdit } = useAuth();
+  const { canEdit, loading: authLoading } = useAuth();
   const [annotations, setAnnotations] = useState(initialAnnotations);
   const [size, setSize] = useState({ width: 320, height: 240 });
   const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [pendingPin, setPendingPin] = useState<PendingPin | null>(null);
   const [category, setCategory] = useState<AnnotationCategory>("observation");
   const [note, setNote] = useState("");
@@ -78,33 +82,74 @@ export function AnnotationCanvas({
   }, [image]);
 
   useEffect(() => {
-    if (!imageUrl) return;
+    const src = imageUrl;
+    if (!src) return;
 
-    const img = new window.Image();
-    img.crossOrigin = "anonymous";
-    img.src = imageUrl;
-    img.onload = () => setImage(img);
+    let cancelled = false;
+
+    const resolvedSrc = src;
+
+    function loadImage(useCrossOrigin: boolean) {
+      const img = new window.Image();
+      if (useCrossOrigin) {
+        img.crossOrigin = "anonymous";
+      }
+      img.src = resolvedSrc;
+      img.onload = () => {
+        if (!cancelled) {
+          setImage(img);
+          setImageLoadFailed(false);
+        }
+      };
+      img.onerror = () => {
+        if (cancelled) return;
+        if (useCrossOrigin) {
+          loadImage(false);
+          return;
+        }
+        setImage(null);
+        setImageLoadFailed(true);
+      };
+    }
+
+    loadImage(true);
 
     return () => {
-      img.onload = null;
+      cancelled = true;
     };
   }, [imageUrl]);
 
+  const openPinForm = useCallback((xPercent: number, yPercent: number) => {
+    setPendingPin({
+      x_percent: Number(xPercent.toFixed(2)),
+      y_percent: Number(yPercent.toFixed(2)),
+    });
+    setNote("");
+    setCategory("observation");
+    setError(null);
+  }, []);
+
   const placePin = useCallback(
     (x: number, y: number) => {
-      if (!canEdit) return;
-      setPendingPin({
-        x_percent: Number(((x / size.width) * 100).toFixed(2)),
-        y_percent: Number(((y / size.height) * 100).toFixed(2)),
-      });
-      setNote("");
-      setCategory("observation");
-      setError(null);
+      if (authLoading) {
+        setError("Checking sign-in status…");
+        return;
+      }
+      if (!canEdit) {
+        setError(SIGN_IN_MESSAGE);
+        return;
+      }
+      if (size.width <= 0 || size.height <= 0) {
+        setError("The canvas is still loading. Try again in a moment.");
+        return;
+      }
+
+      openPinForm((x / size.width) * 100, (y / size.height) * 100);
     },
-    [canEdit, size.height, size.width]
+    [authLoading, canEdit, openPinForm, size.height, size.width]
   );
 
-  const handleStageTap = useCallback(
+  const handleStagePointer = useCallback(
     (event: {
       target: {
         getStage: () => {
@@ -133,19 +178,25 @@ export function AnnotationCanvas({
   );
 
   async function saveAnnotation() {
+    if (!canEdit) {
+      setError(SIGN_IN_MESSAGE);
+      return;
+    }
     if (!pendingPin || !note.trim()) return;
+
+    const endpoint = `/api/artworks/${artworkId}/annotations`;
+    const payload = {
+      ...pendingPin,
+      category,
+      text: note.trim(),
+    };
+
     setSaving(true);
     setError(null);
+    logAnnotationRequest(endpoint, payload);
 
     try {
-      const created = await api.post<Annotation>(
-        `/api/artworks/${artworkId}/annotations`,
-        {
-          ...pendingPin,
-          category,
-          text: note.trim(),
-        }
-      );
+      const created = await api.post<Annotation>(endpoint, payload);
       setAnnotations((current) => [...current, created]);
       setPendingPin(null);
       setNote("");
@@ -156,41 +207,61 @@ export function AnnotationCanvas({
     }
   }
 
+  const canvasReady = size.width > 0 && size.height > 0;
+  const activeImage = imageUrl ? image : null;
+  const activeImageLoadFailed = imageUrl ? imageLoadFailed : false;
+  const showImageCanvas = Boolean(imageUrl) && !activeImageLoadFailed;
+
   return (
     <div className="space-y-5">
-      {!canEdit ? <SignInPrompt compact /> : null}
+      {!canEdit && !authLoading ? <SignInPrompt compact /> : null}
 
       <p className="text-base text-muted-foreground">
-        {canEdit
-          ? "Tap the image to place a pin. Pins save as percentage coordinates."
-          : "Viewing annotations on this artwork."}
+        {authLoading
+          ? "Checking sign-in status…"
+          : canEdit
+            ? showImageCanvas
+              ? "Click or tap the image to place a pin. Pins save as percentage coordinates."
+              : "Add an image before placing pins, or add a text-only observation below."
+            : SIGN_IN_MESSAGE}
       </p>
+
+      {error && !pendingPin ? <p className="text-sm text-destructive">{error}</p> : null}
 
       <div
         ref={containerRef}
         className="w-full overflow-hidden rounded-xl border border-border bg-[#f3efe8] touch-none"
       >
-        {imageUrl ? (
+        {showImageCanvas && canvasReady ? (
           <KonvaCanvasStage
             width={size.width}
             height={size.height}
-            image={image}
+            image={activeImage}
             pins={pins}
             pendingPin={pendingPin}
-            onStageTap={handleStageTap}
+            onStagePointer={handleStagePointer}
           />
         ) : (
-          <button
-            type="button"
-            className="flex w-full items-center justify-center bg-[#f3efe8] px-4 text-base text-muted-foreground"
-            style={{ height: size.height }}
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect();
-              placePin(event.clientX - rect.left, event.clientY - rect.top);
-            }}
+          <div
+            className="flex flex-col items-center justify-center gap-4 px-4 text-center text-base text-muted-foreground"
+            style={{ minHeight: size.height }}
           >
-            Tap to place a pin on this placeholder canvas
-          </button>
+            <p>
+              {activeImageLoadFailed
+                ? "This artwork image could not be loaded for pinning."
+                : "Add an image before placing pins."}
+            </p>
+            {canEdit ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="touch"
+                onClick={() => openPinForm(50, 50)}
+              >
+                Add text-only observation
+              </Button>
+            ) : null}
+          </div>
         )}
       </div>
 
@@ -260,10 +331,11 @@ export function AnnotationCanvas({
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <Button
+            type="button"
             size="touch"
             className="w-full"
-            onClick={saveAnnotation}
-            disabled={saving || !note.trim()}
+            onClick={() => void saveAnnotation()}
+            disabled={saving || !note.trim() || !canEdit}
           >
             {saving ? "Saving…" : "Save pin"}
           </Button>

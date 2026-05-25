@@ -1,5 +1,7 @@
 from typing import Annotated
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -8,6 +10,8 @@ from app.auth.dependencies import require_admin_user
 from app.database import get_db
 from app.models import Annotation, Artwork
 from app.schemas import AnnotationCreate, AnnotationRead, AnnotationUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["annotations"])
 
@@ -38,14 +42,27 @@ def list_annotations(artwork_id: int, db: Session = Depends(get_db)) -> list[Ann
 def create_annotation(
     artwork_id: int,
     payload: AnnotationCreate,
-    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    user: Annotated[dict[str, str], Depends(require_admin_user)],
     db: Session = Depends(get_db),
 ) -> Annotation:
+    logger.info(
+        "annotation create requested artwork_id=%s user=%s category=%s",
+        artwork_id,
+        user.get("email"),
+        payload.category.value,
+    )
     _get_artwork_or_404(db, artwork_id)
     annotation = Annotation(artwork_id=artwork_id, **payload.model_dump())
     db.add(annotation)
     db.commit()
     db.refresh(annotation)
+    logger.info(
+        "annotation created id=%s artwork_id=%s x=%.2f y=%.2f",
+        annotation.id,
+        artwork_id,
+        annotation.x_percent,
+        annotation.y_percent,
+    )
     return annotation
 
 
