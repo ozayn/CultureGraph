@@ -404,3 +404,4 @@ class ArtworkLookupResponse(BaseModel):
         "Matches are suggestions from open museum collection data. "
         "Review title, artist, and image before applying."
     )
+    notice: str | None = None

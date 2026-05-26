@@ -201,3 +201,68 @@ async def test_lookup_image_unsupported_museum_returns_empty(
     payload = lookup_response.json()
     assert payload["candidates"] == []
     assert payload["sources_searched"] == []
+
+
+@pytest.mark.asyncio
+async def test_lookup_image_with_source_param_searches_nga(
+    auth_headers: dict[str, str],
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        visit_response = await client.post(
+            "/api/visits",
+            headers=auth_headers,
+            json={
+                "museum_name": "Smithsonian American Art Museum",
+                "city": "Washington, DC",
+                "visit_date": "2026-05-25",
+            },
+        )
+        visit_id = visit_response.json()["id"]
+
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={
+                "title": "The Adoration of the Magi",
+                "artist": "Botticelli",
+                "visit_id": visit_id,
+            },
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        lookup_response = await client.get(
+            f"/api/artworks/{artwork_id}/lookup-image",
+            headers=auth_headers,
+            params={"source": "nga"},
+        )
+
+    assert lookup_response.status_code == 200
+    payload = lookup_response.json()
+    assert payload["candidates"]
+    assert "National Gallery of Art" in payload["sources_searched"]
+
+
+@pytest.mark.asyncio
+async def test_lookup_image_returns_notice_when_no_matches(
+    auth_headers: dict[str, str],
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={"title": "ZZZ Nonexistent Artwork XYZ", "artist": "Nobody Known"},
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        lookup_response = await client.get(
+            f"/api/artworks/{artwork_id}/lookup-image",
+            headers=auth_headers,
+            params={"source": "nga"},
+        )
+
+    assert lookup_response.status_code == 200
+    payload = lookup_response.json()
+    assert payload["candidates"] == []
+    assert payload["notice"]

@@ -203,6 +203,16 @@ CultureGraph is intentionally small today. This list tracks what exists, what ne
 | Cultural entity model (beyond artworks) | Done | `CulturalEntity` types (artist, concept, movement, etc.) saved separately from visit notes |
 | Official artwork image lookup | Done (NGA first) | “Find official image” on artwork detail when no photo; NGA open-data index; more museums later |
 
+**Manual QA — official image lookup**
+
+1. Create an artwork with no image (title + artist help matching).
+2. Open artwork detail → tap **Find official image** in the placeholder.
+3. Review candidate cards (thumbnail, title, artist, source, confidence).
+4. Tap **Use this image** on a candidate.
+5. Confirm the artwork shows the image and catalog attribution.
+6. Refresh the page — image and metadata persist.
+7. With an image present, **Replace image** opens the same lookup sheet.
+
 ### Next up
 
 | Area | Goal |

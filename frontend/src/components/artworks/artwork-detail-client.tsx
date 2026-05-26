@@ -216,33 +216,49 @@ export function ArtworkDetailClient({
     <div className="-mx-4 space-y-5 pb-28 sm:mx-0 sm:space-y-8 sm:pb-10">
       <section className="overflow-hidden bg-[#f3efe8] sm:rounded-xl sm:border sm:border-border">
         {imageSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageSrc}
-            alt={artwork.title}
-            className="block w-full object-contain"
-            style={{ maxHeight: "min(70dvh, 640px)" }}
-          />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imageSrc}
+              alt={artwork.title}
+              className="block w-full object-contain"
+              style={{ maxHeight: "min(70dvh, 640px)" }}
+            />
+            {canEdit ? (
+              <div className="flex justify-end border-t border-border/60 bg-background/80 px-3 py-2">
+                <ArtworkImageLookupPanel
+                  artwork={artwork}
+                  museumName={museumName}
+                  canEdit={canEdit}
+                  variant="replace"
+                  onApplied={(updated) => {
+                    setArtwork(updated);
+                    setImageSrc(mediaUrl(updated.image_url));
+                    router.refresh();
+                  }}
+                />
+              </div>
+            ) : null}
+          </>
         ) : (
-          <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-6 py-10 text-center text-sm text-muted-foreground">
+          <div className="flex min-h-48 flex-col items-center justify-center gap-4 px-6 py-10 text-center text-sm text-muted-foreground">
             <Camera className="size-8 opacity-50" />
-            <p>No photo yet. Tap Photo below to capture the label or artwork.</p>
+            <p>No photo yet. Capture your own, or find an official museum image.</p>
+            {canEdit ? (
+              <ArtworkImageLookupPanel
+                artwork={artwork}
+                museumName={museumName}
+                canEdit={canEdit}
+                onApplied={(updated) => {
+                  setArtwork(updated);
+                  setImageSrc(mediaUrl(updated.image_url));
+                  router.refresh();
+                }}
+              />
+            ) : null}
           </div>
         )}
       </section>
-
-      {!imageSrc && canEdit ? (
-        <ArtworkImageLookupPanel
-          artwork={artwork}
-          museumName={museumName}
-          canEdit={canEdit}
-          onApplied={(updated) => {
-            setArtwork(updated);
-            setImageSrc(mediaUrl(updated.image_url));
-            router.refresh();
-          }}
-        />
-      ) : null}
 
       {canEdit ? (
         <div className="px-4 sm:px-0">

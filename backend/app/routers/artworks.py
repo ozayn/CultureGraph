@@ -91,12 +91,20 @@ def lookup_artwork_image(
     candidates = lookup_artwork_candidates(query)
     sources_searched = [NGA_SOURCE_NAME] if should_search_nga(query) else []
 
+    notice: str | None = None
+    if should_search_nga(query) and not candidates:
+        if not (artwork.title or "").strip() and not (artwork.artist or "").strip():
+            notice = "Add a title or artist to improve collection matching."
+        else:
+            notice = "No close matches found in the National Gallery open collection index."
+
     return ArtworkLookupResponse(
         candidates=[
             ArtworkLookupCandidateRead.model_validate(item, from_attributes=True)
             for item in candidates
         ],
         sources_searched=sources_searched,
+        notice=notice,
     )
 
 

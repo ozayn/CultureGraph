@@ -81,6 +81,7 @@ export interface ArtworkLookupResponse {
   candidates: ArtworkLookupCandidate[];
   sources_searched: string[];
   disclaimer: string;
+  notice?: string | null;
 }
 
 export interface Annotation {
