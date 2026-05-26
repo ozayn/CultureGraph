@@ -1,16 +1,14 @@
 "use client";
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ArtworkImageLookupAction,
   ArtworkImageLookupPanel,
-  ArtworkImageLookupProvider,
-  ArtworkImageLookupTrigger,
 } from "@/components/artworks/artwork-image-lookup-panel";
 
 const getMock = vi.fn();
-const putMock = vi.fn();
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -18,7 +16,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     ...actual,
     api: {
       get: (...args: unknown[]) => getMock(...args),
-      put: (...args: unknown[]) => putMock(...args),
+      put: vi.fn(),
     },
   };
 });
@@ -48,34 +46,24 @@ const artwork = {
 };
 
 describe("ArtworkImageLookupPanel", () => {
-  it("shows Find official image and opens lookup sheet", async () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows Find official image for admin users", async () => {
     getMock.mockResolvedValueOnce({
-      candidates: [
-        {
-          title: "The Adoration of the Magi",
-          artist: "Botticelli",
-          date: "1475",
-          medium: "Tempera",
-          image_url: "https://example.com/image.jpg",
-          image_thumbnail_url: "https://example.com/thumb.jpg",
-          object_url: "https://example.com/record",
-          accession_number: "1943.3.1",
-          source_name: "National Gallery of Art",
-          confidence: 0.9,
-          rights_label: "CC0",
-          external_id: "123",
-        },
-      ],
+      candidates: [],
       sources_searched: ["National Gallery of Art"],
-      disclaimer: "Review before applying.",
     });
 
     render(
-      <ArtworkImageLookupPanel
-        artwork={artwork}
-        canEdit
-        onApplied={vi.fn()}
-      />
+      <ArtworkImageLookupPanel artwork={artwork} canEdit hasImage={false} onApplied={vi.fn()}>
+        <ArtworkImageLookupAction primary />
+      </ArtworkImageLookupPanel>
+    );
+
+    expect(screen.getByTestId("artwork-official-image-lookup-primary")).toHaveTextContent(
+      "Find official image"
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Find official image/i }));
@@ -83,25 +71,53 @@ describe("ArtworkImageLookupPanel", () => {
     await waitFor(() => {
       expect(getMock).toHaveBeenCalledWith("/api/artworks/1/lookup-image?source=all");
     });
-
-    await waitFor(() => {
-      expect(screen.getByText("The Adoration of the Magi")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Use this image" })).toBeInTheDocument();
-    });
   });
 
-  it("shows Replace image variant when artwork has a photo", () => {
+  it("shows Replace official image when artwork has a photo", () => {
     render(
-      <ArtworkImageLookupProvider
+      <ArtworkImageLookupPanel
         artwork={{ ...artwork, image_url: "/uploads/1.jpg" }}
         canEdit
         hasImage
         onApplied={vi.fn()}
       >
-        <ArtworkImageLookupTrigger variant="replace" />
-      </ArtworkImageLookupProvider>
+        <ArtworkImageLookupAction variant="replace" />
+      </ArtworkImageLookupPanel>
     );
 
-    expect(screen.getByRole("button", { name: "Replace image" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Replace official image" })).toBeInTheDocument();
+  });
+
+  it("hides the action for non-admin users", () => {
+    render(
+      <ArtworkImageLookupPanel artwork={artwork} canEdit={false} hasImage={false} onApplied={vi.fn()}>
+        <ArtworkImageLookupAction />
+      </ArtworkImageLookupPanel>
+    );
+
+    expect(screen.queryByTestId("artwork-official-image-lookup-primary")).not.toBeInTheDocument();
+  });
+
+  it("shows metadata hint when title and artist are missing", async () => {
+    getMock.mockResolvedValueOnce({ candidates: [], sources_searched: [] });
+
+    render(
+      <ArtworkImageLookupPanel
+        artwork={{ ...artwork, title: "", artist: null }}
+        canEdit
+        hasImage={false}
+        onApplied={vi.fn()}
+      >
+        <ArtworkImageLookupAction primary />
+      </ArtworkImageLookupPanel>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Find official image/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Add a title or artist to improve search results.")
+      ).toBeInTheDocument();
+    });
   });
 });

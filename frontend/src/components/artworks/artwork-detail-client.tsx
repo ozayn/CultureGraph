@@ -10,10 +10,10 @@ import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { AnnotationPinForm } from "@/components/annotations/annotation-pin-form";
 import { AnnotationPinMeta } from "@/components/annotations/annotation-pin-meta";
 import {
+  ArtworkImageLookupAction,
   ArtworkImageLookupDebug,
-  ArtworkImageLookupProvider,
+  ArtworkImageLookupPanel,
   ArtworkImageLookupSignInHint,
-  ArtworkImageLookupTrigger,
   useArtworkImageLookup,
 } from "@/components/artworks/artwork-image-lookup-panel";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
@@ -224,7 +224,7 @@ export function ArtworkDetailClient({
   }
 
   return (
-  <ArtworkImageLookupProvider
+  <ArtworkImageLookupPanel
     artwork={artwork}
     canEdit={canEdit}
     hasImage={hasImage}
@@ -240,18 +240,24 @@ export function ArtworkDetailClient({
       />
 
       <section className="overflow-hidden bg-[#f3efe8] sm:rounded-xl sm:border sm:border-border">
-        {hasImage && imageSrc ? (
+        {hasImage ? (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageSrc}
-              alt={artwork.title}
-              className="block w-full object-contain"
-              style={{ maxHeight: "min(70dvh, 640px)" }}
-            />
-            {canEdit ? (
-              <div className="flex justify-end border-t border-border/60 bg-background/80 px-3 py-2">
-                <ArtworkImageLookupTrigger variant="replace" />
+            {imageSrc ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={imageSrc}
+                alt={artwork.title}
+                className="block w-full object-contain"
+                style={{ maxHeight: "min(70dvh, 640px)" }}
+              />
+            ) : (
+              <div className="flex min-h-48 items-center justify-center px-6 py-10 text-sm text-muted-foreground">
+                Image file unavailable — you can still replace it with an official museum image.
+              </div>
+            )}
+            {!authLoading && canEdit ? (
+              <div className="border-t border-border/60 bg-background px-4 py-3">
+                <ArtworkImageLookupAction variant="replace" fullWidth primary />
               </div>
             ) : null}
           </>
@@ -259,11 +265,11 @@ export function ArtworkDetailClient({
           <div className="flex min-h-48 flex-col items-center justify-center gap-4 px-6 py-10 text-center text-sm text-muted-foreground">
             <Camera className="size-8 opacity-50" />
             <p>No photo yet. Capture your own, or find an official museum image.</p>
-            {canEdit ? (
-              <ArtworkImageLookupTrigger />
-            ) : (
+            {!authLoading && canEdit ? (
+              <ArtworkImageLookupAction fullWidth primary className="max-w-sm" />
+            ) : !authLoading ? (
               <ArtworkImageLookupSignInHint />
-            )}
+            ) : null}
           </div>
         )}
       </section>
@@ -332,7 +338,7 @@ export function ArtworkDetailClient({
           <Button size="touch" variant="outline" onClick={() => setPhotoOpen(true)}>
             Add photo
           </Button>
-          <ArtworkImageLookupTrigger variant={hasImage ? "replace" : "find"} />
+          <ArtworkImageLookupAction variant={hasImage ? "replace" : "find"} />
           <Button size="touch" variant="outline" onClick={triggerResearch}>
             Research with AI
           </Button>
@@ -499,7 +505,7 @@ export function ArtworkDetailClient({
             href={`/artworks/${artwork.id}/annotate`}
           />
           <ActionButton icon={Camera} label="Photo" onClick={() => setPhotoOpen(true)} />
-          <LookupActionButton hasImage={hasImage} />
+          <LookupActionButton hasImage={hasImage} label={hasImage ? "Replace" : "Find"} />
           <ActionButton icon={Sparkles} label="AI" onClick={triggerResearch} />
         </div>
       </div>
@@ -631,22 +637,25 @@ export function ArtworkDetailClient({
       onConfirm={deleteAnnotation}
     />
   </>
-  </ArtworkImageLookupProvider>
+  </ArtworkImageLookupPanel>
   );
 }
 
-function LookupActionButton({ hasImage }: { hasImage: boolean }) {
-  const { openLookup } = useArtworkImageLookup();
+function LookupActionButton({ hasImage, label }: { hasImage: boolean; label: string }) {
+  const { openLookup, canEdit } = useArtworkImageLookup();
+
+  if (!canEdit) return null;
 
   return (
     <button
       type="button"
       onClick={openLookup}
+      data-testid="artwork-official-image-lookup-mobile"
       className="flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] text-foreground transition-colors active:bg-muted"
-      aria-label={hasImage ? "Replace image" : "Find official image"}
+      aria-label={hasImage ? "Replace official image" : "Find official image"}
     >
       <ImageIcon className="size-5" strokeWidth={1.75} />
-      <span>{hasImage ? "Image" : "Find"}</span>
+      <span>{label}</span>
     </button>
   );
 }

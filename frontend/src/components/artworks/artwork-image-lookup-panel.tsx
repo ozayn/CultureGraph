@@ -17,6 +17,10 @@ import { api } from "@/lib/api";
 import type { Artwork, ArtworkLookupCandidate, ArtworkLookupResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+const SEARCH_INFO =
+  "Searching NGA open data first. More museum sources coming later.";
+const MISSING_METADATA_HINT = "Add a title or artist to improve search results.";
+
 interface ArtworkImageLookupContextValue {
   openLookup: () => void;
   canEdit: boolean;
@@ -25,12 +29,12 @@ interface ArtworkImageLookupContextValue {
 
 const ArtworkImageLookupContext = createContext<ArtworkImageLookupContextValue | null>(null);
 
-interface ArtworkImageLookupProviderProps {
+export interface ArtworkImageLookupPanelProps {
   artwork: Artwork;
   canEdit: boolean;
   hasImage: boolean;
   onApplied: (artwork: Artwork) => void;
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 function candidateKey(candidate: ArtworkLookupCandidate): string {
@@ -41,11 +45,8 @@ function lookupEndpoint(artworkId: number): string {
   return `/api/artworks/${artworkId}/lookup-image?source=all`;
 }
 
-function sourcesBannerLabel(sources: string[] | undefined): string {
-  if (!sources?.length) {
-    return "National Gallery of Art and Smithsonian Open Access";
-  }
-  return sources.join(" · ");
+function missingSearchMetadata(artwork: Artwork): boolean {
+  return !artwork.title?.trim() && !artwork.artist?.trim();
 }
 
 function LookupCandidateCard({
@@ -112,18 +113,20 @@ function LookupCandidateCard({
   );
 }
 
-export function ArtworkImageLookupProvider({
+/** Provider + lookup sheet. Mount once on the artwork detail page. */
+export function ArtworkImageLookupPanel({
   artwork,
   canEdit,
   hasImage,
   onApplied,
   children,
-}: ArtworkImageLookupProviderProps) {
+}: ArtworkImageLookupPanelProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<ArtworkLookupResponse | null>(null);
+  const needsMetadata = missingSearchMetadata(artwork);
 
   const runLookup = useCallback(async () => {
     setLoading(true);
@@ -133,11 +136,9 @@ export function ArtworkImageLookupProvider({
       const result = await api.get<ArtworkLookupResponse>(lookupEndpoint(artwork.id));
       setResponse(result);
 
-      if (!result.candidates.length) {
+      if (!result.candidates.length && !needsMetadata) {
         if (result.notice) {
           setError(result.notice);
-        } else if (!artwork.title?.trim() && !artwork.artist?.trim()) {
-          setError("Add a title or artist on this artwork to improve matching.");
         } else {
           setError("No close matches found in the open collection indexes.");
         }
@@ -150,7 +151,7 @@ export function ArtworkImageLookupProvider({
     } finally {
       setLoading(false);
     }
-  }, [artwork.artist, artwork.id, artwork.title]);
+  }, [artwork.id, needsMetadata]);
 
   const openLookup = useCallback(() => {
     if (!canEdit) return;
@@ -214,8 +215,14 @@ export function ArtworkImageLookupProvider({
       >
         <div className="space-y-4">
           <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            Searching: {sourcesBannerLabel(response?.sources_searched)}
+            {response?.sources_searched?.length
+              ? `Searching: ${response.sources_searched.join(" · ")}`
+              : SEARCH_INFO}
           </div>
+
+          {needsMetadata ? (
+            <p className="text-sm text-muted-foreground">{MISSING_METADATA_HINT}</p>
+          ) : null}
 
           {loading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -246,7 +253,7 @@ export function ArtworkImageLookupProvider({
             </ul>
           ) : null}
 
-          {!loading && response && !response.candidates.length && !error ? (
+          {!loading && response && !response.candidates.length && !error && !needsMetadata ? (
             <p className="py-4 text-sm text-muted-foreground">
               No matches found. Try editing the title or artist, then search again.
             </p>
@@ -272,83 +279,49 @@ export function ArtworkImageLookupProvider({
 function useArtworkImageLookup(): ArtworkImageLookupContextValue {
   const context = useContext(ArtworkImageLookupContext);
   if (!context) {
-    throw new Error("ArtworkImageLookupTrigger must be used within ArtworkImageLookupProvider.");
+    throw new Error("ArtworkImageLookupAction must be used within ArtworkImageLookupPanel.");
   }
   return context;
 }
 
 export { useArtworkImageLookup };
 
-interface ArtworkImageLookupTriggerProps {
+export interface ArtworkImageLookupActionProps {
   variant?: "find" | "replace";
   className?: string;
+  fullWidth?: boolean;
+  /** Primary image-area action (used in tests). */
+  primary?: boolean;
 }
 
-export function ArtworkImageLookupTrigger({
+/** Visible lookup trigger — always render for admin users on the detail page. */
+export function ArtworkImageLookupAction({
   variant = "find",
   className,
-}: ArtworkImageLookupTriggerProps) {
+  fullWidth = false,
+  primary = false,
+}: ArtworkImageLookupActionProps) {
   const { openLookup, canEdit, hasImage } = useArtworkImageLookup();
 
   if (!canEdit) {
     return null;
   }
 
-  const resolvedVariant = variant === "replace" || hasImage ? "replace" : "find";
-
-  if (resolvedVariant === "replace") {
-    return (
-      <Button
-        type="button"
-        variant="outline"
-        size="touch"
-        className={cn("gap-2", className)}
-        onClick={openLookup}
-      >
-        Replace image
-      </Button>
-    );
-  }
+  const isReplace = variant === "replace" || hasImage;
+  const label = isReplace ? "Replace official image" : "Find official image";
 
   return (
     <Button
       type="button"
-      variant="outline"
+      variant="default"
       size="touch"
-      className={cn("gap-2", className)}
+      data-testid={primary ? "artwork-official-image-lookup-primary" : undefined}
+      className={cn("gap-2", fullWidth && "w-full", className)}
       onClick={openLookup}
     >
-      <ImageIcon className="size-4" strokeWidth={1.75} />
-      Find official image
+      {!isReplace ? <ImageIcon className="size-4" strokeWidth={1.75} /> : null}
+      {label}
     </Button>
-  );
-}
-
-/** @deprecated Use ArtworkImageLookupProvider + ArtworkImageLookupTrigger */
-export function ArtworkImageLookupPanel({
-  artwork,
-  canEdit,
-  onApplied,
-  variant = "find",
-  className,
-}: {
-  artwork: Artwork;
-  museumName?: string | null;
-  canEdit: boolean;
-  onApplied: (artwork: Artwork) => void;
-  variant?: "find" | "replace";
-  className?: string;
-}) {
-  const hasImage = Boolean(artwork.image_url);
-  return (
-    <ArtworkImageLookupProvider
-      artwork={artwork}
-      canEdit={canEdit}
-      hasImage={hasImage}
-      onApplied={onApplied}
-    >
-      <ArtworkImageLookupTrigger variant={variant} className={className} />
-    </ArtworkImageLookupProvider>
   );
 }
 
@@ -376,9 +349,12 @@ export function ArtworkImageLookupDebug({
   }
 
   return (
-    <p className="rounded border border-amber-300/60 bg-amber-50 px-2 py-1 font-mono text-[10px] text-amber-950">
-      lookup debug · isAdmin={String(canEdit)} · hasImage={String(hasImage)} · image_url=
-      {imageUrl ?? "null"} · panel={lookupMounted ? "mounted" : "no"}
+    <p
+      data-testid="artwork-lookup-debug"
+      className="mx-4 rounded border border-amber-300/60 bg-amber-50 px-2 py-1 font-mono text-[10px] text-amber-950 sm:mx-0"
+    >
+      lookup debug · isAdmin={String(canEdit)} · hasImage={String(hasImage)} · imageUrl=
+      {imageUrl ? "yes" : "no"} · lookupMounted={lookupMounted ? "yes" : "no"}
     </p>
   );
 }
