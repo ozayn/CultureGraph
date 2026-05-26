@@ -89,8 +89,8 @@ class Annotation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     artwork_id: Mapped[int] = mapped_column(ForeignKey("artworks.id"), nullable=False)
-    x_percent: Mapped[float] = mapped_column(Float, nullable=False)
-    y_percent: Mapped[float] = mapped_column(Float, nullable=False)
+    x_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    y_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     category: Mapped[AnnotationCategory] = mapped_column(
         Enum(AnnotationCategory, name="annotation_category"), nullable=False
     )

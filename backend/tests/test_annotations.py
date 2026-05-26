@@ -134,3 +134,87 @@ async def test_create_annotation_returns_404_for_missing_artwork(
         )
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_unplaced_annotation(auth_headers: dict[str, str]) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        visit_response = await client.post(
+            "/api/visits",
+            headers=auth_headers,
+            json={
+                "museum_name": "Unplaced Annotation Museum",
+                "city": "Washington, DC",
+                "visit_date": "2026-05-25",
+            },
+        )
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={"title": "Unplaced artwork", "visit_id": visit_response.json()["id"]},
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        create_response = await client.post(
+            f"/api/artworks/{artwork_id}/annotations",
+            headers=auth_headers,
+            json={
+                "x_percent": None,
+                "y_percent": None,
+                "category": "observation",
+                "text": "Text-only AI suggestion accepted without a pin.",
+            },
+        )
+
+        assert create_response.status_code == 201
+        created = create_response.json()
+        assert created["x_percent"] is None
+        assert created["y_percent"] is None
+
+        place_response = await client.patch(
+            f"/api/artworks/{artwork_id}/annotations/{created['id']}",
+            headers=auth_headers,
+            json={"x_percent": 24.5, "y_percent": 66.0},
+        )
+
+        assert place_response.status_code == 200
+        placed = place_response.json()
+        assert placed["x_percent"] == 24.5
+        assert placed["y_percent"] == 66.0
+
+
+@pytest.mark.asyncio
+async def test_create_annotation_rejects_partial_coordinates(
+    auth_headers: dict[str, str],
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        visit_response = await client.post(
+            "/api/visits",
+            headers=auth_headers,
+            json={
+                "museum_name": "Partial Coordinate Museum",
+                "city": "Washington, DC",
+                "visit_date": "2026-05-25",
+            },
+        )
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={"title": "Partial coordinate artwork", "visit_id": visit_response.json()["id"]},
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        response = await client.post(
+            f"/api/artworks/{artwork_id}/annotations",
+            headers=auth_headers,
+            json={
+                "x_percent": 10,
+                "y_percent": None,
+                "category": "observation",
+                "text": "Only one coordinate",
+            },
+        )
+
+    assert response.status_code == 422

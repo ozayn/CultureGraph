@@ -52,8 +52,8 @@ class AdminAnnotationRecord(BaseModel):
     artwork_id: int
     category: AnnotationCategory
     text: str
-    x_percent: float
-    y_percent: float
+    x_percent: float | None
+    y_percent: float | None
     created_at: datetime
 
 

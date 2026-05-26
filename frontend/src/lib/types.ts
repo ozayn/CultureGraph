@@ -86,8 +86,8 @@ export interface ArtworkLookupResponse {
 export interface Annotation {
   id: number;
   artwork_id: number;
-  x_percent: number;
-  y_percent: number;
+  x_percent: number | null;
+  y_percent: number | null;
   category: AnnotationCategory;
   text: string;
   tags: string[];

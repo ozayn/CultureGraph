@@ -18,7 +18,7 @@ import {
   suggestedAnnotationToAnnotationPayload,
   suggestedAnnotationToFormValues,
 } from "@/lib/research-suggestions";
-import { CATEGORY_LABELS, type AiSuggestedAnnotation, type CulturalEntity } from "@/lib/types";
+import { CATEGORY_LABELS, type AiSuggestedAnnotation, type Annotation, type CulturalEntity } from "@/lib/types";
 
 interface AiSuggestedAnnotationsProps {
   artworkId: number;
@@ -26,6 +26,7 @@ interface AiSuggestedAnnotationsProps {
   culturalEntities?: CulturalEntity[];
   hasImage?: boolean;
   onSuggestionsChange: (suggestions: AiSuggestedAnnotation[]) => void;
+  onAnnotationAccepted?: (annotation: Annotation) => void;
 }
 
 interface IndexedSuggestion {
@@ -43,6 +44,7 @@ export function AiSuggestedAnnotations({
   culturalEntities = [],
   hasImage = false,
   onSuggestionsChange,
+  onAnnotationAccepted,
 }: AiSuggestedAnnotationsProps) {
   const router = useRouter();
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -74,22 +76,24 @@ export function AiSuggestedAnnotations({
 
   async function acceptSuggestion(item: IndexedSuggestion) {
     const { suggestion } = item;
-    if (!hasSuggestedCoordinates(suggestion)) {
-      setError("Place this suggestion on the image before saving.");
-      return;
-    }
 
     setSavingId(item.id);
     setError(null);
     try {
-      await api.post(
+      const created = await api.post<Annotation>(
         `/api/artworks/${artworkId}/annotations`,
-        suggestedAnnotationToAnnotationPayload(suggestion, {
-          x_percent: suggestion.suggested_position.x_percent,
-          y_percent: suggestion.suggested_position.y_percent,
-        })
+        suggestedAnnotationToAnnotationPayload(
+          suggestion,
+          hasSuggestedCoordinates(suggestion)
+            ? {
+                x_percent: suggestion.suggested_position.x_percent,
+                y_percent: suggestion.suggested_position.y_percent,
+              }
+            : null
+        )
       );
       removeSuggestion(item.id);
+      onAnnotationAccepted?.(created);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save annotation.");
     } finally {
@@ -192,7 +196,7 @@ export function AiSuggestedAnnotations({
                   type="button"
                   size="sm"
                   className="min-h-10"
-                  disabled={!positioned || savingId === item.id}
+                  disabled={savingId === item.id}
                   onClick={() => void acceptSuggestion(item)}
                 >
                   {savingId === item.id ? "Saving…" : "Accept"}

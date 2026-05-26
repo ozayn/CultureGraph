@@ -154,13 +154,19 @@ class ArtworkRead(ArtworkBase):
 
 
 class AnnotationBase(BaseModel):
-    x_percent: float = Field(ge=0, le=100)
-    y_percent: float = Field(ge=0, le=100)
+    x_percent: float | None = Field(default=None, ge=0, le=100)
+    y_percent: float | None = Field(default=None, ge=0, le=100)
     category: AnnotationCategory
     text: str = Field(min_length=1)
     tags: list[str] = Field(default_factory=list)
     linked_entity_ids: list[int] = Field(default_factory=list)
     linked_concept_names: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_coordinate_pair(self) -> "AnnotationBase":
+        if (self.x_percent is None) ^ (self.y_percent is None):
+            raise ValueError("Both x_percent and y_percent must be set together or both omitted.")
+        return self
 
 
 class AnnotationCreate(AnnotationBase):
@@ -175,6 +181,12 @@ class AnnotationUpdate(BaseModel):
     tags: list[str] | None = None
     linked_entity_ids: list[int] | None = None
     linked_concept_names: list[str] | None = None
+
+    @model_validator(mode="after")
+    def validate_coordinate_pair(self) -> "AnnotationUpdate":
+        if (self.x_percent is None) ^ (self.y_percent is None):
+            raise ValueError("Both x_percent and y_percent must be set together or both omitted.")
+        return self
 
 
 class AnnotationRead(AnnotationBase):

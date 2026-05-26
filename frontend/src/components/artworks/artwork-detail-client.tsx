@@ -29,6 +29,8 @@ import {
   type AnnotationPinFormValues,
 } from "@/lib/annotation-form";
 import { buildAnnotationTagSuggestions } from "@/lib/annotation-suggestions";
+import { splitAnnotationsByPlacement } from "@/lib/annotation-placement";
+import { setPendingAnnotationPlacement } from "@/lib/pending-annotation-placement";
 import { validateArtworkUploadFile } from "@/lib/upload-validation";
 import {
   CATEGORY_LABELS,
@@ -75,6 +77,10 @@ export function ArtworkDetailClient({
   const tagSuggestions = useMemo(
     () => buildAnnotationTagSuggestions(culturalEntities),
     [culturalEntities]
+  );
+  const { placed: placedAnnotations, unplaced: unplacedAnnotations } = useMemo(
+    () => splitAnnotationsByPlacement(annotations),
+    [annotations]
   );
   const [note, setNote] = useState(artwork.personal_notes ?? "");
   const [savingNote, setSavingNote] = useState(false);
@@ -132,6 +138,16 @@ export function ArtworkDetailClient({
   function triggerResearch() {
     void generateResearchRef.current?.();
     researchRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleAnnotationAccepted(annotation: Annotation) {
+    setAnnotations((current) => [...current, annotation]);
+    router.refresh();
+  }
+
+  function placeAnnotationOnImage(annotationId: number) {
+    setPendingAnnotationPlacement(artwork.id, annotationId);
+    router.push(`/artworks/${artwork.id}/annotate`);
   }
 
   function openAnnotationEditor(annotation: Annotation) {
@@ -329,7 +345,12 @@ export function ArtworkDetailClient({
       <section className="space-y-3 px-4 sm:px-0">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-heading text-xl">Annotations</h2>
-          <span className="text-sm text-muted-foreground">{annotations.length} pins</span>
+          <span className="text-sm text-muted-foreground">
+            {placedAnnotations.length} placed
+            {unplacedAnnotations.length > 0
+              ? ` · ${unplacedAnnotations.length} to place`
+              : ""}
+          </span>
         </div>
 
         {annotations.length === 0 ? (
@@ -337,37 +358,86 @@ export function ArtworkDetailClient({
             Tap Annotate below to mark details on the image.
           </div>
         ) : (
-          <ul className="space-y-3">
-            {annotations.map((annotation, index) => (
-              <li
-                key={annotation.id}
-                className="rounded-xl border border-border bg-card p-4"
-              >
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                      {index + 1}
-                    </span>
-                    <Badge variant="secondary">
-                      {CATEGORY_LABELS[annotation.category]}
-                    </Badge>
-                  </div>
-                  {canEdit ? (
-                    <AdminActionsMenu
-                      label={`Actions for annotation ${index + 1}`}
-                      onEdit={() => openAnnotationEditor(annotation)}
-                      onDelete={() => setDeletingAnnotation(annotation)}
+          <div className="space-y-4">
+            {unplacedAnnotations.length > 0 ? (
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  Annotations to place
+                </h3>
+                <ul className="space-y-3">
+                  {unplacedAnnotations.map((annotation) => (
+                    <li
+                      key={annotation.id}
+                      className="rounded-xl border border-dashed border-border bg-muted/20 p-4"
+                    >
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <Badge variant="secondary">
+                          {CATEGORY_LABELS[annotation.category]}
+                        </Badge>
+                        {canEdit ? (
+                          <AdminActionsMenu
+                            label={`Actions for unplaced annotation ${annotation.id}`}
+                            onEdit={() => openAnnotationEditor(annotation)}
+                            onDelete={() => setDeletingAnnotation(annotation)}
+                          />
+                        ) : null}
+                      </div>
+                      <p className="text-base leading-relaxed">{annotation.text}</p>
+                      <AnnotationPinMeta
+                        annotation={annotation}
+                        culturalEntities={culturalEntities}
+                      />
+                      {canEdit && imageSrc ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-3 min-h-10"
+                          onClick={() => placeAnnotationOnImage(annotation.id)}
+                        >
+                          Place on image
+                        </Button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {placedAnnotations.length > 0 ? (
+              <ul className="space-y-3">
+                {placedAnnotations.map((annotation, index) => (
+                  <li
+                    key={annotation.id}
+                    className="rounded-xl border border-border bg-card p-4"
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                          {index + 1}
+                        </span>
+                        <Badge variant="secondary">
+                          {CATEGORY_LABELS[annotation.category]}
+                        </Badge>
+                      </div>
+                      {canEdit ? (
+                        <AdminActionsMenu
+                          label={`Actions for annotation ${index + 1}`}
+                          onEdit={() => openAnnotationEditor(annotation)}
+                          onDelete={() => setDeletingAnnotation(annotation)}
+                        />
+                      ) : null}
+                    </div>
+                    <p className="text-base leading-relaxed">{annotation.text}</p>
+                    <AnnotationPinMeta
+                      annotation={annotation}
+                      culturalEntities={culturalEntities}
                     />
-                  ) : null}
-                </div>
-                <p className="text-base leading-relaxed">{annotation.text}</p>
-                <AnnotationPinMeta
-                  annotation={annotation}
-                  culturalEntities={culturalEntities}
-                />
-              </li>
-            ))}
-          </ul>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         )}
       </section>
 
@@ -386,6 +456,7 @@ export function ArtworkDetailClient({
           onReady={(generate) => {
             generateResearchRef.current = generate;
           }}
+          onAnnotationAccepted={handleAnnotationAccepted}
         />
       </div>
     </div>

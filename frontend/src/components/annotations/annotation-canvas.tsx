@@ -19,9 +19,13 @@ import {
   type AnnotationPinFormValues,
 } from "@/lib/annotation-form";
 import { buildAnnotationTagSuggestions } from "@/lib/annotation-suggestions";
+import { splitAnnotationsByPlacement } from "@/lib/annotation-placement";
 import { logAnnotationRequest } from "@/lib/annotation-debug";
 import { api } from "@/lib/api";
 import { consumePendingAiAnnotation } from "@/lib/pending-ai-annotation";
+import {
+  consumePendingAnnotationPlacement,
+} from "@/lib/pending-annotation-placement";
 import { suggestedAnnotationToFormValues } from "@/lib/research-suggestions";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -77,6 +81,17 @@ export function AnnotationCanvas({
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [pendingAiSuggestion, setPendingAiSuggestion] = useState<AiSuggestedAnnotation | null>(
     () => (typeof window !== "undefined" ? consumePendingAiAnnotation(artworkId) : null)
+  );
+  const [placingAnnotation, setPlacingAnnotation] = useState<Annotation | null>(() => {
+    if (typeof window === "undefined") return null;
+    const annotationId = consumePendingAnnotationPlacement(artworkId);
+    if (!annotationId) return null;
+    return initialAnnotations.find((annotation) => annotation.id === annotationId) ?? null;
+  });
+
+  const { placed: placedAnnotations, unplaced: unplacedAnnotations } = useMemo(
+    () => splitAnnotationsByPlacement(annotations),
+    [annotations]
   );
 
   const tagSuggestions = useMemo(
@@ -154,6 +169,31 @@ export function AnnotationCanvas({
     []
   );
 
+  const saveAnnotationPlacement = useCallback(
+    async (annotation: Annotation, xPercent: number, yPercent: number) => {
+      setSaving(true);
+      setError(null);
+      try {
+        const updated = await api.patch<Annotation>(
+          `/api/artworks/${artworkId}/annotations/${annotation.id}`,
+          {
+            x_percent: Number(xPercent.toFixed(2)),
+            y_percent: Number(yPercent.toFixed(2)),
+          }
+        );
+        setAnnotations((current) =>
+          current.map((item) => (item.id === updated.id ? updated : item))
+        );
+        setPlacingAnnotation(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not place annotation on the image.");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [artworkId]
+  );
+
   const placePin = useCallback(
     (x: number, y: number) => {
       if (authLoading) {
@@ -169,13 +209,30 @@ export function AnnotationCanvas({
         return;
       }
 
+      const xPercent = (x / size.width) * 100;
+      const yPercent = (y / size.height) * 100;
+
+      if (placingAnnotation) {
+        void saveAnnotationPlacement(placingAnnotation, xPercent, yPercent);
+        return;
+      }
+
       openPinForm(
-        (x / size.width) * 100,
-        (y / size.height) * 100,
+        xPercent,
+        yPercent,
         pendingAiSuggestion ? suggestedAnnotationToFormValues(pendingAiSuggestion) : undefined
       );
     },
-    [authLoading, canEdit, openPinForm, pendingAiSuggestion, size.height, size.width]
+    [
+      authLoading,
+      canEdit,
+      openPinForm,
+      pendingAiSuggestion,
+      placingAnnotation,
+      saveAnnotationPlacement,
+      size.height,
+      size.width,
+    ]
   );
 
   const handleStagePointer = useCallback(
@@ -196,15 +253,22 @@ export function AnnotationCanvas({
 
   const pins = useMemo(
     () =>
-      annotations.map((annotation, index) => ({
+      placedAnnotations.map((annotation, index) => ({
         ...annotation,
-        x: (annotation.x_percent / 100) * size.width,
-        y: (annotation.y_percent / 100) * size.height,
+        x: ((annotation.x_percent ?? 0) / 100) * size.width,
+        y: ((annotation.y_percent ?? 0) / 100) * size.height,
         color: CATEGORY_COLORS[annotation.category],
         label: String(index + 1),
       })),
-    [annotations, size.height, size.width]
+    [placedAnnotations, size.height, size.width]
   );
+
+  function startPlacingAnnotation(annotation: Annotation) {
+    setPlacingAnnotation(annotation);
+    setPendingPin(null);
+    setPendingAiSuggestion(null);
+    setError(null);
+  }
 
   async function saveAnnotation() {
     if (!canEdit) {
@@ -291,6 +355,14 @@ export function AnnotationCanvas({
     <div className="space-y-5">
       {!canEdit && !authLoading ? <SignInPrompt compact /> : null}
 
+      {placingAnnotation ? (
+        <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Place annotation on the image</p>
+          <p className="mt-1">{placingAnnotation.text}</p>
+          <p className="mt-2 text-xs">Tap the artwork to choose where this pin should go.</p>
+        </div>
+      ) : null}
+
       {pendingAiSuggestion ? (
         <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
           <p className="font-medium text-foreground">Place AI suggestion on the image</p>
@@ -350,43 +422,87 @@ export function AnnotationCanvas({
         )}
       </div>
 
-      <ul className="space-y-3">
-        {annotations.length === 0 ? (
-          <li className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-            No annotations yet.
-          </li>
-        ) : (
-          annotations.map((annotation, index) => (
-            <li
-              key={annotation.id}
-              className="rounded-xl border border-border bg-card p-4"
-            >
-              <div className="mb-2 flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                    {index + 1}
-                  </span>
-                  <Badge variant="secondary">
-                    {CATEGORY_LABELS[annotation.category]}
-                  </Badge>
-                </div>
-                {canEdit ? (
-                  <AdminActionsMenu
-                    label={`Actions for annotation ${index + 1}`}
-                    onEdit={() => openAnnotationEditor(annotation)}
-                    onDelete={() => setDeletingAnnotation(annotation)}
+      <div className="space-y-4">
+        {unplacedAnnotations.length > 0 ? (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground">Annotations to place</h3>
+            <ul className="space-y-3">
+              {unplacedAnnotations.map((annotation) => (
+                <li
+                  key={annotation.id}
+                  className="rounded-xl border border-dashed border-border bg-muted/20 p-4"
+                >
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <Badge variant="secondary">{CATEGORY_LABELS[annotation.category]}</Badge>
+                    {canEdit ? (
+                      <AdminActionsMenu
+                        label={`Actions for unplaced annotation ${annotation.id}`}
+                        onEdit={() => openAnnotationEditor(annotation)}
+                        onDelete={() => setDeletingAnnotation(annotation)}
+                      />
+                    ) : null}
+                  </div>
+                  <p className="text-base leading-relaxed">{annotation.text}</p>
+                  <AnnotationPinMeta
+                    annotation={annotation}
+                    culturalEntities={culturalEntities}
                   />
-                ) : null}
-              </div>
-              <p className="text-base leading-relaxed">{annotation.text}</p>
-              <AnnotationPinMeta
-                annotation={annotation}
-                culturalEntities={culturalEntities}
-              />
+                  {canEdit && showImageCanvas ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 min-h-10"
+                      disabled={saving}
+                      onClick={() => startPlacingAnnotation(annotation)}
+                    >
+                      Place on image
+                    </Button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <ul className="space-y-3">
+          {placedAnnotations.length === 0 && unplacedAnnotations.length === 0 ? (
+            <li className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+              No annotations yet.
             </li>
-          ))
-        )}
-      </ul>
+          ) : (
+            placedAnnotations.map((annotation, index) => (
+              <li
+                key={annotation.id}
+                className="rounded-xl border border-border bg-card p-4"
+              >
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                      {index + 1}
+                    </span>
+                    <Badge variant="secondary">
+                      {CATEGORY_LABELS[annotation.category]}
+                    </Badge>
+                  </div>
+                  {canEdit ? (
+                    <AdminActionsMenu
+                      label={`Actions for annotation ${index + 1}`}
+                      onEdit={() => openAnnotationEditor(annotation)}
+                      onDelete={() => setDeletingAnnotation(annotation)}
+                    />
+                  ) : null}
+                </div>
+                <p className="text-base leading-relaxed">{annotation.text}</p>
+                <AnnotationPinMeta
+                  annotation={annotation}
+                  culturalEntities={culturalEntities}
+                />
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
 
       <BottomSheet
         open={pendingPin !== null}

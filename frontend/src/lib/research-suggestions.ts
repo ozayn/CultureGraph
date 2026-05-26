@@ -141,11 +141,22 @@ export function formValuesToSuggestedAnnotation(
 
 export function suggestedAnnotationToAnnotationPayload(
   suggestion: AiSuggestedAnnotation,
-  position: { x_percent: number; y_percent: number }
+  position?: { x_percent: number; y_percent: number } | null
 ) {
+  let x_percent: number | null = null;
+  let y_percent: number | null = null;
+
+  if (position) {
+    x_percent = position.x_percent;
+    y_percent = position.y_percent;
+  } else if (hasSuggestedCoordinates(suggestion)) {
+    x_percent = suggestion.suggested_position.x_percent;
+    y_percent = suggestion.suggested_position.y_percent;
+  }
+
   return {
-    x_percent: position.x_percent,
-    y_percent: position.y_percent,
+    x_percent,
+    y_percent,
     category: suggestion.category,
     text: suggestion.note,
     tags: suggestion.tags,

@@ -44,8 +44,8 @@ export interface AdminAnnotationRecord {
   artwork_id: number;
   category: string;
   text: string;
-  x_percent: number;
-  y_percent: number;
+  x_percent: number | null;
+  y_percent: number | null;
   created_at: string;
 }
 

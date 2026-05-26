@@ -9,7 +9,7 @@ import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { parseSuggestedAnnotations } from "@/lib/research-suggestions";
-import type { AiSuggestedAnnotation, CulturalEntity, ResearchDraft, ResearchNote } from "@/lib/types";
+import type { AiSuggestedAnnotation, Annotation, CulturalEntity, ResearchDraft, ResearchNote } from "@/lib/types";
 
 interface ResearchPanelProps {
   artworkId: number;
@@ -17,6 +17,7 @@ interface ResearchPanelProps {
   hasImage?: boolean;
   culturalEntities?: CulturalEntity[];
   onReady?: (generate: () => Promise<void>) => void;
+  onAnnotationAccepted?: (annotation: Annotation) => void;
 }
 
 function parseResearchNote(note: ResearchNote): ResearchDraft {
@@ -47,6 +48,7 @@ export function ResearchPanel({
   hasImage = false,
   culturalEntities = [],
   onReady,
+  onAnnotationAccepted,
 }: ResearchPanelProps) {
   const [notes, setNotes] = useState<ResearchNote[]>([]);
   const [draft, setDraft] = useState<ResearchDraft | null>(null);
@@ -222,6 +224,7 @@ export function ResearchPanel({
             culturalEntities={culturalEntities}
             hasImage={hasImage}
             onSuggestionsChange={setVisibleSuggestions}
+            onAnnotationAccepted={onAnnotationAccepted}
           />
         </div>
       ) : (

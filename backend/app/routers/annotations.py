@@ -58,13 +58,20 @@ def create_annotation(
     db.add(annotation)
     db.commit()
     db.refresh(annotation)
-    logger.info(
-        "annotation created id=%s artwork_id=%s x=%.2f y=%.2f",
-        annotation.id,
-        artwork_id,
-        annotation.x_percent,
-        annotation.y_percent,
-    )
+    if annotation.x_percent is None or annotation.y_percent is None:
+        logger.info(
+            "annotation created id=%s artwork_id=%s placement=unplaced",
+            annotation.id,
+            artwork_id,
+        )
+    else:
+        logger.info(
+            "annotation created id=%s artwork_id=%s x=%.2f y=%.2f",
+            annotation.id,
+            artwork_id,
+            annotation.x_percent,
+            annotation.y_percent,
+        )
     return annotation
 
 

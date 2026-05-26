@@ -4,6 +4,7 @@ import {
   hasSuggestedCoordinates,
   normalizeAiSuggestedAnnotation,
   parseSuggestedAnnotations,
+  suggestedAnnotationToAnnotationPayload,
 } from "@/lib/research-suggestions";
 
 describe("research-suggestions", () => {
@@ -37,5 +38,19 @@ describe("research-suggestions", () => {
 
     expect(item?.note).toBe("Legacy note");
     expect(item?.confidence).toBe(0.5);
+  });
+
+  it("builds unplaced annotation payloads for accept", () => {
+    const item = normalizeAiSuggestedAnnotation({
+      category: "history",
+      note: "Notice the layered gesso ground.",
+      suggested_position: { x_percent: null, y_percent: null, reason: null },
+    });
+    expect(item).not.toBeNull();
+
+    const payload = suggestedAnnotationToAnnotationPayload(item!);
+    expect(payload.x_percent).toBeNull();
+    expect(payload.y_percent).toBeNull();
+    expect(payload.text).toContain("gesso");
   });
 });
