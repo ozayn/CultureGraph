@@ -24,6 +24,48 @@ function candidateKey(candidate: ArtworkLookupCandidate): string {
   return candidate.external_id ?? candidate.object_url ?? candidate.title;
 }
 
+function isNgaMuseum(museumName: string | null): boolean {
+  if (!museumName) return false;
+  const normalized = museumName.toLowerCase();
+  return normalized.includes("national gallery of art");
+}
+
+function isSmithsonianMuseum(museumName: string | null): boolean {
+  if (!museumName) return false;
+  const normalized = museumName.toLowerCase();
+  return (
+    normalized.includes("smithsonian") ||
+    normalized.includes("national portrait gallery") ||
+    normalized.includes("hirshhorn") ||
+    normalized.includes("asian art") ||
+    normalized.includes("african art") ||
+    normalized.includes("renwick")
+  );
+}
+
+function lookupSourceParam(museumName: string | null): string | undefined {
+  if (!museumName) return undefined;
+  if (isNgaMuseum(museumName) || isSmithsonianMuseum(museumName)) {
+    return undefined;
+  }
+  return "all";
+}
+
+function lookupEndpoint(artworkId: number, museumName: string | null): string {
+  const source = lookupSourceParam(museumName);
+  if (!source) {
+    return `/api/artworks/${artworkId}/lookup-image`;
+  }
+  return `/api/artworks/${artworkId}/lookup-image?source=${source}`;
+}
+
+function sourcesBannerLabel(sources: string[] | undefined): string {
+  if (!sources?.length) {
+    return "National Gallery of Art and Smithsonian Open Access";
+  }
+  return sources.join(" · ");
+}
+
 function LookupCandidateCard({
   candidate,
   applying,
@@ -102,17 +144,12 @@ export function ArtworkImageLookupPanel({
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<ArtworkLookupResponse | null>(null);
 
-  const ngaVisit = museumName ? museumName.toLowerCase().includes("national gallery of art") : false;
-
   async function runLookup() {
     setLoading(true);
     setError(null);
     setResponse(null);
     try {
-      const params = new URLSearchParams({ source: "nga" });
-      const result = await api.get<ArtworkLookupResponse>(
-        `/api/artworks/${artwork.id}/lookup-image?${params.toString()}`
-      );
+      const result = await api.get<ArtworkLookupResponse>(lookupEndpoint(artwork.id, museumName));
       setResponse(result);
 
       if (!result.candidates.length) {
@@ -120,12 +157,12 @@ export function ArtworkImageLookupPanel({
           setError(result.notice);
         } else if (!artwork.title?.trim() && !artwork.artist?.trim()) {
           setError("Add a title or artist on this artwork to improve matching.");
-        } else if (!ngaVisit) {
-          setError(
-            "No matches in the National Gallery open collection. This artwork is not linked to an NGA visit — results may be less accurate."
-          );
-        } else {
+        } else if (isSmithsonianMuseum(museumName)) {
+          setError("No close matches found in the Smithsonian Open Access index.");
+        } else if (isNgaMuseum(museumName)) {
           setError("No close matches found in the National Gallery open collection index.");
+        } else {
+          setError("No close matches found in the open collection indexes.");
         }
       }
     } catch (e) {
@@ -220,8 +257,10 @@ export function ArtworkImageLookupPanel({
       >
         <div className="space-y-4">
           <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            Searching: National Gallery of Art open collection
-            {!ngaVisit ? " (title/artist match; visit museum not NGA)" : null}
+            Searching: {sourcesBannerLabel(response?.sources_searched)}
+            {museumName && !isNgaMuseum(museumName) && !isSmithsonianMuseum(museumName)
+              ? " (title/artist match across collections)"
+              : null}
           </div>
 
           {loading ? (

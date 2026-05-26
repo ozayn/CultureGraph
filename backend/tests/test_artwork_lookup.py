@@ -3,13 +3,23 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.sources.base import ArtworkLookupQuery
-from app.sources.nga import is_nga_museum, search_nga_collection
+from app.sources.museums import is_nga_museum, is_smithsonian_museum
+from app.sources.nga import search_nga_collection
+from app.sources.smithsonian import search_smithsonian_collection
 
 
 def test_is_nga_museum_recognizes_aliases() -> None:
     assert is_nga_museum("National Gallery of Art")
     assert is_nga_museum("national gallery of art, washington")
     assert not is_nga_museum("Smithsonian American Art Museum")
+
+
+def test_is_smithsonian_museum_recognizes_aliases() -> None:
+    assert is_smithsonian_museum("Smithsonian American Art Museum")
+    assert is_smithsonian_museum("National Portrait Gallery")
+    assert is_smithsonian_museum("Hirshhorn Museum and Sculpture Garden")
+    assert is_smithsonian_museum("National Museum of Asian Art")
+    assert not is_smithsonian_museum("National Gallery of Art")
 
 
 def test_search_nga_collection_finds_title_and_artist() -> None:
@@ -28,11 +38,38 @@ def test_search_nga_collection_finds_title_and_artist() -> None:
     assert results[0].source_name == "National Gallery of Art"
 
 
+def test_search_smithsonian_collection_finds_title_and_artist() -> None:
+    results = search_smithsonian_collection(
+        ArtworkLookupQuery(
+            title="George Washington",
+            artist="Ritchie",
+            museum_name="Smithsonian American Art Museum",
+        ),
+        limit=5,
+    )
+    assert results
+    assert "George Washington" in results[0].title
+    assert results[0].image_url
+    assert results[0].confidence >= 0.5
+    assert "Smithsonian" in results[0].source_name or "Portrait" in results[0].source_name
+
+
 def test_search_nga_skips_non_nga_museum_without_explicit_source() -> None:
     results = search_nga_collection(
         ArtworkLookupQuery(
             title="The Adoration of the Magi",
             artist="Botticelli",
+            museum_name="The Met",
+        )
+    )
+    assert results == []
+
+
+def test_search_smithsonian_skips_non_smithsonian_museum_without_explicit_source() -> None:
+    results = search_smithsonian_collection(
+        ArtworkLookupQuery(
+            title="George Washington",
+            artist="Ritchie",
             museum_name="The Met",
         )
     )
@@ -46,6 +83,19 @@ def test_search_nga_explicit_source_overrides_museum() -> None:
             artist="Botticelli",
             museum_name="The Met",
             source="nga",
+        ),
+        limit=3,
+    )
+    assert results
+
+
+def test_search_smithsonian_explicit_source_overrides_museum() -> None:
+    results = search_smithsonian_collection(
+        ArtworkLookupQuery(
+            title="George Washington",
+            artist="Ritchie",
+            museum_name="The Met",
+            source="smithsonian",
         ),
         limit=3,
     )
@@ -104,6 +154,48 @@ async def test_lookup_image_endpoint_returns_nga_candidates(
     assert candidate["image_url"]
     assert candidate.get("image_thumbnail_url")
     assert candidate["source_name"] == "National Gallery of Art"
+    assert candidate["confidence"] > 0
+
+
+@pytest.mark.asyncio
+async def test_lookup_image_endpoint_returns_smithsonian_candidates(
+    auth_headers: dict[str, str],
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        visit_response = await client.post(
+            "/api/visits",
+            headers=auth_headers,
+            json={
+                "museum_name": "Smithsonian American Art Museum",
+                "city": "Washington, DC",
+                "visit_date": "2026-05-25",
+            },
+        )
+        visit_id = visit_response.json()["id"]
+
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={
+                "title": "George Washington",
+                "artist": "Ritchie",
+                "visit_id": visit_id,
+            },
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        lookup_response = await client.get(
+            f"/api/artworks/{artwork_id}/lookup-image",
+            headers=auth_headers,
+        )
+
+    assert lookup_response.status_code == 200
+    payload = lookup_response.json()
+    assert payload["candidates"]
+    assert "Smithsonian Open Access" in payload["sources_searched"]
+    candidate = payload["candidates"][0]
+    assert candidate["image_url"]
     assert candidate["confidence"] > 0
 
 
@@ -178,8 +270,8 @@ async def test_lookup_image_unsupported_museum_returns_empty(
             "/api/visits",
             headers=auth_headers,
             json={
-                "museum_name": "Smithsonian American Art Museum",
-                "city": "Washington, DC",
+                "museum_name": "The Met",
+                "city": "New York, NY",
                 "visit_date": "2026-05-25",
             },
         )
@@ -241,6 +333,46 @@ async def test_lookup_image_with_source_param_searches_nga(
     payload = lookup_response.json()
     assert payload["candidates"]
     assert "National Gallery of Art" in payload["sources_searched"]
+
+
+@pytest.mark.asyncio
+async def test_lookup_image_with_source_param_searches_smithsonian(
+    auth_headers: dict[str, str],
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        visit_response = await client.post(
+            "/api/visits",
+            headers=auth_headers,
+            json={
+                "museum_name": "National Gallery of Art",
+                "city": "Washington, DC",
+                "visit_date": "2026-05-25",
+            },
+        )
+        visit_id = visit_response.json()["id"]
+
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={
+                "title": "George Washington",
+                "artist": "Ritchie",
+                "visit_id": visit_id,
+            },
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        lookup_response = await client.get(
+            f"/api/artworks/{artwork_id}/lookup-image",
+            headers=auth_headers,
+            params={"source": "smithsonian"},
+        )
+
+    assert lookup_response.status_code == 200
+    payload = lookup_response.json()
+    assert payload["candidates"]
+    assert "Smithsonian Open Access" in payload["sources_searched"]
 
 
 @pytest.mark.asyncio

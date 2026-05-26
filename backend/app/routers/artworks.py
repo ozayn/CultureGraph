@@ -17,6 +17,10 @@ from app.schemas import (
 )
 from app.services.artwork_images import normalize_artwork_image_update
 from app.services.artwork_lookup import lookup_artwork_candidates
+from app.sources.routing import (
+    resolve_lookup_sources,
+    sources_searched_labels,
+)
 from app.services.image_upload import (
     process_and_store_artwork_image,
     read_upload_with_limit,
@@ -24,7 +28,8 @@ from app.services.image_upload import (
 )
 from app.services.record_cleanup import delete_artwork as delete_artwork_record
 from app.sources.base import ArtworkLookupQuery
-from app.sources.nga import NGA_SOURCE_NAME, is_nga_museum, should_search_nga
+from app.sources.nga import should_search_nga
+from app.sources.smithsonian import should_search_smithsonian
 
 logger = logging.getLogger(__name__)
 
@@ -72,13 +77,10 @@ def lookup_artwork_image(
     artwork_id: int,
     _user: Annotated[dict[str, str], Depends(require_admin_user)],
     db: Session = Depends(get_db),
-    source: str | None = Query(default=None, description="Explicit source, e.g. nga"),
+    source: str | None = Query(default=None, description="Explicit source, e.g. nga or smithsonian"),
 ) -> ArtworkLookupResponse:
     artwork = _get_artwork_or_404(db, artwork_id)
     museum_name = artwork.visit.museum_name if artwork.visit else None
-
-    if source is None and museum_name and not is_nga_museum(museum_name):
-        return ArtworkLookupResponse(candidates=[], sources_searched=[])
 
     query = ArtworkLookupQuery(
         title=artwork.title,
@@ -88,15 +90,23 @@ def lookup_artwork_image(
         notes=artwork.personal_notes,
         source=source,
     )
+
+    if not resolve_lookup_sources(query):
+        return ArtworkLookupResponse(candidates=[], sources_searched=[])
+
     candidates = lookup_artwork_candidates(query)
-    sources_searched = [NGA_SOURCE_NAME] if should_search_nga(query) else []
+    sources_searched = sources_searched_labels(query)
 
     notice: str | None = None
-    if should_search_nga(query) and not candidates:
+    if not candidates:
         if not (artwork.title or "").strip() and not (artwork.artist or "").strip():
             notice = "Add a title or artist to improve collection matching."
-        else:
+        elif should_search_smithsonian(query) and not should_search_nga(query):
+            notice = "No close matches found in the Smithsonian Open Access index."
+        elif should_search_nga(query) and not should_search_smithsonian(query):
             notice = "No close matches found in the National Gallery open collection index."
+        else:
+            notice = "No close matches found in the open collection indexes."
 
     return ArtworkLookupResponse(
         candidates=[

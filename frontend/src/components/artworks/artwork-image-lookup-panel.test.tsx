@@ -78,7 +78,7 @@ describe("ArtworkImageLookupPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Find official image/i }));
 
     await waitFor(() => {
-      expect(getMock).toHaveBeenCalledWith("/api/artworks/1/lookup-image?source=nga");
+      expect(getMock).toHaveBeenCalledWith("/api/artworks/1/lookup-image");
     });
 
     await waitFor(() => {

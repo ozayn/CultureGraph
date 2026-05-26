@@ -30,6 +30,11 @@ const nextConfig: NextConfig = {
         hostname: "api.nga.gov",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "ids.si.edu",
+        pathname: "/**",
+      },
     ],
   },
 };
