@@ -3,7 +3,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { ArtworkImageLookupPanel } from "@/components/artworks/artwork-image-lookup-panel";
+import {
+  ArtworkImageLookupPanel,
+  ArtworkImageLookupProvider,
+  ArtworkImageLookupTrigger,
+} from "@/components/artworks/artwork-image-lookup-panel";
 
 const getMock = vi.fn();
 const putMock = vi.fn();
@@ -69,7 +73,6 @@ describe("ArtworkImageLookupPanel", () => {
     render(
       <ArtworkImageLookupPanel
         artwork={artwork}
-        museumName="National Gallery of Art"
         canEdit
         onApplied={vi.fn()}
       />
@@ -78,7 +81,7 @@ describe("ArtworkImageLookupPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Find official image/i }));
 
     await waitFor(() => {
-      expect(getMock).toHaveBeenCalledWith("/api/artworks/1/lookup-image");
+      expect(getMock).toHaveBeenCalledWith("/api/artworks/1/lookup-image?source=all");
     });
 
     await waitFor(() => {
@@ -89,13 +92,14 @@ describe("ArtworkImageLookupPanel", () => {
 
   it("shows Replace image variant when artwork has a photo", () => {
     render(
-      <ArtworkImageLookupPanel
+      <ArtworkImageLookupProvider
         artwork={{ ...artwork, image_url: "/uploads/1.jpg" }}
-        museumName="National Gallery of Art"
         canEdit
-        variant="replace"
+        hasImage
         onApplied={vi.fn()}
-      />
+      >
+        <ArtworkImageLookupTrigger variant="replace" />
+      </ArtworkImageLookupProvider>
     );
 
     expect(screen.getByRole("button", { name: "Replace image" })).toBeInTheDocument();

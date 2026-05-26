@@ -1,6 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { ImageIcon, Loader2 } from "lucide-react";
 
 import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
@@ -10,53 +17,28 @@ import { api } from "@/lib/api";
 import type { Artwork, ArtworkLookupCandidate, ArtworkLookupResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-interface ArtworkImageLookupPanelProps {
-  artwork: Artwork;
-  museumName: string | null;
+interface ArtworkImageLookupContextValue {
+  openLookup: () => void;
   canEdit: boolean;
+  hasImage: boolean;
+}
+
+const ArtworkImageLookupContext = createContext<ArtworkImageLookupContextValue | null>(null);
+
+interface ArtworkImageLookupProviderProps {
+  artwork: Artwork;
+  canEdit: boolean;
+  hasImage: boolean;
   onApplied: (artwork: Artwork) => void;
-  /** find = primary action when no photo; replace = subtle action when photo exists */
-  variant?: "find" | "replace";
-  className?: string;
+  children: ReactNode;
 }
 
 function candidateKey(candidate: ArtworkLookupCandidate): string {
   return candidate.external_id ?? candidate.object_url ?? candidate.title;
 }
 
-function isNgaMuseum(museumName: string | null): boolean {
-  if (!museumName) return false;
-  const normalized = museumName.toLowerCase();
-  return normalized.includes("national gallery of art");
-}
-
-function isSmithsonianMuseum(museumName: string | null): boolean {
-  if (!museumName) return false;
-  const normalized = museumName.toLowerCase();
-  return (
-    normalized.includes("smithsonian") ||
-    normalized.includes("national portrait gallery") ||
-    normalized.includes("hirshhorn") ||
-    normalized.includes("asian art") ||
-    normalized.includes("african art") ||
-    normalized.includes("renwick")
-  );
-}
-
-function lookupSourceParam(museumName: string | null): string | undefined {
-  if (!museumName) return undefined;
-  if (isNgaMuseum(museumName) || isSmithsonianMuseum(museumName)) {
-    return undefined;
-  }
-  return "all";
-}
-
-function lookupEndpoint(artworkId: number, museumName: string | null): string {
-  const source = lookupSourceParam(museumName);
-  if (!source) {
-    return `/api/artworks/${artworkId}/lookup-image`;
-  }
-  return `/api/artworks/${artworkId}/lookup-image?source=${source}`;
+function lookupEndpoint(artworkId: number): string {
+  return `/api/artworks/${artworkId}/lookup-image?source=all`;
 }
 
 function sourcesBannerLabel(sources: string[] | undefined): string {
@@ -130,26 +112,25 @@ function LookupCandidateCard({
   );
 }
 
-export function ArtworkImageLookupPanel({
+export function ArtworkImageLookupProvider({
   artwork,
-  museumName,
   canEdit,
+  hasImage,
   onApplied,
-  variant = "find",
-  className,
-}: ArtworkImageLookupPanelProps) {
+  children,
+}: ArtworkImageLookupProviderProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<ArtworkLookupResponse | null>(null);
 
-  async function runLookup() {
+  const runLookup = useCallback(async () => {
     setLoading(true);
     setError(null);
     setResponse(null);
     try {
-      const result = await api.get<ArtworkLookupResponse>(lookupEndpoint(artwork.id, museumName));
+      const result = await api.get<ArtworkLookupResponse>(lookupEndpoint(artwork.id));
       setResponse(result);
 
       if (!result.candidates.length) {
@@ -157,26 +138,25 @@ export function ArtworkImageLookupPanel({
           setError(result.notice);
         } else if (!artwork.title?.trim() && !artwork.artist?.trim()) {
           setError("Add a title or artist on this artwork to improve matching.");
-        } else if (isSmithsonianMuseum(museumName)) {
-          setError("No close matches found in the Smithsonian Open Access index.");
-        } else if (isNgaMuseum(museumName)) {
-          setError("No close matches found in the National Gallery open collection index.");
         } else {
           setError("No close matches found in the open collection indexes.");
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Lookup failed. Check your connection and try again.");
+      setError(
+        e instanceof Error ? e.message : "Lookup failed. Check your connection and try again."
+      );
       setResponse(null);
     } finally {
       setLoading(false);
     }
-  }
+  }, [artwork.artist, artwork.id, artwork.title]);
 
-  async function openLookup() {
+  const openLookup = useCallback(() => {
+    if (!canEdit) return;
     setSheetOpen(true);
-    await runLookup();
-  }
+    void runLookup();
+  }, [canEdit, runLookup]);
 
   async function applyCandidate(candidate: ArtworkLookupCandidate) {
     const key = candidateKey(candidate);
@@ -203,37 +183,14 @@ export function ArtworkImageLookupPanel({
     }
   }
 
-  if (!canEdit) {
-    return null;
-  }
-
-  const trigger =
-    variant === "replace" ? (
-      <Button
-        type="button"
-        variant="ghost"
-        size="touch"
-        className={cn("h-auto min-h-11 px-2 text-sm text-muted-foreground", className)}
-        onClick={() => void openLookup()}
-      >
-        Replace image
-      </Button>
-    ) : (
-      <Button
-        type="button"
-        variant="outline"
-        size="touch"
-        className={cn("gap-2 text-muted-foreground", className)}
-        onClick={() => void openLookup()}
-      >
-        <ImageIcon className="size-4" strokeWidth={1.75} />
-        Find official image
-      </Button>
-    );
+  const contextValue = useMemo(
+    () => ({ openLookup, canEdit, hasImage }),
+    [canEdit, hasImage, openLookup]
+  );
 
   return (
-    <>
-      {trigger}
+    <ArtworkImageLookupContext.Provider value={contextValue}>
+      {children}
 
       <BottomSheet
         open={sheetOpen}
@@ -244,7 +201,7 @@ export function ArtworkImageLookupPanel({
             setResponse(null);
           }
         }}
-        title="Find official image"
+        title={hasImage ? "Replace official image" : "Find official image"}
         description="Suggested matches from open museum collection records. Review before applying."
         footer={
           response?.candidates.length ? (
@@ -258,15 +215,12 @@ export function ArtworkImageLookupPanel({
         <div className="space-y-4">
           <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             Searching: {sourcesBannerLabel(response?.sources_searched)}
-            {museumName && !isNgaMuseum(museumName) && !isSmithsonianMuseum(museumName)
-              ? " (title/artist match across collections)"
-              : null}
           </div>
 
           {loading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
-              Searching collection…
+              Searching collections…
             </div>
           ) : null}
 
@@ -311,6 +265,120 @@ export function ArtworkImageLookupPanel({
           ) : null}
         </div>
       </BottomSheet>
-    </>
+    </ArtworkImageLookupContext.Provider>
+  );
+}
+
+function useArtworkImageLookup(): ArtworkImageLookupContextValue {
+  const context = useContext(ArtworkImageLookupContext);
+  if (!context) {
+    throw new Error("ArtworkImageLookupTrigger must be used within ArtworkImageLookupProvider.");
+  }
+  return context;
+}
+
+export { useArtworkImageLookup };
+
+interface ArtworkImageLookupTriggerProps {
+  variant?: "find" | "replace";
+  className?: string;
+}
+
+export function ArtworkImageLookupTrigger({
+  variant = "find",
+  className,
+}: ArtworkImageLookupTriggerProps) {
+  const { openLookup, canEdit, hasImage } = useArtworkImageLookup();
+
+  if (!canEdit) {
+    return null;
+  }
+
+  const resolvedVariant = variant === "replace" || hasImage ? "replace" : "find";
+
+  if (resolvedVariant === "replace") {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="touch"
+        className={cn("gap-2", className)}
+        onClick={openLookup}
+      >
+        Replace image
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="touch"
+      className={cn("gap-2", className)}
+      onClick={openLookup}
+    >
+      <ImageIcon className="size-4" strokeWidth={1.75} />
+      Find official image
+    </Button>
+  );
+}
+
+/** @deprecated Use ArtworkImageLookupProvider + ArtworkImageLookupTrigger */
+export function ArtworkImageLookupPanel({
+  artwork,
+  canEdit,
+  onApplied,
+  variant = "find",
+  className,
+}: {
+  artwork: Artwork;
+  museumName?: string | null;
+  canEdit: boolean;
+  onApplied: (artwork: Artwork) => void;
+  variant?: "find" | "replace";
+  className?: string;
+}) {
+  const hasImage = Boolean(artwork.image_url);
+  return (
+    <ArtworkImageLookupProvider
+      artwork={artwork}
+      canEdit={canEdit}
+      hasImage={hasImage}
+      onApplied={onApplied}
+    >
+      <ArtworkImageLookupTrigger variant={variant} className={className} />
+    </ArtworkImageLookupProvider>
+  );
+}
+
+export function ArtworkImageLookupSignInHint({ className }: { className?: string }) {
+  return (
+    <p className={cn("text-xs text-muted-foreground", className)}>
+      Sign in to find or replace official museum images.
+    </p>
+  );
+}
+
+export function ArtworkImageLookupDebug({
+  canEdit,
+  hasImage,
+  imageUrl,
+  lookupMounted,
+}: {
+  canEdit: boolean;
+  hasImage: boolean;
+  imageUrl: string | null;
+  lookupMounted: boolean;
+}) {
+  if (process.env.NODE_ENV !== "development") {
+    return null;
+  }
+
+  return (
+    <p className="rounded border border-amber-300/60 bg-amber-50 px-2 py-1 font-mono text-[10px] text-amber-950">
+      lookup debug · isAdmin={String(canEdit)} · hasImage={String(hasImage)} · image_url=
+      {imageUrl ?? "null"} · panel={lookupMounted ? "mounted" : "no"}
+    </p>
   );
 }

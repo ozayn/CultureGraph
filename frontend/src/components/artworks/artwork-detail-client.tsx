@@ -2,14 +2,20 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, MapPin, Pencil, Sparkles } from "lucide-react";
+import { Camera, ImageIcon, MapPin, Pencil, Sparkles } from "lucide-react";
 import { useRef, useState, useMemo } from "react";
 
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { AnnotationPinForm } from "@/components/annotations/annotation-pin-form";
 import { AnnotationPinMeta } from "@/components/annotations/annotation-pin-meta";
-import { ArtworkImageLookupPanel } from "@/components/artworks/artwork-image-lookup-panel";
+import {
+  ArtworkImageLookupDebug,
+  ArtworkImageLookupProvider,
+  ArtworkImageLookupSignInHint,
+  ArtworkImageLookupTrigger,
+  useArtworkImageLookup,
+} from "@/components/artworks/artwork-image-lookup-panel";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
 import { ResearchPanel } from "@/components/artworks/research-panel";
@@ -44,7 +50,6 @@ interface ArtworkDetailClientProps {
   annotations: Annotation[];
   culturalEntities?: CulturalEntity[];
   imageSrc: string | null;
-  museumName: string | null;
 }
 
 export function ArtworkDetailClient({
@@ -52,10 +57,9 @@ export function ArtworkDetailClient({
   annotations: initialAnnotations,
   culturalEntities = [],
   imageSrc: initialImageSrc,
-  museumName,
 }: ArtworkDetailClientProps) {
   const router = useRouter();
-  const { canEdit } = useAuth();
+  const { canEdit, loading: authLoading } = useAuth();
   const researchRef = useRef<HTMLDivElement>(null);
   const generateResearchRef = useRef<(() => Promise<void>) | null>(null);
   const [artwork, setArtwork] = useState(initialArtwork);
@@ -88,6 +92,14 @@ export function ArtworkDetailClient({
   const [photo, setPhoto] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const hasImage = Boolean(artwork.image_url ?? imageSrc);
+
+  function handleLookupApplied(updated: Artwork) {
+    setArtwork(updated);
+    setImageSrc(mediaUrl(updated.image_url));
+    router.refresh();
+  }
 
   async function saveNote() {
     setSavingNote(true);
@@ -212,10 +224,23 @@ export function ArtworkDetailClient({
   }
 
   return (
+  <ArtworkImageLookupProvider
+    artwork={artwork}
+    canEdit={canEdit}
+    hasImage={hasImage}
+    onApplied={handleLookupApplied}
+  >
   <>
     <div className="-mx-4 space-y-5 pb-28 sm:mx-0 sm:space-y-8 sm:pb-10">
+      <ArtworkImageLookupDebug
+        canEdit={canEdit}
+        hasImage={hasImage}
+        imageUrl={artwork.image_url}
+        lookupMounted
+      />
+
       <section className="overflow-hidden bg-[#f3efe8] sm:rounded-xl sm:border sm:border-border">
-        {imageSrc ? (
+        {hasImage && imageSrc ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -226,17 +251,7 @@ export function ArtworkDetailClient({
             />
             {canEdit ? (
               <div className="flex justify-end border-t border-border/60 bg-background/80 px-3 py-2">
-                <ArtworkImageLookupPanel
-                  artwork={artwork}
-                  museumName={museumName}
-                  canEdit={canEdit}
-                  variant="replace"
-                  onApplied={(updated) => {
-                    setArtwork(updated);
-                    setImageSrc(mediaUrl(updated.image_url));
-                    router.refresh();
-                  }}
-                />
+                <ArtworkImageLookupTrigger variant="replace" />
               </div>
             ) : null}
           </>
@@ -245,17 +260,10 @@ export function ArtworkDetailClient({
             <Camera className="size-8 opacity-50" />
             <p>No photo yet. Capture your own, or find an official museum image.</p>
             {canEdit ? (
-              <ArtworkImageLookupPanel
-                artwork={artwork}
-                museumName={museumName}
-                canEdit={canEdit}
-                onApplied={(updated) => {
-                  setArtwork(updated);
-                  setImageSrc(mediaUrl(updated.image_url));
-                  router.refresh();
-                }}
-              />
-            ) : null}
+              <ArtworkImageLookupTrigger />
+            ) : (
+              <ArtworkImageLookupSignInHint />
+            )}
           </div>
         )}
       </section>
@@ -324,6 +332,7 @@ export function ArtworkDetailClient({
           <Button size="touch" variant="outline" onClick={() => setPhotoOpen(true)}>
             Add photo
           </Button>
+          <ArtworkImageLookupTrigger variant={hasImage ? "replace" : "find"} />
           <Button size="touch" variant="outline" onClick={triggerResearch}>
             Research with AI
           </Button>
@@ -457,7 +466,7 @@ export function ArtworkDetailClient({
         )}
       </section>
 
-      {!canEdit ? (
+      {!canEdit && !authLoading ? (
         <div className="px-4 sm:px-0">
           <SignInPrompt compact />
         </div>
@@ -482,7 +491,7 @@ export function ArtworkDetailClient({
         className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
-        <div className="mx-auto grid max-w-lg grid-cols-4 gap-1 px-2 py-2">
+        <div className="mx-auto grid max-w-lg grid-cols-5 gap-1 px-2 py-2">
           <ActionButton icon={Pencil} label="Note" onClick={() => setNoteOpen(true)} />
           <ActionButton
             icon={MapPin}
@@ -490,6 +499,7 @@ export function ArtworkDetailClient({
             href={`/artworks/${artwork.id}/annotate`}
           />
           <ActionButton icon={Camera} label="Photo" onClick={() => setPhotoOpen(true)} />
+          <LookupActionButton hasImage={hasImage} />
           <ActionButton icon={Sparkles} label="AI" onClick={triggerResearch} />
         </div>
       </div>
@@ -621,6 +631,23 @@ export function ArtworkDetailClient({
       onConfirm={deleteAnnotation}
     />
   </>
+  </ArtworkImageLookupProvider>
+  );
+}
+
+function LookupActionButton({ hasImage }: { hasImage: boolean }) {
+  const { openLookup } = useArtworkImageLookup();
+
+  return (
+    <button
+      type="button"
+      onClick={openLookup}
+      className="flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] text-foreground transition-colors active:bg-muted"
+      aria-label={hasImage ? "Replace image" : "Find official image"}
+    >
+      <ImageIcon className="size-5" strokeWidth={1.75} />
+      <span>{hasImage ? "Image" : "Find"}</span>
+    </button>
   );
 }
 

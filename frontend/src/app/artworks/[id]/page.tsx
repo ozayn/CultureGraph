@@ -15,7 +15,6 @@ export default async function ArtworkDetailPage({
   let artwork: Artwork;
   let annotations: Annotation[] = [];
   let culturalEntities: CulturalEntity[] = [];
-  let museumName: string | null = null;
 
   try {
     artwork = await api.get<Artwork>(`/api/artworks/${artworkId}`);
@@ -23,8 +22,6 @@ export default async function ArtworkDetailPage({
       `/api/artworks/${artworkId}/annotations`
     );
     if (artwork.visit_id) {
-      const visit = await api.get<{ museum_name: string }>(`/api/visits/${artwork.visit_id}`);
-      museumName = visit.museum_name;
       culturalEntities = await api.get<CulturalEntity[]>(
         `/api/cultural-entities?visit_id=${artwork.visit_id}`
       );
@@ -39,7 +36,6 @@ export default async function ArtworkDetailPage({
       annotations={annotations}
       culturalEntities={culturalEntities}
       imageSrc={mediaUrl(artwork.image_url)}
-      museumName={museumName}
     />
   );
 }
