@@ -1,8 +1,12 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  ArtworkImageLookupPanel,
+} from "@/components/artworks/artwork-image-lookup-panel";
 import { ResearchPanel } from "@/components/artworks/research-panel";
 
 const getMock = vi.fn();
@@ -58,15 +62,32 @@ const researchNote = {
   id: 10,
   artwork_id: 1,
   short_summary: "Four Dancers — possibly by Edgar Degas",
-  historical_context: "Context",
+  historical_context: "A rehearsal scene from Degas's ballet series.",
   visual_elements_to_notice: "[]",
   related_questions: "[]",
-  suggested_annotations: "[]",
+  suggested_annotations: JSON.stringify([
+    {
+      category: "material",
+      note: "Pastel on paper",
+      tags: [],
+      linked_concept_names: [],
+      confidence: 0.8,
+      suggested_position: { x_percent: null, y_percent: null, reason: null },
+    },
+  ]),
   possible_title: "Four Dancers — possibly by Edgar Degas",
   possible_artist: "Edgar Degas",
-  period_or_movement: "Impressionism",
+  period_or_movement: "Impressionism, c. 1890",
   created_at: "2026-05-25T12:00:00Z",
 };
+
+function renderWithLookup(ui: ReactNode) {
+  return render(
+    <ArtworkImageLookupPanel artwork={artwork} canEdit hasImage={false} onApplied={vi.fn()}>
+      {ui}
+    </ArtworkImageLookupPanel>
+  );
+}
 
 describe("ResearchPanel metadata apply", () => {
   afterEach(() => {
@@ -76,56 +97,76 @@ describe("ResearchPanel metadata apply", () => {
     postMock.mockReset();
   });
 
-  it("renders Use this title for admin users when AI title exists", async () => {
+  it("shows a single Review suggested metadata action", async () => {
     getMock.mockResolvedValueOnce([researchNote]);
 
-    render(
+    renderWithLookup(
       <ResearchPanel artwork={artwork} canEdit onArtworkUpdated={vi.fn()} />
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/AI suggested title:/)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Use this title" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Review suggested metadata" })
+      ).toBeInTheDocument();
     });
+    expect(screen.queryByRole("button", { name: "Use title" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Use this title" })).not.toBeInTheDocument();
   });
 
-  it("updates artwork title after review confirm", async () => {
+  it("updates selected artwork fields after review confirm", async () => {
     getMock.mockResolvedValueOnce([researchNote]);
-    putMock.mockResolvedValueOnce({ ...artwork, title: "Four Dancers", artist: "Edgar Degas" });
+    putMock.mockResolvedValueOnce({
+      ...artwork,
+      title: "Four Dancers",
+      artist: "Edgar Degas",
+      year_period: "c. 1890 · Impressionism",
+      medium: "Pastel on paper",
+    });
     const onArtworkUpdated = vi.fn();
 
-    render(
+    renderWithLookup(
       <ResearchPanel artwork={artwork} canEdit onArtworkUpdated={onArtworkUpdated} />
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Use this title" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Review suggested metadata" })
+      ).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Use this title" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review suggested metadata" }));
     expect(screen.getByText(/Review before saving/)).toBeInTheDocument();
-    expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Apply selected" }));
 
     await waitFor(() => {
-      expect(putMock).toHaveBeenCalledWith("/api/artworks/1", { title: "Four Dancers" });
-      expect(onArtworkUpdated).toHaveBeenCalledWith(
-        expect.objectContaining({ title: "Four Dancers" })
+      expect(putMock).toHaveBeenCalledWith(
+        "/api/artworks/1",
+        expect.objectContaining({
+          title: "Four Dancers",
+          artist: "Edgar Degas",
+          year_period: "c. 1890 · Impressionism",
+          medium: "Pastel on paper",
+        })
       );
+      expect(onArtworkUpdated).toHaveBeenCalled();
     });
+
+    expect(screen.getByText(/Artwork metadata updated/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Find official image" })).toBeInTheDocument();
   });
 
   it("hides apply actions for non-admin users", async () => {
     getMock.mockResolvedValueOnce([researchNote]);
 
-    render(<ResearchPanel artwork={artwork} canEdit={false} />);
+    renderWithLookup(<ResearchPanel artwork={artwork} canEdit={false} />);
 
     await waitFor(() => {
       expect(screen.getByText("Summary")).toBeInTheDocument();
     });
 
-    expect(screen.queryByRole("button", { name: "Use this title" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Use title" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Review suggested metadata" })
+    ).not.toBeInTheDocument();
   });
 });

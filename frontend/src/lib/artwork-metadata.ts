@@ -1,3 +1,5 @@
+import type { ResearchDraft } from "@/lib/types";
+
 const PLACEHOLDER_TITLES = new Set([
   "unknown",
   "untitled",
@@ -19,6 +21,9 @@ const PLACEHOLDER_ARTISTS = new Set([
   "artist unknown",
 ]);
 
+export const HIGH_CONFIDENCE_THRESHOLD = 0.72;
+export const LOW_CONFIDENCE_THRESHOLD = 0.55;
+
 export function isPlaceholderTitle(title: string | null | undefined): boolean {
   const normalized = (title ?? "").trim().toLowerCase();
   if (!normalized) return true;
@@ -29,6 +34,10 @@ export function isPlaceholderArtist(artist: string | null | undefined): boolean 
   const normalized = (artist ?? "").trim().toLowerCase();
   if (!normalized) return true;
   return PLACEHOLDER_ARTISTS.has(normalized);
+}
+
+export function isPlaceholderNotes(notes: string | null | undefined): boolean {
+  return !(notes ?? "").trim();
 }
 
 /** Strip attribution uncertainty from AI title strings. */
@@ -59,14 +68,60 @@ export function cleanAiArtist(raw: string | null | undefined): string | null {
 export function cleanAiPeriod(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null;
   const period = raw.trim();
-  if (/^unknown\s*(period|date)?$/i.test(period)) return null;
+  if (/^unknown\s*(period|date|movement)?$/i.test(period)) return null;
   return period;
+}
+
+export function extractYearFromPeriod(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const text = raw.trim();
+  const circa = text.match(/\bc\.?\s*(\d{3,4}s?)\b/i);
+  if (circa) return `c. ${circa[1]}`;
+  const range = text.match(/\b(\d{3,4})\s*[–-]\s*(\d{3,4})\b/);
+  if (range) return `${range[1]}–${range[2]}`;
+  const decade = text.match(/\b(\d{3,4}s)\b/i);
+  if (decade) return decade[1];
+  const year = text.match(/\b(1[0-9]{3}|20[0-9]{2})\b/);
+  if (year) return year[1];
+  return null;
+}
+
+export function extractMovementFromPeriod(raw: string | null | undefined): string | null {
+  const cleaned = cleanAiPeriod(raw);
+  if (!cleaned) return null;
+  const withoutYear = cleaned
+    .replace(/\bc\.?\s*\d{3,4}s?\b/gi, "")
+    .replace(/\b\d{3,4}\s*[–-]\s*\d{3,4}\b/g, "")
+    .replace(/\b(1[0-9]{3}|20[0-9]{2})s?\b/g, "")
+    .replace(/[(),]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!withoutYear || /^unknown$/i.test(withoutYear)) return null;
+  return withoutYear;
+}
+
+export function extractMediumFromDraft(draft: ResearchDraft): string | null {
+  for (const item of draft.suggested_annotations ?? []) {
+    if (item.category !== "material") continue;
+    const note = item.note?.trim();
+    if (note && note.length <= 255) return note;
+  }
+  return null;
+}
+
+export function extractNotesFromDraft(draft: ResearchDraft): string | null {
+  const context = draft.historical_context?.trim();
+  if (!context || context.length < 20) return null;
+  return context.length > 1200 ? `${context.slice(0, 1197)}…` : context;
 }
 
 export interface ResearchMetadataHints {
   title: string | null;
   artist: string | null;
+  year: string | null;
   period: string | null;
+  medium: string | null;
+  notes: string | null;
   confidence: number | null;
 }
 
@@ -76,21 +131,67 @@ export function extractResearchMetadataHints(draft: {
   period_or_movement?: string | null;
   confidence?: number | null;
   short_summary?: string | null;
+  historical_context?: string | null;
+  suggested_annotations?: ResearchDraft["suggested_annotations"];
 }): ResearchMetadataHints | null {
   let title = cleanAiTitle(draft.possible_title);
   const artist = cleanAiArtist(draft.possible_artist);
-  const period = cleanAiPeriod(draft.period_or_movement);
+  const year = extractYearFromPeriod(draft.period_or_movement);
+  const period = extractMovementFromPeriod(draft.period_or_movement);
+  const medium = draft.suggested_annotations
+    ? extractMediumFromDraft(draft as ResearchDraft)
+    : null;
+  const notes = draft.historical_context
+    ? extractNotesFromDraft(draft as ResearchDraft)
+    : null;
 
   if (!title && draft.short_summary) {
     title = cleanAiTitle(draft.short_summary.split(/\s*[—–-]\s*/)[0]);
   }
 
-  if (!title && !artist && !period) return null;
+  if (!title && !artist && !year && !period && !medium && !notes) return null;
 
   return {
     title,
     artist,
+    year,
     period,
+    medium,
+    notes,
     confidence: draft.confidence ?? null,
   };
+}
+
+export function defaultMetadataFieldChecked(
+  current: string | null | undefined,
+  suggested: string | null,
+  confidence: number | null,
+  isPlaceholder: (value: string | null | undefined) => boolean
+): boolean {
+  if (!suggested?.trim()) return false;
+
+  const hasUserValue = Boolean(current?.trim()) && !isPlaceholder(current);
+  if (hasUserValue) return false;
+
+  const level = confidence ?? 0.65;
+  if (level < LOW_CONFIDENCE_THRESHOLD) return false;
+  if (isPlaceholder(current) || !current?.trim()) return true;
+  return level >= HIGH_CONFIDENCE_THRESHOLD;
+}
+
+export function buildYearPeriodValue(
+  year: string | null,
+  period: string | null,
+  applyYear: boolean,
+  applyPeriod: boolean
+): string | null {
+  const parts: string[] = [];
+  if (applyYear && year) parts.push(year);
+  if (applyPeriod && period) parts.push(period);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+export function formatMetadataCurrent(value: string | null | undefined, fallback = "—"): string {
+  const trimmed = (value ?? "").trim();
+  return trimmed || fallback;
 }

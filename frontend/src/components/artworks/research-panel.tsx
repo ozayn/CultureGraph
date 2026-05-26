@@ -22,7 +22,7 @@ interface ResearchPanelProps {
   onAnnotationAccepted?: (annotation: Annotation) => void;
   onArtworkUpdated?: (artwork: Artwork) => void;
   onHintsChange?: (hints: ResearchMetadataHints | null) => void;
-  onApplyReviewReady?: (openReview: (preset?: "title" | "artist" | "both" | "review") => void) => void;
+  onApplyReviewReady?: (openReview: () => void) => void;
 }
 
 function parseResearchNote(note: ResearchNote): ResearchDraft {

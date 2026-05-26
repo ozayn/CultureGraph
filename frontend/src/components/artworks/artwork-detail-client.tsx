@@ -515,7 +515,7 @@ export function ArtworkDetailClient({
           onArtworkUpdated={handleArtworkUpdated}
           onHintsChange={setResearchHints}
           onApplyReviewReady={(openReview) => {
-            openApplyReviewRef.current = () => openReview("review");
+            openApplyReviewRef.current = openReview;
           }}
         />
       </div>
