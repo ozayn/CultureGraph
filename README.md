@@ -109,6 +109,27 @@ cp frontend/.env.example frontend/.env.local
 cd frontend && npm run icons
 ```
 
+## Development notes
+
+### Node `[DEP0205] module.register()` warning (harmless)
+
+During `npm run dev` or `npm run build`, Node may print:
+
+```text
+(node:…) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+```
+
+**Source:** Tailwind CSS v4 (`@tailwindcss/node`, pulled in by `@tailwindcss/postcss`), not CultureGraph app code, Next.js, tsx, or ts-node. With `--trace-deprecation`, the stack points at `frontend/node_modules/@tailwindcss/node/dist/index.js` (ESM cache loader registration).
+
+**Impact:** Cosmetic only — CSS compiles and the app builds normally. No action required until Tailwind ships an update using `module.registerHooks()`.
+
+To inspect the stack locally:
+
+```bash
+cd frontend
+NODE_OPTIONS="--trace-deprecation" npm run build
+```
+
 ## Railway deployment
 
 Deploy as **two services** from this monorepo. Configure variables in each service’s **Railway dashboard** — not in a root `.env` file.
