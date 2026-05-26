@@ -15,6 +15,7 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { isPlaceholderTitle } from "@/lib/artwork-metadata";
 import type {
   Artwork,
   ArtworkLookupCandidate,
@@ -63,6 +64,8 @@ export interface ArtworkImageLookupPanelProps {
   artwork: Artwork;
   canEdit: boolean;
   hasImage: boolean;
+  aiTitleHint?: string | null;
+  aiArtistHint?: string | null;
   onApplied: (artwork: Artwork) => void;
   children?: ReactNode;
 }
@@ -81,17 +84,6 @@ function lookupEndpoint(artworkId: number, params: LookupSearchParams = {}): str
     query.set("artist_override", params.artist.trim());
   }
   return `/api/artworks/${artworkId}/lookup-image?${query.toString()}`;
-}
-
-function isPlaceholderTitle(title: string | null | undefined): boolean {
-  const normalized = (title ?? "").trim().toLowerCase();
-  return (
-    !normalized ||
-    normalized === "unknown" ||
-    normalized === "untitled" ||
-    normalized === "unidentified artwork" ||
-    normalized === "painting"
-  );
 }
 
 function defaultApplyFields(
@@ -310,6 +302,8 @@ export function ArtworkImageLookupPanel({
   artwork,
   canEdit,
   hasImage,
+  aiTitleHint,
+  aiArtistHint,
   onApplied,
   children,
 }: ArtworkImageLookupPanelProps) {
@@ -545,6 +539,42 @@ export function ArtworkImageLookupPanel({
               Search again
             </Button>
           </div>
+
+          {aiTitleHint && isPlaceholderTitle(artwork.title) ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="min-h-9 w-full sm:w-auto"
+              disabled={loading}
+              onClick={() => {
+                setManualTitle(aiTitleHint);
+                if (aiArtistHint) setManualArtist(aiArtistHint);
+                void (async () => {
+                  setLoading(true);
+                  setError(null);
+                  setPendingApply(null);
+                  try {
+                    const result = await api.get<ArtworkLookupResponse>(
+                      lookupEndpoint(artwork.id, {
+                        title: aiTitleHint,
+                        artist:
+                          aiArtistHint ??
+                          (manualArtist || artwork.artist || undefined),
+                      })
+                    );
+                    setResponse(result);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Lookup failed.");
+                  } finally {
+                    setLoading(false);
+                  }
+                })();
+              }}
+            >
+              Search using AI title
+            </Button>
+          ) : null}
 
           {loading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">

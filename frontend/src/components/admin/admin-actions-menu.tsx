@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 interface AdminActionsMenuProps {
   onEdit?: () => void;
   onDelete?: () => void;
+  extraActions?: { label: string; onClick: () => void }[];
   className?: string;
   label?: string;
 }
@@ -15,6 +16,7 @@ interface AdminActionsMenuProps {
 export function AdminActionsMenu({
   onEdit,
   onDelete,
+  extraActions = [],
   className,
   label = "More actions",
 }: AdminActionsMenuProps) {
@@ -46,7 +48,7 @@ export function AdminActionsMenu({
     };
   }, [open]);
 
-  if (!onEdit && !onDelete) return null;
+  if (!onEdit && !onDelete && extraActions.length === 0) return null;
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>
@@ -80,6 +82,20 @@ export function AdminActionsMenu({
               Edit
             </button>
           ) : null}
+          {extraActions.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              role="menuitem"
+              className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-muted"
+              onClick={() => {
+                setOpen(false);
+                action.onClick();
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
           {onDelete ? (
             <button
               type="button"

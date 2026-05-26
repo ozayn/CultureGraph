@@ -35,6 +35,7 @@ import {
   type AnnotationPinFormValues,
 } from "@/lib/annotation-form";
 import { buildAnnotationTagSuggestions } from "@/lib/annotation-suggestions";
+import type { ResearchMetadataHints } from "@/lib/artwork-metadata";
 import { splitAnnotationsByPlacement } from "@/lib/annotation-placement";
 import { setPendingAnnotationPlacement } from "@/lib/pending-annotation-placement";
 import { validateArtworkUploadFile } from "@/lib/upload-validation";
@@ -94,6 +95,14 @@ export function ArtworkDetailClient({
   const [error, setError] = useState<string | null>(null);
 
   const hasImage = Boolean(artwork.image_url ?? imageSrc);
+
+  const openApplyReviewRef = useRef<(() => void) | null>(null);
+  const [researchHints, setResearchHints] = useState<ResearchMetadataHints | null>(null);
+
+  function handleArtworkUpdated(updated: Artwork) {
+    setArtwork(updated);
+    router.refresh();
+  }
 
   function handleLookupApplied(updated: Artwork) {
     setArtwork(updated);
@@ -228,6 +237,8 @@ export function ArtworkDetailClient({
     artwork={artwork}
     canEdit={canEdit}
     hasImage={hasImage}
+    aiTitleHint={researchHints?.title}
+    aiArtistHint={researchHints?.artist}
     onApplied={handleLookupApplied}
   >
   <>
@@ -301,6 +312,19 @@ export function ArtworkDetailClient({
               label="Artwork actions"
               onEdit={() => setEditOpen(true)}
               onDelete={() => setDeleteOpen(true)}
+              extraActions={
+                researchHints
+                  ? [
+                      {
+                        label: "Apply suggested metadata",
+                        onClick: () => {
+                          researchRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          openApplyReviewRef.current?.();
+                        },
+                      },
+                    ]
+                  : []
+              }
             />
           ) : null}
         </div>
@@ -480,7 +504,7 @@ export function ArtworkDetailClient({
 
       <div ref={researchRef} className="px-4 sm:px-0">
         <ResearchPanel
-          artworkId={artwork.id}
+          artwork={artwork}
           canEdit={canEdit}
           hasImage={Boolean(imageSrc)}
           culturalEntities={culturalEntities}
@@ -488,6 +512,11 @@ export function ArtworkDetailClient({
             generateResearchRef.current = generate;
           }}
           onAnnotationAccepted={handleAnnotationAccepted}
+          onArtworkUpdated={handleArtworkUpdated}
+          onHintsChange={setResearchHints}
+          onApplyReviewReady={(openReview) => {
+            openApplyReviewRef.current = () => openReview("review");
+          }}
         />
       </div>
     </div>

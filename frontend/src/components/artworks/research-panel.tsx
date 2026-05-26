@@ -3,21 +3,26 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { AiSuggestedAnnotations } from "@/components/artworks/ai-suggested-annotations";
+import { ResearchMetadataApply, extractDraftMetadataHints } from "@/components/artworks/research-metadata-apply";
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { parseSuggestedAnnotations } from "@/lib/research-suggestions";
-import type { AiSuggestedAnnotation, Annotation, CulturalEntity, ResearchDraft, ResearchNote } from "@/lib/types";
+import type { ResearchMetadataHints } from "@/lib/artwork-metadata";
+import type { AiSuggestedAnnotation, Annotation, Artwork, CulturalEntity, ResearchDraft, ResearchNote } from "@/lib/types";
 
 interface ResearchPanelProps {
-  artworkId: number;
+  artwork: Artwork;
   canEdit?: boolean;
   hasImage?: boolean;
   culturalEntities?: CulturalEntity[];
   onReady?: (generate: () => Promise<void>) => void;
   onAnnotationAccepted?: (annotation: Annotation) => void;
+  onArtworkUpdated?: (artwork: Artwork) => void;
+  onHintsChange?: (hints: ResearchMetadataHints | null) => void;
+  onApplyReviewReady?: (openReview: (preset?: "title" | "artist" | "both" | "review") => void) => void;
 }
 
 function parseResearchNote(note: ResearchNote): ResearchDraft {
@@ -39,17 +44,24 @@ function parseResearchNote(note: ResearchNote): ResearchDraft {
     visual_elements_to_notice: parseJsonList(note.visual_elements_to_notice),
     related_questions: parseJsonList(note.related_questions),
     suggested_annotations: parseSuggestedAnnotations(note.suggested_annotations),
+    possible_title: note.possible_title,
+    possible_artist: note.possible_artist,
+    period_or_movement: note.period_or_movement,
   };
 }
 
 export function ResearchPanel({
-  artworkId,
+  artwork,
   canEdit = true,
   hasImage = false,
   culturalEntities = [],
   onReady,
   onAnnotationAccepted,
+  onArtworkUpdated,
+  onHintsChange,
+  onApplyReviewReady,
 }: ResearchPanelProps) {
+  const artworkId = artwork.id;
   const [notes, setNotes] = useState<ResearchNote[]>([]);
   const [draft, setDraft] = useState<ResearchDraft | null>(null);
   const [visibleSuggestions, setVisibleSuggestions] = useState<AiSuggestedAnnotation[]>([]);
@@ -112,6 +124,10 @@ export function ResearchPanel({
   useEffect(() => {
     onReady?.(generateDraft);
   }, [generateDraft, onReady]);
+
+  useEffect(() => {
+    onHintsChange?.(draft ? extractDraftMetadataHints(draft) : null);
+  }, [draft, onHintsChange]);
 
   async function deleteNote() {
     if (!deletingNote) return;
@@ -193,6 +209,14 @@ export function ResearchPanel({
 
       {draft ? (
         <div className="space-y-5 text-base leading-relaxed">
+          <ResearchMetadataApply
+            artwork={artwork}
+            draft={draft}
+            canEdit={canEdit}
+            onApplied={(updated) => onArtworkUpdated?.(updated)}
+            onReviewControlReady={onApplyReviewReady}
+          />
+
           <div>
             <h4 className="mb-1 font-medium">Summary</h4>
             <p className="text-muted-foreground">{draft.short_summary}</p>

@@ -56,6 +56,48 @@ async def test_research_returns_structured_suggested_annotations(
 
 
 @pytest.mark.asyncio
+async def test_research_notes_expose_possible_title_and_artist(
+    auth_headers: dict[str, str],
+) -> None:
+    from app.database import SessionLocal
+    from app.models import ResearchNote
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={"title": "Unknown", "visit_id": None},
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        db = SessionLocal()
+        try:
+            db.add(
+                ResearchNote(
+                    artwork_id=artwork_id,
+                    short_summary="Four Dancers — possibly by Edgar Degas",
+                    historical_context="Context",
+                    visual_elements_to_notice="[]",
+                    related_questions="[]",
+                    suggested_annotations="[]",
+                    possible_title="Four Dancers",
+                    possible_artist="Edgar Degas",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        notes_response = await client.get(f"/api/artworks/{artwork_id}/research")
+
+    assert notes_response.status_code == 200
+    payload = notes_response.json()
+    assert payload[0]["possible_title"] == "Four Dancers"
+    assert payload[0]["possible_artist"] == "Edgar Degas"
+
+
+@pytest.mark.asyncio
 async def test_mock_research_provider_includes_nullable_coordinates() -> None:
     draft = await MockLLMProvider().generate_research({"title": "Test"})
     assert isinstance(draft, ResearchDraft)

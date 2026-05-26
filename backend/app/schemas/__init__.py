@@ -296,6 +296,9 @@ class ResearchNoteRead(BaseModel):
     visual_elements_to_notice: str
     related_questions: str
     suggested_annotations: str
+    possible_title: str | None = None
+    possible_artist: str | None = None
+    period_or_movement: str | None = None
     created_at: datetime
 
 

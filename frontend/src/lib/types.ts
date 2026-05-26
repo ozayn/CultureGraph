@@ -129,6 +129,9 @@ export interface ResearchNote {
   visual_elements_to_notice: string;
   related_questions: string;
   suggested_annotations: string;
+  possible_title?: string | null;
+  possible_artist?: string | null;
+  period_or_movement?: string | null;
   created_at: string;
 }
 
