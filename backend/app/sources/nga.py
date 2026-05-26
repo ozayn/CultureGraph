@@ -11,7 +11,13 @@ from app.sources.base import ArtworkLookupCandidate, ArtworkLookupQuery
 from app.sources.matching import resolve_search_terms, score_artwork_entry
 from app.sources.museums import NGA_SOURCE_NAME, is_nga_museum
 
-__all__ = ["NGA_SOURCE_NAME", "is_nga_museum", "search_nga_collection", "should_search_nga"]
+__all__ = [
+    "NGA_SOURCE_NAME",
+    "collect_nga_scored_candidates",
+    "is_nga_museum",
+    "search_nga_collection",
+    "should_search_nga",
+]
 
 NGA_INDEX_PATH = Path(__file__).resolve().parent.parent / "data" / "nga_lookup_index.json"
 
@@ -20,11 +26,9 @@ def should_search_nga(query: ArtworkLookupQuery) -> bool:
     return "nga" in resolve_lookup_sources(query)
 
 
-def search_nga_collection(
+def collect_nga_scored_candidates(
     query: ArtworkLookupQuery,
-    *,
-    limit: int = 8,
-) -> list[ArtworkLookupCandidate]:
+) -> list[tuple[float, dict, ArtworkLookupCandidate]]:
     if not should_search_nga(query):
         return []
 
@@ -32,32 +36,42 @@ def search_nga_collection(
     if not search_text and not artist_text:
         return []
 
-    scored: list[tuple[float, dict]] = []
+    scored: list[tuple[float, dict, ArtworkLookupCandidate]] = []
     for entry in _load_index():
         score = score_artwork_entry(entry, search_text, artist_text, query.year_period)
-        if score >= 0.35:
-            scored.append((score, entry))
-
-    scored.sort(key=lambda item: item[0], reverse=True)
-    results: list[ArtworkLookupCandidate] = []
-    for score, entry in scored[:limit]:
-        results.append(
-            ArtworkLookupCandidate(
-                title=entry["title"],
-                artist=entry.get("artist"),
-                date=entry.get("date"),
-                medium=entry.get("medium"),
-                image_url=entry.get("image_url"),
-                image_thumbnail_url=entry.get("image_thumbnail_url") or entry.get("image_url"),
-                object_url=entry.get("object_url"),
-                accession_number=entry.get("accession_number"),
-                source_name=NGA_SOURCE_NAME,
-                confidence=round(min(score, 0.95), 2),
-                rights_label=entry.get("rights_label"),
-                external_id=entry.get("object_id"),
+        if score < 0.25:
+            continue
+        scored.append(
+            (
+                score,
+                entry,
+                ArtworkLookupCandidate(
+                    title=entry["title"],
+                    artist=entry.get("artist"),
+                    date=entry.get("date"),
+                    medium=entry.get("medium"),
+                    image_url=entry.get("image_url"),
+                    image_thumbnail_url=entry.get("image_thumbnail_url") or entry.get("image_url"),
+                    object_url=entry.get("object_url"),
+                    accession_number=entry.get("accession_number"),
+                    source_name=NGA_SOURCE_NAME,
+                    confidence=round(min(score, 0.95), 2),
+                    rights_label=entry.get("rights_label"),
+                    external_id=entry.get("object_id"),
+                ),
             )
         )
-    return results
+    return scored
+
+
+def search_nga_collection(
+    query: ArtworkLookupQuery,
+    *,
+    limit: int = 8,
+) -> list[ArtworkLookupCandidate]:
+    scored = collect_nga_scored_candidates(query)
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [item[2] for item in scored[:limit]]
 
 
 @lru_cache(maxsize=1)

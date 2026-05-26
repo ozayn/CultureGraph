@@ -115,6 +115,8 @@ class ResearchNote(Base):
     visual_elements_to_notice: Mapped[str] = mapped_column(Text, nullable=False)
     related_questions: Mapped[str] = mapped_column(Text, nullable=False)
     suggested_annotations: Mapped[str] = mapped_column(Text, nullable=False)
+    possible_title: Mapped[str | None] = mapped_column(String(255))
+    possible_artist: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

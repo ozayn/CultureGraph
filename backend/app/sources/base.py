@@ -9,6 +9,7 @@ class ArtworkLookupQuery:
     year_period: str | None = None
     notes: str | None = None
     source: str | None = None
+    has_title_query: bool = False
 
 
 @dataclass(frozen=True)
@@ -25,3 +26,4 @@ class ArtworkLookupCandidate:
     rights_label: str | None
     external_id: str | None = None
     image_thumbnail_url: str | None = None
+    low_confidence: bool = False

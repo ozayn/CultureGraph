@@ -88,7 +88,7 @@ class MockLLMProvider:
         )
 
 
-def serialize_research_draft(draft: ResearchDraft) -> dict[str, str]:
+def serialize_research_draft(draft: ResearchDraft) -> dict[str, str | None]:
     return {
         "short_summary": draft.short_summary,
         "historical_context": draft.historical_context,
@@ -97,6 +97,8 @@ def serialize_research_draft(draft: ResearchDraft) -> dict[str, str]:
         "suggested_annotations": json.dumps(
             [item.model_dump(mode="json") for item in draft.suggested_annotations]
         ),
+        "possible_title": draft.possible_title,
+        "possible_artist": draft.possible_artist,
     }
 
 

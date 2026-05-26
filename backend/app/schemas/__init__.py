@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -395,11 +396,15 @@ class ArtworkLookupCandidateRead(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     rights_label: str | None = None
     external_id: str | None = None
+    low_confidence: bool = False
 
 
 class ArtworkLookupResponse(BaseModel):
     candidates: list[ArtworkLookupCandidateRead]
     sources_searched: list[str]
+    query_used: str = ""
+    query_source: Literal["ai_title", "saved_title", "artist_notes", "manual"] = "saved_title"
+    alternate_title: str | None = None
     disclaimer: str = (
         "Matches are suggestions from open museum collection data. "
         "Review title, artist, and image before applying."

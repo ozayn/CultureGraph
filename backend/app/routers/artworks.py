@@ -17,6 +17,7 @@ from app.schemas import (
 )
 from app.services.artwork_images import normalize_artwork_image_update
 from app.services.artwork_lookup import lookup_artwork_candidates
+from app.services.lookup_query import build_artwork_lookup_query
 from app.sources.routing import (
     resolve_lookup_sources,
     sources_searched_labels,
@@ -27,7 +28,6 @@ from app.services.image_upload import (
     remove_artwork_image_files,
 )
 from app.services.record_cleanup import delete_artwork as delete_artwork_record
-from app.sources.base import ArtworkLookupQuery
 from app.sources.nga import should_search_nga
 from app.sources.smithsonian import should_search_smithsonian
 
@@ -77,29 +77,38 @@ def lookup_artwork_image(
     artwork_id: int,
     _user: Annotated[dict[str, str], Depends(require_admin_user)],
     db: Session = Depends(get_db),
-    source: str | None = Query(default=None, description="Explicit source, e.g. nga or smithsonian"),
+    source: str | None = Query(default=None, description="Explicit source, e.g. nga or all"),
+    title_override: str | None = Query(default=None, description="Manual title search override"),
+    artist_override: str | None = Query(default=None, description="Manual artist search override"),
 ) -> ArtworkLookupResponse:
     artwork = _get_artwork_or_404(db, artwork_id)
     museum_name = artwork.visit.museum_name if artwork.visit else None
 
-    query = ArtworkLookupQuery(
-        title=artwork.title,
-        artist=artwork.artist,
+    built = build_artwork_lookup_query(
+        artwork,
+        db,
         museum_name=museum_name,
-        year_period=artwork.year_period,
-        notes=artwork.personal_notes,
+        title_override=title_override,
+        artist_override=artist_override,
         source=source,
     )
+    query = built.query
 
     if not resolve_lookup_sources(query):
-        return ArtworkLookupResponse(candidates=[], sources_searched=[])
+        return ArtworkLookupResponse(
+            candidates=[],
+            sources_searched=[],
+            query_used=built.query_used,
+            query_source=built.query_source,
+            alternate_title=built.alternate_title,
+        )
 
     candidates = lookup_artwork_candidates(query)
     sources_searched = sources_searched_labels(query)
 
     notice: str | None = None
     if not candidates:
-        if not (artwork.title or "").strip() and not (artwork.artist or "").strip():
+        if not built.query_used.strip():
             notice = "Add a title or artist to improve collection matching."
         elif should_search_smithsonian(query) and not should_search_nga(query):
             notice = "No close matches found in the Smithsonian Open Access index."
@@ -114,6 +123,9 @@ def lookup_artwork_image(
             for item in candidates
         ],
         sources_searched=sources_searched,
+        query_used=built.query_used,
+        query_source=built.query_source,
+        alternate_title=built.alternate_title,
         notice=notice,
     )
 

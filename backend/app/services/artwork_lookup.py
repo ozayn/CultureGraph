@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from app.services.lookup_ranking import rank_lookup_candidates
 from app.sources.routing import resolve_lookup_sources
 from app.sources.base import ArtworkLookupCandidate, ArtworkLookupQuery
-from app.sources.nga import search_nga_collection
-from app.sources.smithsonian import search_smithsonian_collection
+from app.sources.nga import collect_nga_scored_candidates
+from app.sources.smithsonian import collect_smithsonian_scored_candidates
 
 
 class ArtworkLookupError(Exception):
@@ -14,12 +15,11 @@ class ArtworkLookupError(Exception):
 
 def lookup_artwork_candidates(query: ArtworkLookupQuery) -> list[ArtworkLookupCandidate]:
     sources = resolve_lookup_sources(query)
-    candidates: list[ArtworkLookupCandidate] = []
+    raw: list[tuple[float, dict, ArtworkLookupCandidate]] = []
 
     if "nga" in sources:
-        candidates.extend(search_nga_collection(query))
+        raw.extend(collect_nga_scored_candidates(query))
     if "smithsonian" in sources:
-        candidates.extend(search_smithsonian_collection(query))
+        raw.extend(collect_smithsonian_scored_candidates(query))
 
-    candidates.sort(key=lambda item: item.confidence, reverse=True)
-    return candidates[:12]
+    return rank_lookup_candidates(raw, query)

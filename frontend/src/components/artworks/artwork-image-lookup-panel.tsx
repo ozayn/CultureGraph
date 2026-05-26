@@ -13,13 +13,43 @@ import { ImageIcon, Loader2 } from "lucide-react";
 import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
-import type { Artwork, ArtworkLookupCandidate, ArtworkLookupResponse } from "@/lib/types";
+import type {
+  Artwork,
+  ArtworkLookupCandidate,
+  ArtworkLookupQuerySource,
+  ArtworkLookupResponse,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const SEARCH_INFO =
-  "Searching NGA open data first. More museum sources coming later.";
 const MISSING_METADATA_HINT = "Add a title or artist to improve search results.";
+
+const QUERY_SOURCE_LABELS: Record<ArtworkLookupQuerySource, string> = {
+  ai_title: "AI title",
+  saved_title: "Saved title",
+  artist_notes: "Artist + notes",
+  manual: "Manual search",
+};
+
+interface LookupSearchParams {
+  title?: string;
+  artist?: string;
+}
+
+interface ApplyFields {
+  image: boolean;
+  title: boolean;
+  artist: boolean;
+  date: boolean;
+  medium: boolean;
+  sourceUrl: boolean;
+}
+
+interface PendingApply {
+  candidate: ArtworkLookupCandidate;
+  fields: ApplyFields;
+}
 
 interface ArtworkImageLookupContextValue {
   openLookup: () => void;
@@ -41,25 +71,167 @@ function candidateKey(candidate: ArtworkLookupCandidate): string {
   return candidate.external_id ?? candidate.object_url ?? candidate.title;
 }
 
-function lookupEndpoint(artworkId: number): string {
-  return `/api/artworks/${artworkId}/lookup-image?source=all`;
+function lookupEndpoint(artworkId: number, params: LookupSearchParams = {}): string {
+  const query = new URLSearchParams();
+  query.set("source", "all");
+  if (params.title?.trim()) {
+    query.set("title_override", params.title.trim());
+  }
+  if (params.artist?.trim()) {
+    query.set("artist_override", params.artist.trim());
+  }
+  return `/api/artworks/${artworkId}/lookup-image?${query.toString()}`;
 }
 
-function missingSearchMetadata(artwork: Artwork): boolean {
-  return !artwork.title?.trim() && !artwork.artist?.trim();
+function isPlaceholderTitle(title: string | null | undefined): boolean {
+  const normalized = (title ?? "").trim().toLowerCase();
+  return (
+    !normalized ||
+    normalized === "unknown" ||
+    normalized === "untitled" ||
+    normalized === "unidentified artwork" ||
+    normalized === "painting"
+  );
+}
+
+function defaultApplyFields(
+  artwork: Artwork,
+  candidate: ArtworkLookupCandidate,
+  preset: "image" | "image_title" | "title"
+): ApplyFields {
+  const suggestTitle = isPlaceholderTitle(artwork.title) && Boolean(candidate.title?.trim());
+  return {
+    image: preset === "image" || preset === "image_title",
+    title: preset === "image_title" || preset === "title" || suggestTitle,
+    artist: false,
+    date: false,
+    medium: false,
+    sourceUrl: preset === "image" || preset === "image_title",
+  };
+}
+
+function ApplyReview({
+  artwork,
+  pending,
+  saving,
+  onCancel,
+  onConfirm,
+  onToggle,
+}: {
+  artwork: Artwork;
+  pending: PendingApply;
+  saving: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onToggle: (field: keyof ApplyFields) => void;
+}) {
+  const { candidate, fields } = pending;
+
+  const changes: string[] = [];
+  if (fields.title && candidate.title && candidate.title !== artwork.title) {
+    changes.push(`title from “${artwork.title || "Unknown"}” to “${candidate.title}”`);
+  }
+  if (fields.artist && candidate.artist && candidate.artist !== artwork.artist) {
+    changes.push(`artist to “${candidate.artist}”`);
+  }
+  if (fields.date && candidate.date && candidate.date !== artwork.year_period) {
+    changes.push(`date to “${candidate.date}”`);
+  }
+  if (fields.medium && candidate.medium && candidate.medium !== artwork.medium) {
+    changes.push(`medium to “${candidate.medium}”`);
+  }
+  if (fields.image) {
+    changes.push("official image");
+  }
+  if (fields.sourceUrl && candidate.object_url) {
+    changes.push("catalog source URL");
+  }
+
+  const fieldOptions: { key: keyof ApplyFields; label: string; disabled?: boolean }[] = [
+    { key: "image", label: "Image", disabled: !candidate.image_url },
+    { key: "title", label: "Title", disabled: !candidate.title?.trim() },
+    { key: "artist", label: "Artist", disabled: !candidate.artist?.trim() },
+    { key: "date", label: "Date", disabled: !candidate.date?.trim() },
+    { key: "medium", label: "Medium", disabled: !candidate.medium?.trim() },
+    { key: "sourceUrl", label: "Source URL", disabled: !candidate.object_url },
+  ];
+
+  return (
+    <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3">
+      <p className="text-sm font-medium">Review before saving</p>
+      {changes.length ? (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Update {changes.join(", ")}?
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">Select fields to apply.</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {fieldOptions.map(({ key, label, disabled }) => (
+          <label
+            key={key}
+            className={cn(
+              "inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border px-2.5 text-xs",
+              fields[key] ? "border-primary bg-primary/5" : "border-border",
+              disabled && "cursor-not-allowed opacity-50"
+            )}
+          >
+            <input
+              type="checkbox"
+              className="size-3.5 accent-primary"
+              checked={fields[key]}
+              disabled={disabled || saving}
+              onChange={() => onToggle(key)}
+            />
+            {label}
+          </label>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" size="touch" className="flex-1" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          size="touch"
+          className="flex-1"
+          disabled={saving || !Object.values(fields).some(Boolean)}
+          onClick={onConfirm}
+        >
+          {saving ? "Saving…" : "Apply selected"}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function LookupCandidateCard({
   candidate,
+  artwork,
   applying,
-  onApply,
+  pendingKey,
+  onPreset,
 }: {
   candidate: ArtworkLookupCandidate;
+  artwork: Artwork;
   applying: boolean;
-  onApply: () => void;
+  pendingKey: string | null;
+  onPreset: (preset: "image" | "image_title" | "title") => void;
 }) {
+  const key = candidateKey(candidate);
+  const busy = applying && pendingKey === key;
+  const suggestTitle =
+    isPlaceholderTitle(artwork.title) &&
+    Boolean(candidate.title?.trim()) &&
+    !candidate.low_confidence;
+
   return (
-    <li className="rounded-xl border border-border bg-card p-3">
+    <li
+      className={cn(
+        "rounded-xl border border-border bg-card p-3",
+        candidate.low_confidence && "opacity-70"
+      )}
+    >
       <div className="flex gap-3">
         <EntryThumbnail
           imageUrl={candidate.image_thumbnail_url ?? candidate.image_url}
@@ -77,33 +249,53 @@ function LookupCandidateCard({
             {candidate.confidence != null
               ? ` · ${Math.round(candidate.confidence * 100)}% match`
               : null}
+            {candidate.low_confidence ? " · low confidence" : null}
           </p>
           {candidate.medium ? (
             <p className="text-[11px] text-muted-foreground">{candidate.medium}</p>
           ) : null}
-          {candidate.rights_label ? (
-            <p className="text-[11px] leading-snug text-muted-foreground">
-              {candidate.rights_label}
-            </p>
+          {suggestTitle ? (
+            <p className="text-[11px] font-medium text-primary">Use this title?</p>
           ) : null}
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Button
           type="button"
           size="touch"
+          variant="default"
           className="flex-1 sm:flex-none"
-          disabled={!candidate.image_url || applying}
-          onClick={onApply}
+          disabled={!candidate.image_url || busy}
+          onClick={() => onPreset("image")}
         >
-          {applying ? "Saving…" : "Use this image"}
+          {busy ? "Saving…" : "Use image"}
+        </Button>
+        <Button
+          type="button"
+          size="touch"
+          variant="secondary"
+          className="flex-1 sm:flex-none"
+          disabled={!candidate.image_url || !candidate.title?.trim() || busy}
+          onClick={() => onPreset("image_title")}
+        >
+          Use image + update title
+        </Button>
+        <Button
+          type="button"
+          size="touch"
+          variant="outline"
+          className="flex-1 sm:flex-none"
+          disabled={!candidate.title?.trim() || busy}
+          onClick={() => onPreset("title")}
+        >
+          Update title only
         </Button>
         {candidate.object_url ? (
           <a
             href={candidate.object_url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-h-11 items-center px-2 text-sm text-muted-foreground underline-offset-2 hover:underline"
+            className="inline-flex min-h-11 items-center justify-center px-2 text-sm text-muted-foreground underline-offset-2 hover:underline"
           >
             View record
           </a>
@@ -123,25 +315,29 @@ export function ArtworkImageLookupPanel({
 }: ArtworkImageLookupPanelProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<ArtworkLookupResponse | null>(null);
-  const needsMetadata = missingSearchMetadata(artwork);
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualArtist, setManualArtist] = useState("");
+  const [pendingApply, setPendingApply] = useState<PendingApply | null>(null);
 
-  const runLookup = useCallback(async () => {
+  const runAutoLookup = useCallback(async () => {
     setLoading(true);
     setError(null);
     setResponse(null);
+    setPendingApply(null);
     try {
       const result = await api.get<ArtworkLookupResponse>(lookupEndpoint(artwork.id));
       setResponse(result);
 
-      if (!result.candidates.length && !needsMetadata) {
-        if (result.notice) {
-          setError(result.notice);
-        } else {
-          setError("No close matches found in the open collection indexes.");
-        }
+      if (!result.candidates.length && !result.query_used?.trim()) {
+        setError(MISSING_METADATA_HINT);
+      } else if (!result.candidates.length && result.notice) {
+        setError(result.notice);
+      } else if (!result.candidates.length) {
+        setError("No close matches found in the open collection indexes.");
       }
     } catch (e) {
       setError(
@@ -151,36 +347,97 @@ export function ArtworkImageLookupPanel({
     } finally {
       setLoading(false);
     }
-  }, [artwork.id, needsMetadata]);
+  }, [artwork.id]);
+
+  const runManualLookup = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setResponse(null);
+    setPendingApply(null);
+    try {
+      const result = await api.get<ArtworkLookupResponse>(
+        lookupEndpoint(artwork.id, {
+          title: manualTitle || undefined,
+          artist: manualArtist || undefined,
+        })
+      );
+      setResponse(result);
+
+      if (!result.candidates.length && !result.query_used?.trim()) {
+        setError(MISSING_METADATA_HINT);
+      } else if (!result.candidates.length && result.notice) {
+        setError(result.notice);
+      } else if (!result.candidates.length) {
+        setError("No close matches found in the open collection indexes.");
+      }
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Lookup failed. Check your connection and try again."
+      );
+      setResponse(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [artwork.id, manualArtist, manualTitle]);
 
   const openLookup = useCallback(() => {
     if (!canEdit) return;
+    setManualTitle(isPlaceholderTitle(artwork.title) ? "" : artwork.title ?? "");
+    setManualArtist(artwork.artist ?? "");
     setSheetOpen(true);
-    void runLookup();
-  }, [canEdit, runLookup]);
+    void runAutoLookup();
+  }, [artwork.artist, artwork.title, canEdit, runAutoLookup]);
 
-  async function applyCandidate(candidate: ArtworkLookupCandidate) {
-    const key = candidateKey(candidate);
-    setApplyingId(key);
+  function startApply(candidate: ArtworkLookupCandidate, preset: "image" | "image_title" | "title") {
+    setPendingApply({
+      candidate,
+      fields: defaultApplyFields(artwork, candidate, preset),
+    });
+    setPendingKey(candidateKey(candidate));
+  }
+
+  async function confirmApply() {
+    if (!pendingApply) return;
+    const { candidate, fields } = pendingApply;
+    if (!Object.values(fields).some(Boolean)) return;
+
+    setSaving(true);
     setError(null);
     try {
-      const updated = await api.put<Artwork>(`/api/artworks/${artwork.id}`, {
-        image_url: candidate.image_url,
-        image_thumbnail_url: candidate.image_thumbnail_url ?? candidate.image_url,
-        catalog_source: candidate.source_name,
-        catalog_object_url: candidate.object_url,
-        catalog_accession_number: candidate.accession_number,
-        catalog_rights_label: candidate.rights_label,
-        medium: artwork.medium ?? candidate.medium,
-        year_period: artwork.year_period ?? candidate.date,
-      });
+      const payload: Partial<Artwork> = {};
+      if (fields.image && candidate.image_url) {
+        payload.image_url = candidate.image_url;
+        payload.image_thumbnail_url = candidate.image_thumbnail_url ?? candidate.image_url;
+        payload.catalog_source = candidate.source_name;
+        payload.catalog_accession_number = candidate.accession_number;
+        payload.catalog_rights_label = candidate.rights_label;
+      }
+      if (fields.sourceUrl && candidate.object_url) {
+        payload.catalog_object_url = candidate.object_url;
+      }
+      if (fields.title && candidate.title) {
+        payload.title = candidate.title;
+      }
+      if (fields.artist && candidate.artist) {
+        payload.artist = candidate.artist;
+      }
+      if (fields.date && candidate.date) {
+        payload.year_period = candidate.date;
+      }
+      if (fields.medium && candidate.medium) {
+        payload.medium = candidate.medium;
+      }
+
+      const updated = await api.put<Artwork>(`/api/artworks/${artwork.id}`, payload);
       onApplied(updated);
       setSheetOpen(false);
       setResponse(null);
+      setPendingApply(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save image.");
+      setError(e instanceof Error ? e.message : "Could not save changes.");
     } finally {
-      setApplyingId(null);
+      setSaving(false);
+      setPendingKey(null);
     }
   }
 
@@ -188,6 +445,9 @@ export function ArtworkImageLookupPanel({
     () => ({ openLookup, canEdit, hasImage }),
     [canEdit, hasImage, openLookup]
   );
+
+  const highConfidence = response?.candidates.filter((c) => !c.low_confidence) ?? [];
+  const lowConfidence = response?.candidates.filter((c) => c.low_confidence) ?? [];
 
   return (
     <ArtworkImageLookupContext.Provider value={contextValue}>
@@ -200,6 +460,7 @@ export function ArtworkImageLookupPanel({
           if (!open) {
             setError(null);
             setResponse(null);
+            setPendingApply(null);
           }
         }}
         title={hasImage ? "Replace official image" : "Find official image"}
@@ -207,22 +468,83 @@ export function ArtworkImageLookupPanel({
         footer={
           response?.candidates.length ? (
             <p className="text-center text-xs text-muted-foreground">
-              {response.candidates.length} candidate{response.candidates.length === 1 ? "" : "s"} ·
-              tap Use this image to apply
+              {response.candidates.length} candidate{response.candidates.length === 1 ? "" : "s"}
             </p>
           ) : null
         }
       >
         <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            {response?.sources_searched?.length
-              ? `Searching: ${response.sources_searched.join(" · ")}`
-              : SEARCH_INFO}
-          </div>
-
-          {needsMetadata ? (
-            <p className="text-sm text-muted-foreground">{MISSING_METADATA_HINT}</p>
+          {response?.query_used ? (
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
+              <p className="text-muted-foreground">
+                Searching for:{" "}
+                <span className="font-medium text-foreground">{response.query_used}</span>
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                Query source: {QUERY_SOURCE_LABELS[response.query_source] ?? response.query_source}
+              </p>
+              {response.sources_searched?.length ? (
+                <p className="mt-0.5 text-muted-foreground">
+                  Collections: {response.sources_searched.join(" · ")}
+                </p>
+              ) : null}
+              {response.alternate_title ? (
+                <button
+                  type="button"
+                  className="mt-1 text-primary underline-offset-2 hover:underline"
+                  onClick={() => {
+                    const title = response.alternate_title ?? "";
+                    setManualTitle(title);
+                    void (async () => {
+                      setLoading(true);
+                      setError(null);
+                      setPendingApply(null);
+                      try {
+                        const result = await api.get<ArtworkLookupResponse>(
+                          lookupEndpoint(artwork.id, {
+                            title,
+                            artist: manualArtist || undefined,
+                          })
+                        );
+                        setResponse(result);
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : "Lookup failed.");
+                      } finally {
+                        setLoading(false);
+                      }
+                    })();
+                  }}
+                >
+                  Also try: {response.alternate_title}
+                </button>
+              ) : null}
+            </div>
           ) : null}
+
+          <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+            <Input
+              value={manualTitle}
+              onChange={(event) => setManualTitle(event.target.value)}
+              placeholder="Title"
+              aria-label="Search title"
+            />
+            <Input
+              value={manualArtist}
+              onChange={(event) => setManualArtist(event.target.value)}
+              placeholder="Artist"
+              aria-label="Search artist"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="touch"
+              className="sm:px-4"
+              disabled={loading}
+              onClick={() => void runManualLookup()}
+            >
+              Search again
+            </Button>
+          </div>
 
           {loading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -233,42 +555,67 @@ export function ArtworkImageLookupPanel({
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
+          {pendingApply ? (
+            <ApplyReview
+              artwork={artwork}
+              pending={pendingApply}
+              saving={saving}
+              onCancel={() => {
+                setPendingApply(null);
+                setPendingKey(null);
+              }}
+              onConfirm={() => void confirmApply()}
+              onToggle={(field) =>
+                setPendingApply((current) =>
+                  current
+                    ? { ...current, fields: { ...current.fields, [field]: !current.fields[field] } }
+                    : current
+                )
+              }
+            />
+          ) : null}
+
           {response?.disclaimer ? (
             <p className="text-xs leading-relaxed text-muted-foreground">{response.disclaimer}</p>
           ) : null}
 
-          {!loading && response?.candidates.length ? (
+          {!loading && highConfidence.length ? (
             <ul className="space-y-3">
-              {response.candidates.map((candidate) => {
-                const key = candidateKey(candidate);
-                return (
-                  <LookupCandidateCard
-                    key={key}
-                    candidate={candidate}
-                    applying={applyingId === key}
-                    onApply={() => void applyCandidate(candidate)}
-                  />
-                );
-              })}
+              {highConfidence.map((candidate) => (
+                <LookupCandidateCard
+                  key={candidateKey(candidate)}
+                  candidate={candidate}
+                  artwork={artwork}
+                  applying={saving}
+                  pendingKey={pendingKey}
+                  onPreset={(preset) => startApply(candidate, preset)}
+                />
+              ))}
             </ul>
           ) : null}
 
-          {!loading && response && !response.candidates.length && !error && !needsMetadata ? (
-            <p className="py-4 text-sm text-muted-foreground">
-              No matches found. Try editing the title or artist, then search again.
-            </p>
+          {!loading && lowConfidence.length ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Lower confidence matches</p>
+              <ul className="space-y-3">
+                {lowConfidence.map((candidate) => (
+                  <LookupCandidateCard
+                    key={candidateKey(candidate)}
+                    candidate={candidate}
+                    artwork={artwork}
+                    applying={saving}
+                    pendingKey={pendingKey}
+                    onPreset={(preset) => startApply(candidate, preset)}
+                  />
+                ))}
+              </ul>
+            </div>
           ) : null}
 
-          {!loading ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="touch"
-              className="w-full"
-              onClick={() => void runLookup()}
-            >
-              Search again
-            </Button>
+          {!loading && response && !response.candidates.length && !error ? (
+            <p className="py-4 text-sm text-muted-foreground">
+              No matches found. Adjust the title or artist above, then search again.
+            </p>
           ) : null}
         </div>
       </BottomSheet>

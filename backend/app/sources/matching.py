@@ -3,8 +3,57 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from app.sources.base import ArtworkLookupQuery
+
+PLACEHOLDER_TITLES = frozenset(
+    {
+        "unknown",
+        "untitled",
+        "unidentified artwork",
+        "unidentified",
+        "painting",
+        "artwork",
+        "work",
+        "no title",
+        "untitled artwork",
+        "unknown artwork",
+        "unknown title",
+    }
+)
+
+PLACEHOLDER_ARTISTS = frozenset(
+    {
+        "unknown",
+        "unknown artist",
+        "unidentified",
+        "anonymous",
+        "attributed",
+        "artist unknown",
+    }
+)
+
+
+@dataclass(frozen=True)
+class ScoreDetails:
+    combined: float
+    title_score: float
+    artist_score: float
+
+
+def is_placeholder_title(value: str | None) -> bool:
+    cleaned = normalize(value or "")
+    if not cleaned:
+        return True
+    return cleaned in PLACEHOLDER_TITLES
+
+
+def is_placeholder_artist(value: str | None) -> bool:
+    cleaned = normalize(value or "")
+    if not cleaned:
+        return True
+    return cleaned in PLACEHOLDER_ARTISTS
 
 
 def resolve_search_terms(query: ArtworkLookupQuery) -> tuple[str, str]:
@@ -12,16 +61,16 @@ def resolve_search_terms(query: ArtworkLookupQuery) -> tuple[str, str]:
     artist = (query.artist or "").strip()
     notes = (query.notes or "").strip()
 
-    if title:
-        return title, artist
+    if title and not is_placeholder_title(title):
+        return title, artist if not is_placeholder_artist(artist) else ""
 
     if notes:
-        return notes, artist
+        return notes, artist if not is_placeholder_artist(artist) else ""
 
-    return "", artist
+    return "", artist if not is_placeholder_artist(artist) else ""
 
 
-def score_artwork_entry(
+def score_artwork_entry_detailed(
     entry: dict,
     search_text: str,
     artist_text: str,
@@ -30,7 +79,7 @@ def score_artwork_entry(
     title_key: str = "title",
     artist_key: str = "artist",
     medium_key: str = "medium",
-) -> float:
+) -> ScoreDetails:
     title = entry.get(title_key) or ""
     artist = entry.get(artist_key) or ""
     medium = entry.get(medium_key) or ""
@@ -48,10 +97,10 @@ def score_artwork_entry(
         title_score = max(title_score, text_similarity(artist_text, title) * 0.5)
 
     if artist_text and artist_score < 0.25:
-        return 0.0
+        return ScoreDetails(combined=0.0, title_score=title_score, artist_score=artist_score)
 
     if search_text and artist_text:
-        combined = title_score * 0.62 + artist_score * 0.38
+        combined = title_score * 0.68 + artist_score * 0.32
     elif search_text:
         combined = title_score
     elif artist_text:
@@ -62,7 +111,32 @@ def score_artwork_entry(
     if year_period:
         combined += year_bonus(year_period, entry.get("begin_year"), entry.get("end_year"))
 
-    return min(combined, 1.0)
+    return ScoreDetails(
+        combined=min(combined, 1.0),
+        title_score=title_score,
+        artist_score=artist_score,
+    )
+
+
+def score_artwork_entry(
+    entry: dict,
+    search_text: str,
+    artist_text: str,
+    year_period: str | None,
+    *,
+    title_key: str = "title",
+    artist_key: str = "artist",
+    medium_key: str = "medium",
+) -> float:
+    return score_artwork_entry_detailed(
+        entry,
+        search_text,
+        artist_text,
+        year_period,
+        title_key=title_key,
+        artist_key=artist_key,
+        medium_key=medium_key,
+    ).combined
 
 
 def year_bonus(year_period: str, begin_year: str | None, end_year: str | None) -> float:

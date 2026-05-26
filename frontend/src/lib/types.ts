@@ -75,11 +75,21 @@ export interface ArtworkLookupCandidate {
   confidence: number;
   rights_label: string | null;
   external_id: string | null;
+  low_confidence?: boolean;
 }
+
+export type ArtworkLookupQuerySource =
+  | "ai_title"
+  | "saved_title"
+  | "artist_notes"
+  | "manual";
 
 export interface ArtworkLookupResponse {
   candidates: ArtworkLookupCandidate[];
   sources_searched: string[];
+  query_used: string;
+  query_source: ArtworkLookupQuerySource;
+  alternate_title?: string | null;
   disclaimer: string;
   notice?: string | null;
 }
