@@ -34,6 +34,7 @@ import {
   type Annotation,
   type CulturalEntity,
 } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const KonvaCanvasStage = dynamic(() => import("@/components/annotations/konva-canvas-stage"), {
   ssr: false,
@@ -88,6 +89,7 @@ export function AnnotationCanvas({
     if (!annotationId) return null;
     return initialAnnotations.find((annotation) => annotation.id === annotationId) ?? null;
   });
+  const [newPinMode, setNewPinMode] = useState(false);
 
   const { placed: placedAnnotations, unplaced: unplacedAnnotations } = useMemo(
     () => splitAnnotationsByPlacement(annotations),
@@ -217,6 +219,10 @@ export function AnnotationCanvas({
         return;
       }
 
+      if (!pendingAiSuggestion && !newPinMode) {
+        return;
+      }
+
       openPinForm(
         xPercent,
         yPercent,
@@ -229,6 +235,7 @@ export function AnnotationCanvas({
       openPinForm,
       pendingAiSuggestion,
       placingAnnotation,
+      newPinMode,
       saveAnnotationPlacement,
       size.height,
       size.width,
@@ -293,6 +300,7 @@ export function AnnotationCanvas({
       setPendingPin(null);
       setFormValues(emptyAnnotationPinFormValues());
       setPendingAiSuggestion(null);
+      setNewPinMode(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save annotation.");
     } finally {
@@ -350,6 +358,7 @@ export function AnnotationCanvas({
   const activeImage = imageUrl ? image : null;
   const activeImageLoadFailed = imageUrl ? imageLoadFailed : false;
   const showImageCanvas = Boolean(imageUrl) && !activeImageLoadFailed;
+  const placementModeActive = Boolean(placingAnnotation || pendingAiSuggestion || newPinMode);
 
   return (
     <div className="space-y-5">
@@ -376,10 +385,39 @@ export function AnnotationCanvas({
           ? "Checking sign-in status…"
           : canEdit
             ? showImageCanvas
-              ? "Click or tap the image to place a pin. Pins save as percentage coordinates."
+              ? placementModeActive
+                ? "Tap the image to place a pin at that spot."
+                : "Start placement mode, then tap the image to add a pin."
               : "Add an image before placing pins, or add a text-only observation below."
             : SIGN_IN_MESSAGE}
       </p>
+
+      {canEdit && showImageCanvas && !placingAnnotation && !pendingAiSuggestion ? (
+        <div className="flex flex-wrap gap-2">
+          {!newPinMode ? (
+            <Button type="button" size="touch" onClick={() => setNewPinMode(true)}>
+              Place pin
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="touch"
+                onClick={() => {
+                  setNewPinMode(false);
+                  setPendingPin(null);
+                }}
+              >
+                Cancel placement
+              </Button>
+              <span className="self-center text-sm text-muted-foreground">
+                Tap the artwork to choose a spot.
+              </span>
+            </>
+          )}
+        </div>
+      ) : null}
 
       {error && !pendingPin && !editingAnnotation ? (
         <p className="text-sm text-destructive">{error}</p>
@@ -387,7 +425,10 @@ export function AnnotationCanvas({
 
       <div
         ref={containerRef}
-        className="w-full overflow-hidden rounded-xl border border-border bg-[#f3efe8] touch-none"
+        className={cn(
+          "w-full overflow-hidden rounded-xl border border-border bg-[#f3efe8] touch-none",
+          showImageCanvas && canEdit && !placementModeActive && "opacity-90"
+        )}
       >
         {showImageCanvas && canvasReady ? (
           <KonvaCanvasStage
@@ -451,8 +492,8 @@ export function AnnotationCanvas({
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="mt-3 min-h-10"
+                      size="touch"
+                      className="mt-3"
                       disabled={saving}
                       onClick={() => startPlacingAnnotation(annotation)}
                     >
@@ -511,6 +552,20 @@ export function AnnotationCanvas({
         }}
         title="New annotation"
         description="What did you notice at this spot?"
+        footer={
+          <>
+            {error ? <p className="mb-3 text-sm text-destructive">{error}</p> : null}
+            <Button
+              type="button"
+              size="touch"
+              className="w-full"
+              onClick={() => void saveAnnotation()}
+              disabled={saving || !formValues.text.trim() || !canEdit}
+            >
+              {saving ? "Saving…" : "Save pin"}
+            </Button>
+          </>
+        }
       >
         <AnnotationPinForm
           values={formValues}
@@ -518,16 +573,6 @@ export function AnnotationCanvas({
           culturalEntities={culturalEntities}
           tagSuggestions={tagSuggestions}
         />
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <Button
-          type="button"
-          size="touch"
-          className="mt-4 w-full"
-          onClick={() => void saveAnnotation()}
-          disabled={saving || !formValues.text.trim() || !canEdit}
-        >
-          {saving ? "Saving…" : "Save pin"}
-        </Button>
       </BottomSheet>
 
       <BottomSheet
@@ -537,6 +582,20 @@ export function AnnotationCanvas({
         }}
         title="Edit annotation"
         description="Update category, note, tags, or links."
+        footer={
+          <>
+            {error ? <p className="mb-3 text-sm text-destructive">{error}</p> : null}
+            <Button
+              type="button"
+              size="touch"
+              className="w-full"
+              onClick={() => void saveAnnotationEdit()}
+              disabled={saving || !formValues.text.trim() || !canEdit}
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </>
+        }
       >
         <AnnotationPinForm
           values={formValues}
@@ -545,16 +604,6 @@ export function AnnotationCanvas({
           tagSuggestions={tagSuggestions}
           noteId="edit-annotation-note"
         />
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <Button
-          type="button"
-          size="touch"
-          className="mt-4 w-full"
-          onClick={() => void saveAnnotationEdit()}
-          disabled={saving || !formValues.text.trim() || !canEdit}
-        >
-          {saving ? "Saving…" : "Save changes"}
-        </Button>
       </BottomSheet>
 
       <ConfirmDeleteDialog

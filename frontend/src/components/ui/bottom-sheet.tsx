@@ -15,6 +15,7 @@ interface BottomSheetProps {
   title: string;
   description?: string;
   children: React.ReactNode;
+  footer?: React.ReactNode;
   className?: string;
 }
 
@@ -24,6 +25,7 @@ export function BottomSheet({
   title,
   description,
   children,
+  footer,
   className,
 }: BottomSheetProps) {
   return (
@@ -31,15 +33,23 @@ export function BottomSheet({
       <DialogContent
         showCloseButton
         className={cn(
-          "top-auto bottom-0 max-h-[88dvh] w-full max-w-none translate-x-[-50%] translate-y-0 overflow-y-auto rounded-b-none rounded-t-2xl border-b-0 p-0 sm:top-1/2 sm:bottom-auto sm:max-h-[85vh] sm:max-w-md sm:translate-y-[-50%] sm:rounded-xl sm:border-b",
+          "top-auto bottom-0 flex max-h-[88dvh] w-full max-w-none translate-x-[-50%] translate-y-0 flex-col overflow-hidden rounded-b-none rounded-t-2xl border-b-0 p-0 sm:top-1/2 sm:bottom-auto sm:max-h-[85vh] sm:max-w-md sm:translate-y-[-50%] sm:rounded-xl sm:border-b",
           className
         )}
       >
-        <DialogHeader className="sticky top-0 z-10 border-b bg-popover px-4 py-4">
+        <DialogHeader className="shrink-0 border-b bg-popover px-4 py-4">
           <DialogTitle className="font-heading text-lg">{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
-        <div className="px-4 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
+        {footer ? (
+          <div
+            className="shrink-0 border-t bg-popover px-4 py-4"
+            style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+          >
+            {footer}
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   );

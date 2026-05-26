@@ -233,8 +233,18 @@ export function VisitDetailClient({
 
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="font-heading text-xl">Artworks</h2>
-            <ButtonLink href="/visits" variant="ghost" size="sm" className="hidden sm:inline-flex">
+            <div className="flex items-center gap-2">
+              <ButtonLink
+                href="/visits"
+                variant="ghost"
+                size="sm"
+                className="inline-flex min-h-11 sm:hidden"
+              >
+                All visits
+              </ButtonLink>
+              <h2 className="font-heading text-xl">Artworks</h2>
+            </div>
+            <ButtonLink href="/visits" variant="ghost" size="sm" className="hidden min-h-11 sm:inline-flex">
               All visits
             </ButtonLink>
           </div>
@@ -397,7 +407,10 @@ export function VisitDetailClient({
       />
 
       {deleteVisitError ? (
-        <p className="fixed bottom-24 left-4 right-4 z-50 rounded-lg border border-destructive/30 bg-background px-3 py-2 text-sm text-destructive md:bottom-4">
+        <p
+          className="fixed left-4 right-4 z-50 rounded-lg border border-destructive/30 bg-background px-3 py-2 text-sm text-destructive md:bottom-4"
+          style={{ bottom: "max(6rem, calc(4.5rem + env(safe-area-inset-bottom)))" }}
+        >
           {deleteVisitError}
         </p>
       ) : null}

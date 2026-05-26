@@ -194,8 +194,7 @@ export function AiSuggestedAnnotations({
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  size="sm"
-                  className="min-h-10"
+                  size="touch"
                   disabled={savingId === item.id}
                   onClick={() => void acceptSuggestion(item)}
                 >
@@ -203,18 +202,16 @@ export function AiSuggestedAnnotations({
                 </Button>
                 <Button
                   type="button"
-                  size="sm"
+                  size="touch"
                   variant="outline"
-                  className="min-h-10"
                   onClick={() => startEdit(item)}
                 >
                   Edit
                 </Button>
                 <Button
                   type="button"
-                  size="sm"
+                  size="touch"
                   variant="ghost"
-                  className="min-h-10"
                   onClick={() => dismissSuggestion(item.id)}
                 >
                   Dismiss
@@ -222,9 +219,8 @@ export function AiSuggestedAnnotations({
                 {!positioned && hasImage ? (
                   <Button
                     type="button"
-                    size="sm"
+                    size="touch"
                     variant="outline"
-                    className="min-h-10"
                     onClick={() => placeOnImage(item)}
                   >
                     Place on image

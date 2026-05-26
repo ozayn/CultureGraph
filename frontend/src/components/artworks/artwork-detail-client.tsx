@@ -624,7 +624,7 @@ function ActionButton({
 
   if (href) {
     return (
-      <Link href={href} className={className}>
+      <Link href={href} className={className} aria-label={label}>
         <Icon className="size-5" strokeWidth={1.75} />
         <span>{label}</span>
       </Link>
@@ -632,7 +632,7 @@ function ActionButton({
   }
 
   return (
-    <button type="button" onClick={onClick} className={className}>
+    <button type="button" onClick={onClick} className={className} aria-label={label}>
       <Icon className="size-5" strokeWidth={1.75} />
       <span>{label}</span>
     </button>

@@ -15,7 +15,9 @@ const tabs = [
 export function MobileBottomNav() {
   const pathname = usePathname();
   const hide =
-    pathname.includes("/annotate") || /^\/artworks\/\d+$/.test(pathname);
+    pathname.includes("/annotate") ||
+    /^\/artworks\/\d+$/.test(pathname) ||
+    /^\/visits\/\d+$/.test(pathname);
 
   if (hide) return null;
 

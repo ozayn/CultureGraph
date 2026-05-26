@@ -22,12 +22,14 @@ function GoogleSignInButtonInner({ className, onSignedIn }: GoogleSignInButtonPr
   useEffect(() => {
     if (!ready || !containerRef.current) return;
 
+    const width = Math.min(280, containerRef.current.clientWidth || 280);
+
     renderGoogleSignInButton(containerRef.current, {
       theme: "outline",
       size: "large",
       text: "signin_with",
       shape: "rectangular",
-      width: 280,
+      width,
     });
   }, [ready, signInError]);
 
@@ -47,7 +49,7 @@ function GoogleSignInButtonInner({ className, onSignedIn }: GoogleSignInButtonPr
     <div className={cn("space-y-3", className)}>
       <div
         ref={containerRef}
-        className={cn("min-h-11", signInLoading && "pointer-events-none opacity-60")}
+        className={cn("mx-auto w-full max-w-[280px] min-h-11", signInLoading && "pointer-events-none opacity-60")}
         aria-label="Sign in with Google"
       />
       {!ready && !initError ? (
@@ -63,8 +65,6 @@ function GoogleSignInButtonInner({ className, onSignedIn }: GoogleSignInButtonPr
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="min-h-10"
             onClick={() => clearSignInError()}
           >
             Try again

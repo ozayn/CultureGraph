@@ -352,7 +352,7 @@ export function ImportPageClient() {
           </Button>
         </section>
       ) : (
-        <section className="space-y-5">
+        <section className="space-y-5 pb-32 md:pb-0">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
               Step 2 of 2 · Review draft ·{" "}
@@ -373,7 +373,7 @@ export function ImportPageClient() {
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
-                className="mt-1 size-4 shrink-0 accent-foreground"
+                className="mt-1 size-5 shrink-0 accent-foreground"
                 checked={saveVisit}
                 onChange={(event) => setSaveVisit(event.target.checked)}
               />
@@ -460,7 +460,7 @@ export function ImportPageClient() {
                       <label className="flex items-start gap-3">
                         <input
                           type="checkbox"
-                          className="mt-1 size-4 shrink-0 accent-foreground"
+                          className="mt-1 size-5 shrink-0 accent-foreground"
                           checked={entity.selected}
                           onChange={(event) =>
                             updateEntity(index, { selected: event.target.checked })
@@ -594,7 +594,7 @@ export function ImportPageClient() {
                           <label className="flex items-center gap-2 text-sm">
                             <input
                               type="checkbox"
-                              className="size-4 accent-foreground"
+                              className="size-5 accent-foreground"
                               checked={entity.saveAnnotations}
                               onChange={(event) =>
                                 updateEntity(index, {
@@ -629,7 +629,7 @@ export function ImportPageClient() {
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="hidden flex-col gap-2 sm:flex sm:flex-row">
             <Button
               type="button"
               variant="outline"
@@ -649,6 +649,39 @@ export function ImportPageClient() {
             >
               {saving ? "Saving…" : "Save selected entries"}
             </Button>
+          </div>
+
+          <div
+            className="fixed inset-x-0 z-40 border-t border-border bg-background p-3 md:hidden"
+            style={{
+              bottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))",
+              paddingBottom: "0.75rem",
+            }}
+          >
+            <div className="mx-auto flex max-w-3xl flex-col gap-2">
+              <p className="text-center text-xs text-muted-foreground">
+                {entities.filter((entity) => entity.selected).length} of {entities.length} selected
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="touch"
+                  disabled={saving}
+                  onClick={() => setStep("paste")}
+                >
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  size="touch"
+                  disabled={saving || !canEdit}
+                  onClick={() => void saveSelected()}
+                >
+                  {saving ? "Saving…" : "Save selected"}
+                </Button>
+              </div>
+            </div>
           </div>
         </section>
       )}

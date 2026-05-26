@@ -319,7 +319,7 @@ export function AdminDashboardClient() {
       ) : null}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2">
+        <div className="hidden flex-wrap gap-2 md:flex">
           {(Object.keys(ADMIN_TAB_LABELS) as AdminTab[]).map((tab) => (
             <button
               key={tab}
@@ -329,7 +329,7 @@ export function AdminDashboardClient() {
                 setOffset(0);
               }}
               className={cn(
-                "min-h-10 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                "min-h-11 rounded-full border px-3 py-1.5 text-sm transition-colors",
                 activeTab === tab
                   ? "border-foreground bg-foreground text-background"
                   : "border-border bg-background text-foreground hover:bg-muted"
@@ -477,7 +477,7 @@ export function AdminDashboardClient() {
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="touch"
             disabled={offset <= 0 || loading}
             onClick={() => setOffset((value) => Math.max(0, value - PAGE_SIZE))}
           >
@@ -489,7 +489,7 @@ export function AdminDashboardClient() {
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="touch"
             disabled={offset + PAGE_SIZE >= total || loading}
             onClick={() => setOffset((value) => value + PAGE_SIZE)}
           >
@@ -557,7 +557,7 @@ function AdminSelectionBar({
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          size="touch"
           onClick={onSelectAllVisible}
           disabled={allVisibleSelected}
         >
@@ -566,7 +566,7 @@ function AdminSelectionBar({
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          size="touch"
           onClick={onClearSelection}
           disabled={!someVisibleSelected && selectedCount === 0}
         >
@@ -581,7 +581,7 @@ function AdminSelectionBar({
       <Button
         type="button"
         variant="destructive"
-        size="sm"
+        size="touch"
         disabled={selectedCount === 0}
         onClick={onDeleteSelected}
       >

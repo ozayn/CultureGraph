@@ -56,7 +56,7 @@ export function AdminActionsMenu({
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted"
+        className="inline-flex size-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted"
       >
         <MoreHorizontal className="size-4" strokeWidth={1.75} />
       </button>
@@ -70,7 +70,7 @@ export function AdminActionsMenu({
             <button
               type="button"
               role="menuitem"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+              className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-muted"
               onClick={() => {
                 setOpen(false);
                 onEdit();
@@ -84,7 +84,7 @@ export function AdminActionsMenu({
             <button
               type="button"
               role="menuitem"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
+              className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-destructive hover:bg-destructive/10"
               onClick={() => {
                 setOpen(false);
                 onDelete();

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { UserAvatar } from "@/components/auth/user-avatar";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import {
   Dialog,
   DialogContent,
@@ -20,14 +21,33 @@ import {
 import { getUserDisplayName } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
 
+function useIsMobileNav() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return isMobile;
+}
+
 export function NavbarAuthMenu() {
   const { canEdit, loading, signOut, user } = useAuth();
   const [signInOpen, setSignInOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobileNav();
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen || isMobile) return;
 
     function handlePointerDown(event: MouseEvent | TouchEvent) {
       if (!menuRef.current?.contains(event.target as Node)) {
@@ -50,7 +70,7 @@ export function NavbarAuthMenu() {
       document.removeEventListener("touchstart", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [menuOpen]);
+  }, [isMobile, menuOpen]);
 
   if (loading) {
     return <div className="h-11 w-11 shrink-0" aria-hidden />;
@@ -67,20 +87,63 @@ export function NavbarAuthMenu() {
           Sign in
         </button>
 
-        <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
-          <DialogContent showCloseButton className="sm:max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Sign in</DialogTitle>
-              <DialogDescription>
-                Sign in with Google to edit visits, artworks, and notes.
-              </DialogDescription>
-            </DialogHeader>
+        {isMobile ? (
+          <BottomSheet
+            open={signInOpen}
+            onOpenChange={setSignInOpen}
+            title="Sign in"
+            description="Sign in with Google to edit visits, artworks, and notes."
+          >
             <GoogleSignInButton onSignedIn={() => setSignInOpen(false)} />
-          </DialogContent>
-        </Dialog>
+          </BottomSheet>
+        ) : (
+          <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
+            <DialogContent showCloseButton className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Sign in</DialogTitle>
+                <DialogDescription>
+                  Sign in with Google to edit visits, artworks, and notes.
+                </DialogDescription>
+              </DialogHeader>
+              <GoogleSignInButton onSignedIn={() => setSignInOpen(false)} />
+            </DialogContent>
+          </Dialog>
+        )}
       </>
     );
   }
+
+  const accountMenuItems = (
+    <>
+      <div className="border-b border-border px-1 pb-3">
+        <p className="truncate text-sm font-medium text-foreground">
+          {getUserDisplayName(user)}
+        </p>
+        {user.name ? (
+          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+        ) : null}
+      </div>
+      <Link
+        href="/admin"
+        role="menuitem"
+        className="mt-2 flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm text-foreground transition-colors hover:bg-muted"
+        onClick={() => setMenuOpen(false)}
+      >
+        Admin dashboard
+      </Link>
+      <button
+        type="button"
+        role="menuitem"
+        className="mt-1 flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm text-foreground transition-colors hover:bg-muted"
+        onClick={() => {
+          signOut();
+          setMenuOpen(false);
+        }}
+      >
+        Sign out
+      </button>
+    </>
+  );
 
   return (
     <div ref={menuRef} className="relative shrink-0">
@@ -95,7 +158,16 @@ export function NavbarAuthMenu() {
         <UserAvatar user={user} />
       </button>
 
-      {menuOpen ? (
+      {isMobile ? (
+        <BottomSheet
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          title="Account"
+          description="Manage your CultureGraph session."
+        >
+          {accountMenuItems}
+        </BottomSheet>
+      ) : menuOpen ? (
         <div
           role="menu"
           aria-label="Account"
@@ -104,33 +176,7 @@ export function NavbarAuthMenu() {
             "animate-in fade-in-0 zoom-in-95"
           )}
         >
-          <div className="border-b border-border px-3 py-2.5">
-            <p className="truncate text-sm font-medium text-foreground">
-              {getUserDisplayName(user)}
-            </p>
-            {user.name ? (
-              <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-            ) : null}
-          </div>
-          <Link
-            href="/admin"
-            role="menuitem"
-            className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm text-foreground transition-colors hover:bg-muted"
-            onClick={() => setMenuOpen(false)}
-          >
-            Admin dashboard
-          </Link>
-          <button
-            type="button"
-            role="menuitem"
-            className="mt-1 flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm text-foreground transition-colors hover:bg-muted"
-            onClick={() => {
-              signOut();
-              setMenuOpen(false);
-            }}
-          >
-            Sign out
-          </button>
+          {accountMenuItems}
         </div>
       ) : null}
     </div>
