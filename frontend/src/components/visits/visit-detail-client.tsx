@@ -38,6 +38,44 @@ interface CulturalEntityCardProps {
   onDelete: (entity: CulturalEntity) => void;
 }
 
+interface ArtworkCardProps {
+  artwork: Artwork;
+  canEdit: boolean;
+  onDelete: (artwork: Artwork) => void;
+}
+
+function ArtworkCard({ artwork, canEdit, onDelete }: ArtworkCardProps) {
+  return (
+    <li className="rounded-xl border border-border bg-card">
+      <div className="flex items-center gap-2 p-4">
+        <Link
+          href={`/artworks/${artwork.id}`}
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-3 transition-colors active:opacity-80"
+        >
+          <EntryThumbnail
+            imageUrl={artworkThumbnailUrl(artwork)}
+            alt={artwork.title}
+            entityType="artwork"
+            size="md"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-medium">{artwork.title}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {[artwork.artist, artwork.year_period].filter(Boolean).join(" · ")}
+            </p>
+          </div>
+        </Link>
+        {canEdit ? (
+          <AdminActionsMenu
+            label={`Actions for ${artwork.title}`}
+            onDelete={() => onDelete(artwork)}
+          />
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
 function CulturalEntityCard({ entity, canEdit, onEdit, onDelete }: CulturalEntityCardProps) {
   const Icon = ENTITY_TYPE_ICONS[entity.entity_type];
   const tagLine = [
@@ -101,6 +139,7 @@ export function VisitDetailClient({
 }: VisitDetailClientProps) {
   const router = useRouter();
   const [visit, setVisit] = useState(initialVisit);
+  const [visitArtworks, setVisitArtworks] = useState(artworks);
   const [culturalEntities, setCulturalEntities] = useState(initialCulturalEntities);
   const [addOpen, setAddOpen] = useState(false);
   const [editVisitOpen, setEditVisitOpen] = useState(false);
@@ -110,6 +149,8 @@ export function VisitDetailClient({
   const [editingEntity, setEditingEntity] = useState<CulturalEntity | null>(null);
   const [deletingEntity, setDeletingEntity] = useState<CulturalEntity | null>(null);
   const [deleteEntityLoading, setDeleteEntityLoading] = useState(false);
+  const [deletingArtwork, setDeletingArtwork] = useState<Artwork | null>(null);
+  const [deleteArtworkLoading, setDeleteArtworkLoading] = useState(false);
   const { canEdit } = useAuth();
   const groupedEntities = useMemo(
     () => groupVisitDetailEntities(culturalEntities),
@@ -143,6 +184,24 @@ export function VisitDetailClient({
       setDeleteVisitError(e instanceof Error ? e.message : "Could not delete entity.");
     } finally {
       setDeleteEntityLoading(false);
+    }
+  }
+
+  async function deleteArtwork() {
+    if (!deletingArtwork) return;
+    setDeleteArtworkLoading(true);
+    setDeleteVisitError(null);
+    try {
+      await api.delete(`/api/artworks/${deletingArtwork.id}`);
+      setVisitArtworks((current) =>
+        current.filter((artwork) => artwork.id !== deletingArtwork.id)
+      );
+      setDeletingArtwork(null);
+      router.refresh();
+    } catch (e) {
+      setDeleteVisitError(e instanceof Error ? e.message : "Could not delete artwork.");
+    } finally {
+      setDeleteArtworkLoading(false);
     }
   }
 
@@ -180,32 +239,19 @@ export function VisitDetailClient({
             </ButtonLink>
           </div>
 
-          {artworks.length === 0 ? (
+          {visitArtworks.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-muted-foreground">
               No artworks yet. Tap Add artwork below.
             </div>
           ) : (
             <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {artworks.map((artwork) => (
-                <li key={artwork.id}>
-                  <Link
-                    href={`/artworks/${artwork.id}`}
-                    className="flex min-h-11 items-center gap-3 rounded-xl border border-border bg-card p-4 transition-colors active:bg-muted/50"
-                  >
-                    <EntryThumbnail
-                      imageUrl={artworkThumbnailUrl(artwork)}
-                      alt={artwork.title}
-                      entityType="artwork"
-                      size="md"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-base font-medium">{artwork.title}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {[artwork.artist, artwork.year_period].filter(Boolean).join(" · ")}
-                      </p>
-                    </div>
-                  </Link>
-                </li>
+              {visitArtworks.map((artwork) => (
+                <ArtworkCard
+                  key={artwork.id}
+                  artwork={artwork}
+                  canEdit={canEdit}
+                  onDelete={setDeletingArtwork}
+                />
               ))}
             </ul>
           )}
@@ -337,6 +383,17 @@ export function VisitDetailClient({
         }
         loading={deleteEntityLoading}
         onConfirm={deleteEntity}
+      />
+
+      <ConfirmDeleteDialog
+        open={deletingArtwork !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingArtwork(null);
+        }}
+        title="Delete artwork?"
+        description="Delete this artwork? Its annotations and research notes may also be removed."
+        loading={deleteArtworkLoading}
+        onConfirm={deleteArtwork}
       />
 
       {deleteVisitError ? (
