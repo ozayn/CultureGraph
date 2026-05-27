@@ -11,15 +11,26 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import Artwork, ResearchNote
-from app.schemas import ArtworkLookupResponse, ResearchDraft
+from app.schemas import (
+    ArtworkIdentificationRead,
+    ArtworkLookupResponse,
+    ResearchDraft,
+    VisualAnalysisRead,
+)
+from app.services.artwork_identification import (
+    build_identification,
+    calibrate_research_draft,
+    lookup_with_identification_candidates,
+)
 from app.services.artwork_lookup import lookup_artwork_candidates
-from app.services.lookup_query import build_artwork_lookup_query
+from app.services.lookup_query import build_retrieval_lookup_query
 from app.services.research import (
     ResearchConfigurationError,
     ResearchProviderError,
     get_research_provider,
     serialize_research_draft,
 )
+from app.services.visual_analysis import VisualAnalysis
 from app.sources.nga import should_search_nga
 from app.sources.routing import resolve_lookup_sources, sources_searched_labels
 from app.sources.smithsonian import should_search_smithsonian
@@ -50,9 +61,9 @@ def _artwork_research_context(artwork: Artwork) -> dict[str, Any]:
     }
 
 
-def _build_lookup_response(db: Session, artwork: Artwork) -> ArtworkLookupResponse:
+def _build_lookup_response(db: Session, artwork: Artwork, draft: ResearchDraft) -> ArtworkLookupResponse:
     museum_name = artwork.visit.museum_name if artwork.visit else None
-    built = build_artwork_lookup_query(artwork, db, museum_name=museum_name)
+    built = build_retrieval_lookup_query(artwork, db, draft, museum_name=museum_name)
 
     if not resolve_lookup_sources(built.query):
         return ArtworkLookupResponse(
@@ -70,12 +81,14 @@ def _build_lookup_response(db: Session, artwork: Artwork) -> ArtworkLookupRespon
     sources_searched = sources_searched_labels(built.query)
 
     notice: str | None = None
-    if lookup_result.artist_fallback and candidates:
+    if built.query_source == "visual_keywords":
+        notice = "Searched museum collections using visual style and subject keywords."
+    elif lookup_result.artist_fallback and candidates:
         artist_label = (built.query.artist or "").strip() or "this artist"
         notice = f"No exact title match found. Showing related works by {artist_label}."
     elif not candidates:
         if not built.query_used.strip():
-            notice = "Add a title or artist to improve collection matching."
+            notice = "Add a title, label text, or clearer photo to improve collection matching."
         elif should_search_smithsonian(built.query) and not should_search_nga(built.query):
             notice = "No close matches found in the Smithsonian Open Access index."
         elif should_search_nga(built.query) and not should_search_smithsonian(built.query):
@@ -189,25 +202,38 @@ async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
         _set_enrichment_state(
             artwork,
             status=ENRICHMENT_STATUS_RUNNING,
-            stage=STAGE_GENERATING_ANNOTATIONS,
-        )
-        db.commit()
-
-        serialized = serialize_research_draft(draft)
-        note = ResearchNote(artwork_id=artwork_id, **serialized)
-        db.add(note)
-        db.flush()
-
-        _set_enrichment_state(
-            artwork,
-            status=ENRICHMENT_STATUS_RUNNING,
             stage=STAGE_SEARCHING_COLLECTIONS,
         )
         db.commit()
         db.refresh(artwork)
 
-        lookup_response = _build_lookup_response(db, artwork)
-        artwork.enrichment_lookup = lookup_response.model_dump(mode="json")
+        lookup_response = _build_lookup_response(db, artwork, draft)
+        visual = _draft_visual_analysis(draft)
+        identification = build_identification(draft, lookup_response, visual)
+        calibrated = calibrate_research_draft(draft, identification, visual)
+        lookup_response = lookup_with_identification_candidates(lookup_response, identification)
+
+        _set_enrichment_state(
+            artwork,
+            status=ENRICHMENT_STATUS_RUNNING,
+            stage=STAGE_GENERATING_ANNOTATIONS,
+        )
+        db.commit()
+
+        serialized = serialize_research_draft(calibrated)
+        note = ResearchNote(artwork_id=artwork_id, **serialized)
+        db.add(note)
+        db.flush()
+
+        artwork.enrichment_lookup = {
+            "lookup": lookup_response.model_dump(mode="json"),
+            "identification": ArtworkIdentificationRead.model_validate(
+                identification.model_dump(mode="json")
+            ).model_dump(mode="json"),
+            "visual_analysis": (
+                draft.visual_analysis.model_dump(mode="json") if draft.visual_analysis else None
+            ),
+        }
 
         _set_enrichment_state(
             artwork,
@@ -236,13 +262,51 @@ async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
         raise exc
 
 
-def parse_enrichment_lookup(raw: dict | list | None) -> ArtworkLookupResponse | None:
+def _draft_visual_analysis(draft: ResearchDraft) -> VisualAnalysis | None:
+    if not draft.visual_analysis:
+        return None
+    return VisualAnalysis.model_validate(draft.visual_analysis.model_dump())
+
+
+def parse_enrichment_payload(
+    raw: dict | list | None,
+) -> tuple[ArtworkLookupResponse | None, ArtworkIdentificationRead | None, VisualAnalysisRead | None]:
     if not raw or not isinstance(raw, dict):
-        return None
+        return None, None, None
+
+    if "lookup" in raw:
+        lookup_raw = raw.get("lookup")
+        identification_raw = raw.get("identification")
+        visual_raw = raw.get("visual_analysis")
+        lookup = None
+        identification = None
+        visual = None
+        try:
+            if lookup_raw:
+                lookup = ArtworkLookupResponse.model_validate(lookup_raw)
+        except Exception:
+            lookup = None
+        try:
+            if identification_raw:
+                identification = ArtworkIdentificationRead.model_validate(identification_raw)
+        except Exception:
+            identification = None
+        try:
+            if visual_raw:
+                visual = VisualAnalysisRead.model_validate(visual_raw)
+        except Exception:
+            visual = None
+        return lookup, identification, visual
+
     try:
-        return ArtworkLookupResponse.model_validate(raw)
+        return ArtworkLookupResponse.model_validate(raw), None, None
     except Exception:
-        return None
+        return None, None, None
+
+
+def parse_enrichment_lookup(raw: dict | list | None) -> ArtworkLookupResponse | None:
+    lookup, _, _ = parse_enrichment_payload(raw)
+    return lookup
 
 
 def latest_research_draft(db: Session, artwork_id: int) -> tuple[ResearchDraft | None, int | None]:
@@ -264,6 +328,15 @@ def latest_research_draft(db: Session, artwork_id: int) -> tuple[ResearchDraft |
 
     from app.services.suggested_annotations import load_note_suggestions
 
+    visual_analysis: VisualAnalysisRead | None = None
+    if getattr(note, "visual_analysis", None):
+        try:
+            parsed_visual = json.loads(note.visual_analysis)
+            if isinstance(parsed_visual, dict):
+                visual_analysis = VisualAnalysisRead.model_validate(parsed_visual)
+        except (json.JSONDecodeError, ValueError):
+            visual_analysis = None
+
     draft = ResearchDraft(
         short_summary=note.short_summary,
         historical_context=note.historical_context,
@@ -272,5 +345,9 @@ def latest_research_draft(db: Session, artwork_id: int) -> tuple[ResearchDraft |
         suggested_annotations=load_note_suggestions(note),
         possible_title=note.possible_title,
         possible_artist=note.possible_artist,
+        period_or_movement=getattr(note, "period_or_movement", None),
+        ocr_label_text=getattr(note, "ocr_label_text", None),
+        confidence=getattr(note, "confidence", None),
+        visual_analysis=visual_analysis,
     )
     return draft, note.id

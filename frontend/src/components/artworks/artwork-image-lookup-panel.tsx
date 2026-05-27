@@ -39,6 +39,8 @@ const QUERY_SOURCE_LABELS: Record<ArtworkLookupQuerySource, string> = {
   saved_title: "Saved title",
   artist_notes: "Artist + notes",
   manual: "Manual search",
+  ocr_label: "Wall label (OCR)",
+  visual_keywords: "Visual keywords",
 };
 
 const QUERY_STRATEGY_LABELS: Record<ArtworkLookupQueryStrategy, string> = {

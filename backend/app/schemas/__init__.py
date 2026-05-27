@@ -337,7 +337,20 @@ class ResearchDraft(BaseModel):
     period_or_movement: str | None = None
     ocr_label_text: str | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    visual_analysis: "VisualAnalysisRead | None" = None
     source: str = "mock"
+
+
+class VisualAnalysisRead(BaseModel):
+    subject: str | None = None
+    composition: list[str] = Field(default_factory=list)
+    medium_clues: list[str] = Field(default_factory=list)
+    period_clues: list[str] = Field(default_factory=list)
+    clothing: list[str] = Field(default_factory=list)
+    color_palette: list[str] = Field(default_factory=list)
+    notable_objects: list[str] = Field(default_factory=list)
+    style_signals: list[str] = Field(default_factory=list)
+    movement_style: str | None = None
 
 
 class ClaudeSuggestedAnnotation(AiSuggestedAnnotation):
@@ -345,6 +358,7 @@ class ClaudeSuggestedAnnotation(AiSuggestedAnnotation):
 
 
 class ClaudeResearchResponse(BaseModel):
+    visual_analysis: VisualAnalysisRead | None = None
     possible_title: str | None = None
     possible_artist: str | None = None
     period_or_movement: str | None = None
@@ -482,7 +496,14 @@ class ArtworkLookupResponse(BaseModel):
     candidates: list[ArtworkLookupCandidateRead]
     sources_searched: list[str]
     query_used: str = ""
-    query_source: Literal["ai_title", "saved_title", "artist_notes", "manual"] = "saved_title"
+    query_source: Literal[
+        "ai_title",
+        "saved_title",
+        "artist_notes",
+        "manual",
+        "ocr_label",
+        "visual_keywords",
+    ] = "saved_title"
     query_strategy: Literal["exact", "fuzzy", "artist_fallback", "broad"] | None = None
     artist_fallback: bool = False
     alternate_title: str | None = None
@@ -495,6 +516,22 @@ class ArtworkLookupResponse(BaseModel):
     notice: str | None = None
 
 
+class ArtworkIdentificationRead(BaseModel):
+    identification_mode: Literal["catalog_match", "possible_match", "style_subject"]
+    confidence_level: Literal["high", "medium", "low"]
+    display_summary: str
+    style_assessment: str | None = None
+    subject_assessment: str | None = None
+    iconography_notes: list[str] = Field(default_factory=list)
+    top_candidate: ArtworkLookupCandidateRead | None = None
+    alternative_matches: list[ArtworkLookupCandidateRead] = Field(default_factory=list)
+    match_reasons: list[str] = Field(default_factory=list)
+    suggested_title: str | None = None
+    suggested_artist: str | None = None
+    visual_keywords: list[str] = Field(default_factory=list)
+    catalog_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
 class ArtworkEnrichmentRead(BaseModel):
     status: Literal["idle", "pending", "running", "completed", "failed"]
     stage: Literal["identifying", "searching_collections", "generating_annotations"] | None = None
@@ -502,3 +539,5 @@ class ArtworkEnrichmentRead(BaseModel):
     research_note_id: int | None = None
     draft: ResearchDraft | None = None
     lookup: ArtworkLookupResponse | None = None
+    identification: ArtworkIdentificationRead | None = None
+    visual_analysis: VisualAnalysisRead | None = None

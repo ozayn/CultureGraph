@@ -12,15 +12,31 @@ from anthropic import (
 from pydantic import ValidationError
 
 from app.config import settings
-from app.schemas import ClaudeResearchResponse, ResearchDraft
+from app.schemas import ClaudeResearchResponse, ResearchDraft, VisualAnalysisRead
 from app.services.claude_json import JsonExtractionError, extract_json_object
 from app.services.research import ResearchConfigurationError, ResearchProviderError
+from app.services.visual_analysis import (
+    build_visual_summary,
+    extract_artist_from_ocr,
+    extract_title_from_ocr,
+)
 
 JSON_SCHEMA_PROMPT = """\
 Return ONLY a single JSON object (no markdown fences, no commentary) with this exact shape:
 {
-  "possible_title": string or null,
-  "possible_artist": string or null,
+  "visual_analysis": {
+    "subject": string or null,
+    "composition": [string, ...],
+    "medium_clues": [string, ...],
+    "period_clues": [string, ...],
+    "clothing": [string, ...],
+    "color_palette": [string, ...],
+    "notable_objects": [string, ...],
+    "style_signals": [string, ...],
+    "movement_style": string or null
+  },
+  "possible_title": null,
+  "possible_artist": null,
   "period_or_movement": string or null,
   "visible_elements": [string, ...],
   "ocr_label_text": string or null,
@@ -43,9 +59,14 @@ Return ONLY a single JSON object (no markdown fences, no commentary) with this e
 }
 
 Rules:
-- Base visual analysis on the image when provided; use metadata as hints, not facts.
+- Stage 1 is visual extraction ONLY. Do NOT invent exact catalog titles or artist attributions from the image alone.
+- ALWAYS leave possible_title and possible_artist null unless ocr_label_text explicitly names them on a legible wall label.
+- visual_analysis: describe subject, composition, medium clues, period/style signals, clothing, palette, and notable objects.
+- movement_style: broad style label (e.g. "Northern Renaissance ecclesiastical portrait"), not a specific catalog title.
+- Base visual analysis on the image when provided; use user metadata as hints, not confirmed facts.
 - Read any visible wall labels, captions, or placards into ocr_label_text when legible.
-- confidence reflects how certain you are about identification (0=guess, 1=very confident).
+- confidence reflects certainty of visual description only (0=very uncertain, 1=very clear visual read).
+- Keep confidence below 0.6 when identification would require catalog verification.
 - suggested_annotations: 2–5 specific pin ideas tied to visible details, themes, or historical context.
 - tags: short freeform labels (e.g. composition, gesture, colonialism, material).
 - linked_concept_names: optional related concepts/movements/themes as plain strings.
@@ -53,7 +74,6 @@ Rules:
   confidently locate a region from image analysis. Never invent precise coordinates.
 - When coordinates are null, set suggested_position.reason to explain what the viewer should look for.
 - If no image is provided or the region is uncertain, keep both coordinates null.
-- If uncertain about title/artist, set those fields to null and lower confidence.
 """
 
 
@@ -67,14 +87,14 @@ SUPPORTED_IMAGE_SUFFIXES = {
 
 
 def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
-    title = claude.possible_title or "Unidentified artwork"
-    artist = claude.possible_artist or "Unknown artist"
-    period = claude.period_or_movement or "Unknown period"
-    confidence_pct = f"{round(claude.confidence * 100)}%"
+    visual = claude.visual_analysis
+    title_from_ocr = extract_title_from_ocr(claude.ocr_label_text)
+    artist_from_ocr = extract_artist_from_ocr(claude.ocr_label_text)
 
-    short_summary = (
-        f"{title} — possibly by {artist} ({period}). "
-        f"Analysis confidence: {confidence_pct}."
+    short_summary = build_visual_summary(
+        _to_visual_analysis(visual),
+        period_or_movement=claude.period_or_movement,
+        vision_confidence=claude.confidence,
     )
 
     related_questions: list[str] = []
@@ -82,11 +102,15 @@ def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
         related_questions.append(
             f"What does the visible label text tell us? \"{claude.ocr_label_text}\""
         )
+    if visual and visual.movement_style:
+        related_questions.append(
+            f"Which museum collections hold similar {visual.movement_style} works?"
+        )
     related_questions.extend(
         [
-            f"How does {title} relate to {period}?",
-            "What should you verify in the museum catalog or collection database?",
-            "Which visible details support or contradict the proposed attribution?",
+            "Which official catalog records best match the visible subject and style?",
+            "What iconographic details should be verified before accepting an attribution?",
+            "Does the medium and support match the proposed period?",
         ]
     )
 
@@ -96,13 +120,22 @@ def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
         visual_elements_to_notice=claude.visible_elements,
         related_questions=related_questions,
         suggested_annotations=list(claude.suggested_annotations),
-        possible_title=claude.possible_title,
-        possible_artist=claude.possible_artist,
-        period_or_movement=claude.period_or_movement,
+        possible_title=title_from_ocr,
+        possible_artist=artist_from_ocr,
+        period_or_movement=claude.period_or_movement or (visual.movement_style if visual else None),
         ocr_label_text=claude.ocr_label_text,
-        confidence=claude.confidence,
+        confidence=min(claude.confidence, 0.55) if not title_from_ocr else claude.confidence,
+        visual_analysis=visual,
         source="claude",
     )
+
+
+def _to_visual_analysis(visual: VisualAnalysisRead | None):
+    from app.services.visual_analysis import VisualAnalysis
+
+    if not visual:
+        return None
+    return VisualAnalysis.model_validate(visual.model_dump())
 
 
 def _resolve_image_path(image_url: str | None) -> Path | None:
@@ -138,7 +171,7 @@ def _encode_image(image_path: Path) -> tuple[str, str]:
 
 def _build_metadata_prompt(artwork_context: dict) -> str:
     lines = [
-        "Artwork metadata supplied by the visitor:",
+        "Artwork metadata supplied by the visitor (treat as unverified hints):",
         f"- Title (user): {artwork_context.get('title') or 'not provided'}",
         f"- Artist (user): {artwork_context.get('artist') or 'unknown'}",
         f"- Year/period (user): {artwork_context.get('year_period') or 'unknown'}",

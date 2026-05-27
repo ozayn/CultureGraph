@@ -7,6 +7,7 @@ import { AiSuggestedAnnotations } from "@/components/artworks/ai-suggested-annot
 import {
   LookupCandidateList,
 } from "@/components/artworks/enrichment-lookup-candidates";
+import { ArtworkIdentificationPanel } from "@/components/artworks/artwork-identification-panel";
 import {
   ResearchMetadataApply,
   extractDraftMetadataHints,
@@ -74,6 +75,10 @@ export function ArtworkEnrichmentPanel({
 
   const draft = state?.draft ?? null;
   const active = state ? isActive(state.status) : false;
+  const metadataHints = useMemo(
+    () => (draft ? extractDraftMetadataHints(draft, state?.identification ?? null) : null),
+    [draft, state?.identification]
+  );
 
   const stageLabel = useMemo(() => {
     if (!state) return "Analyzing artwork…";
@@ -155,8 +160,8 @@ export function ArtworkEnrichmentPanel({
   }, [active, refresh]);
 
   useEffect(() => {
-    onHintsChange?.(draft ? extractDraftMetadataHints(draft) : null);
-  }, [draft, onHintsChange]);
+    onHintsChange?.(metadataHints);
+  }, [metadataHints, onHintsChange]);
 
   async function rerunEnrichment() {
     setRerunning(true);
@@ -209,7 +214,7 @@ export function ArtworkEnrichmentPanel({
           <div>
             <h3 className="font-heading text-lg">AI assistant</h3>
             <p className="text-sm text-muted-foreground">
-              Identification, context, and collection matches as you capture.
+              Visual analysis, retrieval-assisted identification, and collection matches.
             </p>
           </div>
         </div>
@@ -247,7 +252,16 @@ export function ArtworkEnrichmentPanel({
         <p className="text-sm text-muted-foreground">Loading AI results…</p>
       ) : null}
 
-      {draft && revealed.identification ? (
+      {state?.identification && revealed.identification ? (
+        <div
+          className={cn(
+            "space-y-3 rounded-lg border border-border/80 bg-muted/20 p-4 transition-all duration-500",
+            showAmbientHeader ? "animate-in fade-in slide-in-from-bottom-2" : ""
+          )}
+        >
+          <ArtworkIdentificationPanel identification={state.identification} />
+        </div>
+      ) : draft && revealed.identification ? (
         <div
           className={cn(
             "space-y-3 rounded-lg border border-border/80 bg-muted/20 p-4 transition-all duration-500",
@@ -255,11 +269,18 @@ export function ArtworkEnrichmentPanel({
           )}
         >
           <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-            Suggested identification
+            Visual analysis
           </p>
+          <p className="text-sm leading-relaxed text-foreground">{draft.short_summary}</p>
+        </div>
+      ) : null}
+
+      {draft && revealed.identification && metadataHints ? (
+        <div className="space-y-3 rounded-lg border border-border/80 bg-muted/20 p-4">
           <ResearchMetadataApply
             artwork={artwork}
             draft={draft}
+            identification={state?.identification ?? null}
             canEdit={canEdit}
             onApplied={(updated) => onArtworkUpdated?.(updated)}
             onReviewControlReady={onApplyReviewReady}

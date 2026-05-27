@@ -9,11 +9,20 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from app.models import Artwork, CulturalEntity, CulturalEntityType, ResearchNote
+from app.schemas import ResearchDraft
 from app.services.lookup_medium import infer_expected_medium_type, resolve_medium_type_filter
+from app.services.visual_analysis import collect_visual_keywords, extract_title_from_ocr, visual_keywords_query
 from app.sources.base import ArtworkLookupQuery
 from app.sources.matching import is_placeholder_artist, is_placeholder_title, normalize
 
-QuerySource = Literal["manual", "ai_title", "saved_title", "artist_notes"]
+QuerySource = Literal[
+    "manual",
+    "ai_title",
+    "saved_title",
+    "artist_notes",
+    "ocr_label",
+    "visual_keywords",
+]
 
 
 @dataclass(frozen=True)
@@ -256,4 +265,118 @@ def _import_entity_title(db: Session, artwork: Artwork) -> str | None:
         if saved_norm and normalize(name) == saved_norm:
             continue
         return name
+    return None
+
+
+def build_retrieval_lookup_query(
+    artwork: Artwork,
+    db: Session,
+    draft: ResearchDraft,
+    *,
+    museum_name: str | None,
+    medium_type: str | None = None,
+    medium_override: str | None = None,
+) -> BuiltLookupQuery:
+    """Build collection search from OCR, saved metadata, and visual keywords — not vision guesses."""
+    from app.services.visual_analysis import VisualAnalysis
+
+    visual = None
+    if draft.visual_analysis:
+        visual = VisualAnalysis.model_validate(draft.visual_analysis.model_dump())
+
+    ai_medium = _medium_from_draft_annotations(draft)
+    expected_medium = infer_expected_medium_type(
+        artwork_medium=artwork.medium,
+        ai_medium=ai_medium,
+        notes=artwork.personal_notes,
+        medium_override=medium_override,
+    )
+    medium_filter = resolve_medium_type_filter(expected_medium, medium_type)
+    medium_hint = (
+        (medium_override or "").strip()
+        or (artwork.medium or "").strip()
+        or (ai_medium or "").strip()
+        or None
+    )
+
+    ocr_title = extract_title_from_ocr(draft.ocr_label_text)
+    if ocr_title and not is_placeholder_title(ocr_title):
+        artist = _resolve_artist(artwork.artist, draft.possible_artist, None)
+        return _pack(
+            artwork,
+            museum_name,
+            None,
+            ocr_title,
+            artist,
+            query_source="ocr_label",
+            expected_medium_type=expected_medium,
+            medium_type_filter=medium_filter,
+            medium_hint=medium_hint,
+        )
+
+    saved_title = (artwork.title or "").strip()
+    if saved_title and not is_placeholder_title(saved_title):
+        artist = _resolve_artist(artwork.artist, draft.possible_artist, None)
+        return _pack(
+            artwork,
+            museum_name,
+            None,
+            saved_title,
+            artist,
+            query_source="saved_title",
+            expected_medium_type=expected_medium,
+            medium_type_filter=medium_filter,
+            medium_hint=medium_hint,
+        )
+
+    if draft.possible_title and not is_placeholder_title(draft.possible_title):
+        artist = _resolve_artist(artwork.artist, draft.possible_artist, None)
+        return _pack(
+            artwork,
+            museum_name,
+            None,
+            draft.possible_title,
+            artist,
+            query_source="ocr_label" if draft.ocr_label_text else "ai_title",
+            expected_medium_type=expected_medium,
+            medium_type_filter=medium_filter,
+            medium_hint=medium_hint,
+        )
+
+    keywords = collect_visual_keywords(
+        visual,
+        period_or_movement=draft.period_or_movement,
+        ocr_label_text=draft.ocr_label_text,
+    )
+    query_text = visual_keywords_query(keywords)
+    if query_text:
+        artist = _resolve_artist(artwork.artist, draft.possible_artist, None)
+        return _pack(
+            artwork,
+            museum_name,
+            None,
+            query_text,
+            artist,
+            query_source="visual_keywords",
+            expected_medium_type=expected_medium,
+            medium_type_filter=medium_filter,
+            medium_hint=medium_hint,
+        )
+
+    return build_artwork_lookup_query(
+        artwork,
+        db,
+        museum_name=museum_name,
+        medium_type=medium_type,
+        medium_override=medium_override,
+    )
+
+
+def _medium_from_draft_annotations(draft: ResearchDraft) -> str | None:
+    for item in draft.suggested_annotations:
+        if item.category != "material":
+            continue
+        text = (item.note or "").strip()
+        if text:
+            return text[:255]
     return None

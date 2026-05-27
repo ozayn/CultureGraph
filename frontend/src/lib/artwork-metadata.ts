@@ -192,17 +192,44 @@ export interface ResearchMetadataHints {
   confidence: number | null;
 }
 
-export function extractResearchMetadataHints(draft: {
-  possible_title?: string | null;
-  possible_artist?: string | null;
-  period_or_movement?: string | null;
-  confidence?: number | null;
-  short_summary?: string | null;
-  historical_context?: string | null;
-  suggested_annotations?: ResearchDraft["suggested_annotations"];
-}): ResearchMetadataHints | null {
-  let title = cleanAiTitle(draft.possible_title);
-  const artist = cleanAiArtist(draft.possible_artist);
+export function extractResearchMetadataHints(
+  draft: {
+    possible_title?: string | null;
+    possible_artist?: string | null;
+    period_or_movement?: string | null;
+    confidence?: number | null;
+    short_summary?: string | null;
+    historical_context?: string | null;
+    suggested_annotations?: ResearchDraft["suggested_annotations"];
+  },
+  identification?: {
+    identification_mode?: "catalog_match" | "possible_match" | "style_subject";
+    confidence_level?: "high" | "medium" | "low";
+    suggested_title?: string | null;
+    suggested_artist?: string | null;
+    catalog_confidence?: number | null;
+  } | null
+): ResearchMetadataHints | null {
+  const catalogMatch =
+    identification?.identification_mode === "catalog_match" &&
+    identification.confidence_level === "high";
+
+  let title = catalogMatch
+    ? cleanAiTitle(identification?.suggested_title ?? draft.possible_title)
+    : null;
+  let artist = catalogMatch
+    ? cleanAiArtist(identification?.suggested_artist ?? draft.possible_artist)
+    : null;
+
+  if (!catalogMatch) {
+    title = cleanAiTitle(draft.possible_title);
+    artist = cleanAiArtist(draft.possible_artist);
+    if (identification && identification.identification_mode !== "catalog_match") {
+      title = null;
+      artist = null;
+    }
+  }
+
   const year = extractYearFromPeriod(draft.period_or_movement);
   const period = extractMovementFromPeriod(draft.period_or_movement);
   const medium = draft.suggested_annotations
@@ -212,11 +239,20 @@ export function extractResearchMetadataHints(draft: {
     ? extractNotesFromDraft(draft as ResearchDraft)
     : null;
 
-  if (!title && draft.short_summary) {
+  if (!title && draft.short_summary && catalogMatch) {
     title = cleanAiTitle(draft.short_summary.split(/\s*[—–-]\s*/)[0]);
   }
 
   if (!title && !artist && !year && !period && !medium && !notes) return null;
+
+  const confidence =
+    identification?.catalog_confidence ??
+    draft.confidence ??
+    (identification?.confidence_level === "high"
+      ? HIGH_CONFIDENCE_THRESHOLD
+      : identification?.confidence_level === "medium"
+        ? LOW_CONFIDENCE_THRESHOLD
+        : null);
 
   return {
     title,
@@ -225,7 +261,7 @@ export function extractResearchMetadataHints(draft: {
     period,
     medium,
     notes,
-    confidence: draft.confidence ?? null,
+    confidence,
   };
 }
 

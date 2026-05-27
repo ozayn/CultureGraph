@@ -16,7 +16,7 @@ import {
   isPlaceholderTitle,
   type ResearchMetadataHints,
 } from "@/lib/artwork-metadata";
-import type { Artwork, ResearchDraft } from "@/lib/types";
+import type { Artwork, ArtworkIdentification, ResearchDraft } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type MetadataFieldKey = "title" | "artist" | "year" | "period" | "medium" | "notes";
@@ -40,6 +40,7 @@ interface MetadataRow {
 interface ResearchMetadataApplyProps {
   artwork: Artwork;
   draft: ResearchDraft;
+  identification?: ArtworkIdentification | null;
   canEdit: boolean;
   onApplied: (artwork: Artwork) => void;
   onReviewControlReady?: (openReview: () => void) => void;
@@ -87,16 +88,22 @@ function defaultFields(artwork: Artwork, hints: ResearchMetadataHints): ApplyFie
   };
 }
 
-export function extractDraftMetadataHints(draft: ResearchDraft): ResearchMetadataHints | null {
-  return extractResearchMetadataHints({
-    possible_title: draft.possible_title,
-    possible_artist: draft.possible_artist,
-    period_or_movement: draft.period_or_movement,
-    confidence: draft.confidence,
-    short_summary: draft.short_summary,
-    historical_context: draft.historical_context,
-    suggested_annotations: draft.suggested_annotations,
-  });
+export function extractDraftMetadataHints(
+  draft: ResearchDraft,
+  identification?: ArtworkIdentification | null
+): ResearchMetadataHints | null {
+  return extractResearchMetadataHints(
+    {
+      possible_title: draft.possible_title,
+      possible_artist: draft.possible_artist,
+      period_or_movement: draft.period_or_movement,
+      confidence: draft.confidence,
+      short_summary: draft.short_summary,
+      historical_context: draft.historical_context,
+      suggested_annotations: draft.suggested_annotations,
+    },
+    identification
+  );
 }
 
 function buildMetadataRows(artwork: Artwork, hints: ResearchMetadataHints): MetadataRow[] {
@@ -157,12 +164,13 @@ function buildMetadataRows(artwork: Artwork, hints: ResearchMetadataHints): Meta
 export function ResearchMetadataApply({
   artwork,
   draft,
+  identification = null,
   canEdit,
   onApplied,
   onReviewControlReady,
 }: ResearchMetadataApplyProps) {
   const { openLookup, hasImage } = useArtworkImageLookup();
-  const hints = extractDraftMetadataHints(draft);
+  const hints = extractDraftMetadataHints(draft, identification);
   const rows = useMemo(
     () => (hints ? buildMetadataRows(artwork, hints) : []),
     [artwork, hints]
@@ -246,16 +254,23 @@ export function ResearchMetadataApply({
   return (
     <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3">
       <div className="space-y-1">
-        <h4 className="text-sm font-medium">Suggested metadata</h4>
+        <h4 className="text-sm font-medium">
+          {identification?.identification_mode === "catalog_match"
+            ? "Verified catalog metadata"
+            : "Style & context metadata"}
+        </h4>
         {hints.confidence != null ? (
           <p className="text-xs text-muted-foreground">
-            AI confidence: {Math.round(hints.confidence * 100)}%
+            {identification?.identification_mode === "catalog_match"
+              ? "Catalog match confidence"
+              : "Analysis confidence"}
+            : {Math.round(hints.confidence * 100)}%
             {hints.confidence < 0.55 ? " · review carefully" : null}
           </p>
         ) : null}
         {showTitleHint && hints.title ? (
           <p className="text-xs text-muted-foreground">
-            AI suggested title:{" "}
+            Catalog title:{" "}
             <span className="font-medium text-foreground">{hints.title}</span>
           </p>
         ) : null}

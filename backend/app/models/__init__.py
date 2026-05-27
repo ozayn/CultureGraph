@@ -130,6 +130,10 @@ class ResearchNote(Base):
     suggested_annotations: Mapped[str] = mapped_column(Text, nullable=False)
     possible_title: Mapped[str | None] = mapped_column(String(255))
     possible_artist: Mapped[str | None] = mapped_column(String(255))
+    period_or_movement: Mapped[str | None] = mapped_column(String(255))
+    ocr_label_text: Mapped[str | None] = mapped_column(Text)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    visual_analysis: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

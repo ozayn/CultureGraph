@@ -95,6 +95,8 @@ export interface ArtworkEnrichmentState {
   research_note_id: number | null;
   draft: ResearchDraft | null;
   lookup: ArtworkLookupResponse | null;
+  identification: ArtworkIdentification | null;
+  visual_analysis: VisualAnalysis | null;
 }
 
 export interface ArtworkLookupCandidate {
@@ -120,7 +122,9 @@ export type ArtworkLookupQuerySource =
   | "ai_title"
   | "saved_title"
   | "artist_notes"
-  | "manual";
+  | "manual"
+  | "ocr_label"
+  | "visual_keywords";
 
 export type ArtworkLookupQueryStrategy =
   | "exact"
@@ -168,7 +172,39 @@ export interface ResearchDraft {
   period_or_movement?: string | null;
   ocr_label_text?: string | null;
   confidence?: number | null;
+  visual_analysis?: VisualAnalysis | null;
   source?: string;
+}
+
+export type IdentificationMode = "catalog_match" | "possible_match" | "style_subject";
+export type IdentificationConfidenceLevel = "high" | "medium" | "low";
+
+export interface VisualAnalysis {
+  subject?: string | null;
+  composition?: string[];
+  medium_clues?: string[];
+  period_clues?: string[];
+  clothing?: string[];
+  color_palette?: string[];
+  notable_objects?: string[];
+  style_signals?: string[];
+  movement_style?: string | null;
+}
+
+export interface ArtworkIdentification {
+  identification_mode: IdentificationMode;
+  confidence_level: IdentificationConfidenceLevel;
+  display_summary: string;
+  style_assessment?: string | null;
+  subject_assessment?: string | null;
+  iconography_notes?: string[];
+  top_candidate?: ArtworkLookupCandidate | null;
+  alternative_matches?: ArtworkLookupCandidate[];
+  match_reasons?: string[];
+  suggested_title?: string | null;
+  suggested_artist?: string | null;
+  visual_keywords?: string[];
+  catalog_confidence?: number | null;
 }
 
 export interface ResearchNote {

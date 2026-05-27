@@ -2,8 +2,9 @@ import json
 from typing import Protocol
 
 from app.config import settings
-from app.schemas import AiSuggestedAnnotation, ResearchDraft, SuggestedAnnotationPosition
+from app.schemas import AiSuggestedAnnotation, ResearchDraft, SuggestedAnnotationPosition, VisualAnalysisRead
 from app.services.suggested_annotations import ensure_pending_defaults
+from app.services.visual_analysis import VisualAnalysis, build_visual_summary
 
 
 class ResearchConfigurationError(Exception):
@@ -22,17 +23,33 @@ class LLMProvider(Protocol):
 
 class MockLLMProvider:
     async def generate_research(self, artwork_context: dict) -> ResearchDraft:
-        title = artwork_context.get("title", "this artwork")
-        artist = artwork_context.get("artist") or "an unknown artist"
+        title = artwork_context.get("title")
+        artist = artwork_context.get("artist")
         year = artwork_context.get("year_period") or "an unspecified period"
+        has_user_title = bool(title and str(title).strip() and str(title) != "this artwork")
+
+        visual = VisualAnalysis(
+            subject="central figure in formal dress" if not has_user_title else f"depicted subject related to {title}",
+            composition=["centered figure", "neutral background"],
+            medium_clues=["oil on canvas"],
+            period_clues=[year] if year != "an unspecified period" else ["19th century"],
+            clothing=["formal attire"],
+            color_palette=["earth tones"],
+            notable_objects=["architectural backdrop"],
+            style_signals=["academic portraiture"],
+            movement_style="19th-century portrait tradition",
+        )
+
+        short_summary = build_visual_summary(
+            visual,
+            period_or_movement=year if year != "an unspecified period" else visual.movement_style,
+            vision_confidence=0.42,
+        )
 
         return ResearchDraft(
-            short_summary=(
-                f"{title} by {artist} ({year}) is a notable work worth studying "
-                "for its cultural and visual significance."
-            ),
+            short_summary=short_summary,
             historical_context=(
-                f"This piece reflects the artistic concerns of {year}. "
+                f"This piece reflects artistic concerns of its period. "
                 "Consider how patronage, geography, and contemporary events "
                 "may have shaped its creation and reception."
             ),
@@ -43,13 +60,15 @@ class MockLLMProvider:
                 "Material technique and surface texture",
             ],
             related_questions=[
-                f"What historical events surrounded the creation of {title}?",
-                "How does this work compare to others by the same artist?",
+                "Which museum catalog records match the visible subject and style?",
+                "How does this work compare to others from the same period?",
                 "What might contemporary viewers have understood differently?",
             ],
-            possible_title=title if title and title != "this artwork" else "Untitled study",
-            possible_artist=artist if artist != "an unknown artist" else None,
-            period_or_movement=year if year != "an unspecified period" else None,
+            possible_title=title if has_user_title else None,
+            possible_artist=artist if artist and artist != "an unknown artist" else None,
+            period_or_movement=year if year != "an unspecified period" else visual.movement_style,
+            confidence=0.42,
+            visual_analysis=VisualAnalysisRead.model_validate(visual.model_dump()),
             suggested_annotations=[
                 AiSuggestedAnnotation(
                     category="composition",
@@ -92,7 +111,11 @@ class MockLLMProvider:
         )
 
 
-def serialize_research_draft(draft: ResearchDraft) -> dict[str, str | None]:
+def serialize_research_draft(draft: ResearchDraft) -> dict[str, str | None | float]:
+    visual_payload: str | None = None
+    if draft.visual_analysis:
+        visual_payload = json.dumps(draft.visual_analysis.model_dump(mode="json"))
+
     return {
         "short_summary": draft.short_summary,
         "historical_context": draft.historical_context,
@@ -106,6 +129,10 @@ def serialize_research_draft(draft: ResearchDraft) -> dict[str, str | None]:
         ),
         "possible_title": draft.possible_title,
         "possible_artist": draft.possible_artist,
+        "period_or_movement": draft.period_or_movement,
+        "ocr_label_text": draft.ocr_label_text,
+        "confidence": draft.confidence,
+        "visual_analysis": visual_payload,
     }
 
 

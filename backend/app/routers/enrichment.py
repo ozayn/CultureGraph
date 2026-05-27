@@ -9,7 +9,7 @@ from app.models import Artwork
 from app.schemas import ArtworkEnrichmentRead
 from app.services.artwork_enrichment import (
     latest_research_draft,
-    parse_enrichment_lookup,
+    parse_enrichment_payload,
     request_artwork_enrichment,
 )
 
@@ -23,11 +23,11 @@ def _get_artwork_or_404(db: Session, artwork_id: int) -> Artwork:
     return artwork
 
 
-@router.get("/{artwork_id}/enrichment", response_model=ArtworkEnrichmentRead)
-def get_artwork_enrichment(artwork_id: int, db: Session = Depends(get_db)) -> ArtworkEnrichmentRead:
-    artwork = _get_artwork_or_404(db, artwork_id)
-    draft, note_id = latest_research_draft(db, artwork_id)
-    lookup = parse_enrichment_lookup(artwork.enrichment_lookup)
+def _enrichment_read(artwork: Artwork, db: Session) -> ArtworkEnrichmentRead:
+    draft, note_id = latest_research_draft(db, artwork.id)
+    lookup, identification, visual_analysis = parse_enrichment_payload(artwork.enrichment_lookup)
+    if visual_analysis is None and draft and draft.visual_analysis:
+        visual_analysis = draft.visual_analysis
 
     return ArtworkEnrichmentRead(
         status=artwork.enrichment_status,  # type: ignore[arg-type]
@@ -36,7 +36,15 @@ def get_artwork_enrichment(artwork_id: int, db: Session = Depends(get_db)) -> Ar
         research_note_id=note_id,
         draft=draft,
         lookup=lookup,
+        identification=identification,
+        visual_analysis=visual_analysis,
     )
+
+
+@router.get("/{artwork_id}/enrichment", response_model=ArtworkEnrichmentRead)
+def get_artwork_enrichment(artwork_id: int, db: Session = Depends(get_db)) -> ArtworkEnrichmentRead:
+    artwork = _get_artwork_or_404(db, artwork_id)
+    return _enrichment_read(artwork, db)
 
 
 @router.post(
@@ -66,4 +74,6 @@ def start_artwork_enrichment(
         research_note_id=None,
         draft=None,
         lookup=None,
+        identification=None,
+        visual_analysis=None,
     )
