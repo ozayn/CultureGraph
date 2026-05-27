@@ -194,15 +194,6 @@ class ArtworkRead(ArtworkBase):
         return cls.model_construct(**normalized)
 
 
-class ArtworkEnrichmentRead(BaseModel):
-    status: Literal["idle", "pending", "running", "completed", "failed"]
-    stage: Literal["identifying", "searching_collections", "generating_annotations"] | None = None
-    error: str | None = None
-    research_note_id: int | None = None
-    draft: ResearchDraft | None = None
-    lookup: ArtworkLookupResponse | None = None
-
-
 class ArtworkImageRegionUpdate(BaseModel):
     x_percent: float | None = Field(default=None, ge=0, le=100)
     y_percent: float | None = Field(default=None, ge=0, le=100)
@@ -502,3 +493,12 @@ class ArtworkLookupResponse(BaseModel):
         "Review title, artist, and image before applying."
     )
     notice: str | None = None
+
+
+class ArtworkEnrichmentRead(BaseModel):
+    status: Literal["idle", "pending", "running", "completed", "failed"]
+    stage: Literal["identifying", "searching_collections", "generating_annotations"] | None = None
+    error: str | None = None
+    research_note_id: int | None = None
+    draft: ResearchDraft | None = None
+    lookup: ArtworkLookupResponse | None = None
