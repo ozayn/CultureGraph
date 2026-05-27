@@ -3,13 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { ArtworkRegionSelector } from "@/components/artworks/artwork-region-selector";
 import { MuseumAutocomplete } from "@/components/museums/museum-autocomplete";
 import { CameraUpload } from "@/components/ui/camera-upload";
 import { Button } from "@/components/ui/button";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { api } from "@/lib/api";
+import type { ArtworkImageRegion } from "@/lib/artwork-region";
 import { prepareArtworkUploadFile } from "@/lib/prepare-artwork-upload";
 import {
   logUploadError,
@@ -42,7 +46,7 @@ export function ProgressiveArtworkForm({
 }: ProgressiveArtworkFormProps) {
   const router = useRouter();
   const isQuickCapture = Boolean(visitId && !artwork);
-  const [step, setStep] = useState<1 | 2>(isQuickCapture ? 1 : 1);
+  const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState<FriendlyUploadError | null>(null);
@@ -50,7 +54,11 @@ export function ProgressiveArtworkForm({
   const [artist, setArtist] = useState(artwork?.artist ?? "");
   const [yearPeriod, setYearPeriod] = useState(artwork?.year_period ?? "");
   const [museumGallery, setMuseumGallery] = useState(artwork?.museum_gallery ?? "");
+  const [medium, setMedium] = useState(artwork?.medium ?? "");
+  const [personalNotes, setPersonalNotes] = useState(artwork?.personal_notes ?? "");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [pendingRegion, setPendingRegion] = useState<ArtworkImageRegion | null>(null);
+  const [regionOpen, setRegionOpen] = useState(false);
   const [savedArtwork, setSavedArtwork] = useState<Artwork | null>(null);
   const [lastAction, setLastAction] = useState<"draft" | "details" | null>(null);
   const previewUrl = useMemo(
@@ -69,7 +77,20 @@ export function ProgressiveArtworkForm({
 
   function clearPhoto() {
     setPhoto(null);
+    setPendingRegion(null);
     setError(null);
+  }
+
+  async function applyPendingRegion(artworkId: number): Promise<Artwork> {
+    if (!pendingRegion) {
+      return api.get<Artwork>(`/api/artworks/${artworkId}`);
+    }
+    return api.patch<Artwork>(`/api/artworks/${artworkId}/image-region`, {
+      x_percent: pendingRegion.x_percent,
+      y_percent: pendingRegion.y_percent,
+      width_percent: pendingRegion.width_percent,
+      height_percent: pendingRegion.height_percent,
+    });
   }
 
   async function preparePhotoForUpload(file: File): Promise<File> {
@@ -123,9 +144,15 @@ export function ProgressiveArtworkForm({
       title: title.trim() || null,
       artist: includeDetails && artist.trim() ? artist.trim() : null,
       year_period: includeDetails && yearPeriod.trim() ? yearPeriod.trim() : null,
-      medium: artwork?.medium ?? null,
+      medium:
+        includeDetails && medium.trim()
+          ? medium.trim()
+          : artwork?.medium ?? null,
       museum_gallery: includeDetails && museumGallery.trim() ? museumGallery.trim() : null,
-      personal_notes: artwork?.personal_notes ?? null,
+      personal_notes:
+        includeDetails && personalNotes.trim()
+          ? personalNotes.trim()
+          : artwork?.personal_notes ?? null,
       visit_id: visitId ?? artwork?.visit_id ?? null,
     };
 
@@ -143,6 +170,9 @@ export function ProgressiveArtworkForm({
         const uploadFile = await preparePhotoForUpload(photo);
         try {
           saved = await api.upload<Artwork>(`/api/artworks/${saved.id}/image`, uploadFile);
+          if (pendingRegion) {
+            saved = await applyPendingRegion(saved.id);
+          }
         } catch (uploadError) {
           logUploadError("artwork image upload", uploadError);
           setError(mapUploadError(uploadError, "upload"));
@@ -240,7 +270,7 @@ export function ProgressiveArtworkForm({
     <div
       className={cn(
         compact ? "space-y-3" : "space-y-4",
-        isQuickCapture && "pb-2"
+        isQuickCapture && "pb-28"
       )}
     >
       {!isQuickCapture ? (
@@ -263,6 +293,10 @@ export function ProgressiveArtworkForm({
             selectedFile={photo}
             disabled={busy}
             onRemove={photo ? clearPhoto : undefined}
+            onSetArtworkArea={
+              photo && previewUrl ? () => setRegionOpen(true) : undefined
+            }
+            artworkAreaSet={Boolean(pendingRegion)}
             onSelect={(file) => {
               const uploadError = validateArtworkUploadFile(file);
               if (uploadError) {
@@ -271,6 +305,7 @@ export function ProgressiveArtworkForm({
                 return;
               }
               setError(null);
+              setPendingRegion(null);
               setPhoto(file);
             }}
           />
@@ -291,9 +326,20 @@ export function ProgressiveArtworkForm({
       ) : (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            You can set the artwork area, run AI research, and find an official image after
-            saving.
+            AI research and official image lookup are on the artwork page after you save.
           </p>
+          {photo && previewUrl ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-9 w-full justify-start"
+              disabled={busy}
+              onClick={() => setRegionOpen(true)}
+            >
+              {pendingRegion ? "Edit artwork area" : "Set artwork area"}
+            </Button>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="artwork-artist">Artist</Label>
             <Input
@@ -312,6 +358,15 @@ export function ProgressiveArtworkForm({
               placeholder="Optional"
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="artwork-medium">Medium</Label>
+            <Input
+              id="artwork-medium"
+              value={medium}
+              onChange={(event) => setMedium(event.target.value)}
+              placeholder="Optional — e.g. Oil on canvas"
+            />
+          </div>
           <MuseumAutocomplete
             id="artwork-museum"
             label="Museum / gallery room"
@@ -319,6 +374,17 @@ export function ProgressiveArtworkForm({
             onValueChange={setMuseumGallery}
             placeholder="Optional — e.g. West Building"
           />
+          <div className="space-y-2">
+            <Label htmlFor="artwork-notes">Notes</Label>
+            <Textarea
+              id="artwork-notes"
+              value={personalNotes}
+              onChange={(event) => setPersonalNotes(event.target.value)}
+              placeholder="Optional — impressions, wall text, etc."
+              rows={3}
+              className="min-h-[4.5rem] resize-y"
+            />
+          </div>
         </div>
       )}
 
@@ -332,7 +398,7 @@ export function ProgressiveArtworkForm({
 
       {isQuickCapture ? (
         <div
-          className="sticky bottom-0 -mx-4 border-t border-border bg-popover px-4 pt-3"
+          className="sticky bottom-0 -mx-4 border-t border-border bg-popover px-4 pt-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]"
           style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
         >
           {footer}
@@ -340,6 +406,30 @@ export function ProgressiveArtworkForm({
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">{footer}</div>
       )}
+
+      {previewUrl ? (
+        <BottomSheet
+          open={regionOpen}
+          onOpenChange={setRegionOpen}
+          title="Select artwork area"
+          description="Frame the work inside your photo. Optional — you can skip and set this later."
+          footer={null}
+        >
+          <ArtworkRegionSelector
+            imageUrl={previewUrl}
+            initialRegion={pendingRegion}
+            onSave={(region) => {
+              setPendingRegion(region);
+              setRegionOpen(false);
+            }}
+            onUseFullImage={() => {
+              setPendingRegion(null);
+              setRegionOpen(false);
+            }}
+            onSkip={() => setRegionOpen(false)}
+          />
+        </BottomSheet>
+      ) : null}
     </div>
   );
 }

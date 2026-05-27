@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, ImagePlus, Trash2 } from "lucide-react";
+import { Camera, Crop, ImagePlus, Trash2 } from "lucide-react";
 import { useRef } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 interface CameraUploadProps {
   onSelect: (file: File) => void;
   onRemove?: () => void;
+  onSetArtworkArea?: () => void;
+  artworkAreaSet?: boolean;
   disabled?: boolean;
   className?: string;
   previewUrl?: string | null;
@@ -25,6 +27,8 @@ interface CameraUploadProps {
 export function CameraUpload({
   onSelect,
   onRemove,
+  onSetArtworkArea,
+  artworkAreaSet = false,
   disabled,
   className,
   previewUrl,
@@ -69,19 +73,34 @@ export function CameraUpload({
                 {selectedFile.name} · {formatUploadFileSize(selectedFile.size)}
               </p>
             ) : null}
-            {onRemove ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="min-h-9"
-                disabled={disabled}
-                onClick={onRemove}
-              >
-                <Trash2 className="size-4" />
-                Remove photo
-              </Button>
-            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {onSetArtworkArea ? (
+                <Button
+                  type="button"
+                  variant={artworkAreaSet ? "secondary" : "outline"}
+                  size="sm"
+                  className="min-h-9"
+                  disabled={disabled}
+                  onClick={onSetArtworkArea}
+                >
+                  <Crop className="size-4" />
+                  {artworkAreaSet ? "Area set" : "Set artwork area"}
+                </Button>
+              ) : null}
+              {onRemove ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-9"
+                  disabled={disabled}
+                  onClick={onRemove}
+                >
+                  <Trash2 className="size-4" />
+                  Remove
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { mediaUrl } from "@/lib/api";
+import { resolveArtworkImageSrc } from "@/lib/api";
 import {
   clampArtworkRegion,
   DEFAULT_ARTWORK_REGION,
@@ -44,7 +44,7 @@ export function ArtworkRegionSelector({
   const dragRef = useRef<DragState | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
 
-  const resolvedUrl = mediaUrl(imageUrl);
+  const resolvedUrl = resolveArtworkImageSrc(imageUrl);
 
   const updateRegion = useCallback((next: ArtworkImageRegion) => {
     setRegion(clampArtworkRegion(next));

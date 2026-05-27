@@ -37,6 +37,14 @@ export function mediaUrl(path: string | null | undefined): string | null {
   return apiUrl(path);
 }
 
+/** Local blob/data URLs and remote paths suitable for `<img src>`. */
+export function resolveArtworkImageSrc(url: string): string {
+  if (url.startsWith("blob:") || url.startsWith("data:") || url.startsWith("http")) {
+    return url;
+  }
+  return mediaUrl(url) ?? url;
+}
+
 type ApiRequestOptions = Omit<RequestInit, "signal"> & {
   timeoutMs?: number;
 };
