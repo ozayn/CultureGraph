@@ -1,7 +1,8 @@
 "use client";
 
 import { Loader2, RefreshCw, Sparkles } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AiSuggestedAnnotations } from "@/components/artworks/ai-suggested-annotations";
 import {
@@ -16,12 +17,12 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { ResearchMetadataHints } from "@/lib/artwork-metadata";
 import { parseSuggestedAnnotations } from "@/lib/research-suggestions";
+import { useArtworkEnrichment } from "@/lib/use-artwork-enrichment";
 import type {
   AiSuggestedAnnotation,
   Annotation,
   Artwork,
   ArtworkEnrichmentStage,
-  ArtworkEnrichmentState,
   CulturalEntity,
   ResearchDraft,
 } from "@/lib/types";
@@ -45,10 +46,6 @@ interface ArtworkEnrichmentPanelProps {
   onApplyReviewReady?: (openReview: () => void) => void;
 }
 
-function isActive(status: ArtworkEnrichmentState["status"]): boolean {
-  return status === "pending" || status === "running";
-}
-
 export function ArtworkEnrichmentPanel({
   artwork,
   canEdit = true,
@@ -61,11 +58,21 @@ export function ArtworkEnrichmentPanel({
   onApplyReviewReady,
 }: ArtworkEnrichmentPanelProps) {
   const artworkId = artwork.id;
-  const [state, setState] = useState<ArtworkEnrichmentState | null>(null);
+  const pathname = usePathname();
+  const pollEnabled = pathname === `/artworks/${artworkId}`;
+  const {
+    state,
+    loading,
+    error,
+    isActive: active,
+    startEnrichment,
+  } = useArtworkEnrichment({
+    artworkId,
+    enabled: pollEnabled,
+  });
   const [suggestions, setSuggestions] = useState<AiSuggestedAnnotation[]>([]);
-  const [loading, setLoading] = useState(true);
   const [rerunning, setRerunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const autoStartedRef = useRef(false);
   const [revealed, setRevealed] = useState({
     identification: false,
     context: false,
@@ -74,7 +81,6 @@ export function ArtworkEnrichmentPanel({
   });
 
   const draft = state?.draft ?? null;
-  const active = state ? isActive(state.status) : false;
   const metadataHints = useMemo(
     () => (draft ? extractDraftMetadataHints(draft, state?.identification ?? null) : null),
     [draft, state?.identification]
@@ -88,56 +94,28 @@ export function ArtworkEnrichmentPanel({
     return null;
   }, [state]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const next = await api.get<ArtworkEnrichmentState>(
-        `/api/artworks/${artworkId}/enrichment`
-      );
-      setState(next);
-      if (next.draft?.suggested_annotations) {
-        setSuggestions(next.draft.suggested_annotations);
-      }
-      setError(next.error);
-      return next;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load AI enrichment.");
-      return null;
+  useEffect(() => {
+    if (state?.draft?.suggested_annotations) {
+      setSuggestions(state.draft.suggested_annotations);
     }
+  }, [state?.draft?.suggested_annotations]);
+
+  useEffect(() => {
+    autoStartedRef.current = false;
   }, [artworkId]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      const next = await refresh();
-      if (!cancelled) setLoading(false);
-
-      if (
-        autoFocus &&
-        canEdit &&
-        hasImage &&
-        next &&
-        next.status === "idle" &&
-        !cancelled
-      ) {
-        try {
-          await api.post(`/api/artworks/${artworkId}/enrichment`);
-          if (!cancelled) await refresh();
-        } catch {
-          // Upload handler may have already queued enrichment.
-        }
-      }
+    if (autoStartedRef.current) return;
+    if (!autoFocus || !canEdit || !hasImage || loading || !state || state.status !== "idle") {
+      return;
     }
 
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [artworkId, autoFocus, canEdit, hasImage, refresh]);
+    autoStartedRef.current = true;
+    void startEnrichment();
+  }, [autoFocus, canEdit, hasImage, loading, state, startEnrichment]);
 
   useEffect(() => {
-    if (!state || isActive(state.status)) return;
+    if (!state || active) return;
 
     const timers = [
       window.setTimeout(() => setRevealed((current) => ({ ...current, identification: true })), 80),
@@ -147,17 +125,7 @@ export function ArtworkEnrichmentPanel({
     ];
 
     return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [state?.status, state?.draft?.short_summary]);
-
-  useEffect(() => {
-    if (!active) return;
-
-    const interval = window.setInterval(() => {
-      void refresh();
-    }, 1500);
-
-    return () => window.clearInterval(interval);
-  }, [active, refresh]);
+  }, [active, state?.status, state?.draft?.short_summary]);
 
   useEffect(() => {
     onHintsChange?.(metadataHints);
@@ -165,7 +133,6 @@ export function ArtworkEnrichmentPanel({
 
   async function rerunEnrichment() {
     setRerunning(true);
-    setError(null);
     setRevealed({
       identification: false,
       context: false,
@@ -173,10 +140,7 @@ export function ArtworkEnrichmentPanel({
       lookup: false,
     });
     try {
-      await api.post(`/api/artworks/${artworkId}/enrichment`);
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not restart AI enrichment.");
+      await startEnrichment();
     } finally {
       setRerunning(false);
     }
@@ -189,14 +153,7 @@ export function ArtworkEnrichmentPanel({
       { suggested_annotations: next }
     );
     setSuggestions(saved.suggested_annotations);
-    setState((current) =>
-      current && current.draft
-        ? {
-            ...current,
-            draft: { ...current.draft, suggested_annotations: saved.suggested_annotations },
-          }
-        : current
-    );
+    // Local suggestion edits stay in panel state; next enrichment refresh will reconcile.
   }
 
   const showAmbientHeader = active || draft || loading;
