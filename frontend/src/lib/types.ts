@@ -117,6 +117,9 @@ export interface ArtworkLookupCandidate {
   medium_match?: boolean | null;
   match_reasons?: string[];
   match_tier?: "high" | "possible" | "weak";
+  identity_certainty?: number | null;
+  visual_similarity?: number | null;
+  match_explanation?: string | null;
 }
 
 export type ArtworkLookupQuerySource =
@@ -181,6 +184,17 @@ export interface ResearchDraft {
 export type IdentificationMode = "catalog_match" | "possible_match" | "style_subject";
 export type IdentificationConfidenceLevel = "high" | "medium" | "low";
 
+export interface IdentityEvidence {
+  exact_title_match?: boolean;
+  ocr_supported?: boolean;
+  artist_aligned?: boolean;
+  clip_similarity?: number | null;
+  reverse_image_similarity?: number | null;
+  museum_context_match?: boolean;
+  composition_overlap?: boolean;
+  subject_overlap?: boolean;
+}
+
 export interface VisualAnalysis {
   subject?: string | null;
   composition?: string[];
@@ -207,6 +221,11 @@ export interface ArtworkIdentification {
   suggested_artist?: string | null;
   visual_keywords?: string[];
   catalog_confidence?: number | null;
+  identity_certainty?: number | null;
+  visual_similarity?: number | null;
+  match_explanation?: string | null;
+  uncertainty_notes?: string[];
+  evidence?: IdentityEvidence | null;
 }
 
 export interface ResearchNote {

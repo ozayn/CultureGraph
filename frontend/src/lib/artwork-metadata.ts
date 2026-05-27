@@ -21,7 +21,8 @@ const PLACEHOLDER_ARTISTS = new Set([
   "artist unknown",
 ]);
 
-export const HIGH_CONFIDENCE_THRESHOLD = 0.72;
+export const HIGH_CONFIDENCE_THRESHOLD = 0.95;
+export const STRONG_CONFIDENCE_THRESHOLD = 0.80;
 export const LOW_CONFIDENCE_THRESHOLD = 0.55;
 
 export const UNKNOWN_ARTWORK_LABEL = "Unknown artwork";
@@ -246,12 +247,13 @@ export function extractResearchMetadataHints(
   if (!title && !artist && !year && !period && !medium && !notes) return null;
 
   const confidence =
+    identification?.identity_certainty ??
     identification?.catalog_confidence ??
     draft.confidence ??
     (identification?.confidence_level === "high"
       ? HIGH_CONFIDENCE_THRESHOLD
       : identification?.confidence_level === "medium"
-        ? LOW_CONFIDENCE_THRESHOLD
+        ? STRONG_CONFIDENCE_THRESHOLD
         : null);
 
   return {
@@ -278,7 +280,7 @@ export function defaultMetadataFieldChecked(
 
   const level = confidence ?? 0.65;
   if (level < LOW_CONFIDENCE_THRESHOLD) return false;
-  if (isPlaceholder(current) || !current?.trim()) return true;
+  if (isPlaceholder(current) || !current?.trim()) return level >= STRONG_CONFIDENCE_THRESHOLD;
   return level >= HIGH_CONFIDENCE_THRESHOLD;
 }
 

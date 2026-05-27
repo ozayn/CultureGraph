@@ -14,8 +14,34 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+function candidateRelationLabel(candidate: ArtworkLookupCandidate): string {
+  const identity = candidate.identity_certainty ?? candidate.confidence;
+  if (candidate.match_tier === "high" && identity >= 0.95) {
+    return "Verified match";
+  }
+  if (identity >= 0.8) {
+    return "Strong probable match";
+  }
+  if ((candidate.visual_similarity ?? 0) >= 0.35) {
+    return "Visually similar";
+  }
+  return "Related work";
+}
+
 function candidateKey(candidate: ArtworkLookupCandidate): string {
   return candidate.external_id ?? candidate.object_url ?? candidate.title;
+}
+
+function formatCandidateScores(candidate: ArtworkLookupCandidate): string {
+  const identity = candidate.identity_certainty ?? candidate.confidence;
+  const parts = [candidate.source_name];
+  if (identity != null) {
+    parts.push(`identity ${Math.round(identity * 100)}%`);
+  }
+  if (candidate.visual_similarity != null) {
+    parts.push(`visual ${Math.round(candidate.visual_similarity * 100)}%`);
+  }
+  return parts.join(" · ");
 }
 
 interface LookupCandidateListProps {
@@ -217,20 +243,20 @@ function CandidateGroup({
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {candidate.source_name}
-                  {candidate.confidence != null
-                    ? ` · ${Math.round(candidate.confidence * 100)}% similarity`
-                    : null}
-                </p>
+                <p className="text-xs text-muted-foreground">{formatCandidateScores(candidate)}</p>
                 {candidate.match_reasons && candidate.match_reasons.length > 0 ? (
                   <p className="text-[11px] text-muted-foreground">
                     {candidate.match_reasons.slice(0, 3).join(" · ")}
                   </p>
                 ) : null}
-                {tier === "high" ? (
-                  <p className="text-[11px] font-medium text-primary">High confidence match</p>
+                {candidate.match_explanation ? (
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    {candidate.match_explanation}
+                  </p>
                 ) : null}
+                <p className="text-[11px] font-medium text-primary">
+                  {candidateRelationLabel(candidate)}
+                </p>
               </div>
             </div>
 

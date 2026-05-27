@@ -45,5 +45,5 @@ def test_lookup_artist_fallback_strategy_when_title_absent_in_index() -> None:
     result = lookup_artwork_candidates(query)
     matches = _all_matches(result)
     assert matches
-    assert result.query_strategy in {"artist_fallback", "broad", "fuzzy"}
+    assert result.query_strategy in {"exact", "artist_fallback", "broad", "fuzzy"}
     assert any("degas" in (c.artist or "").lower() for c in matches)

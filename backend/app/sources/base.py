@@ -34,3 +34,6 @@ class ArtworkLookupCandidate:
     medium_match: bool | None = None
     match_reasons: tuple[str, ...] = ()
     match_tier: str = "weak"
+    identity_certainty: float | None = None
+    visual_similarity: float | None = None
+    match_explanation: str | None = None

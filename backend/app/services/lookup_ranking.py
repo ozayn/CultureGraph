@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Literal
 
+from app.services.confidence_calibration import (
+    STRONG_IDENTITY_MIN,
+    calibrate_candidate_confidence,
+)
 from app.services.lookup_medium import (
     build_match_reasons,
     classify_medium,
@@ -22,8 +26,7 @@ from app.sources.matching import (
 
 MatchTier = Literal["high", "possible", "weak"]
 
-HIGH_CONFIDENCE_MIN = 0.85
-POSSIBLE_CONFIDENCE_MIN = 0.70
+POSSIBLE_CONFIDENCE_MIN = STRONG_IDENTITY_MIN
 
 STRATEGY_THRESHOLDS: dict[LookupStrategy, dict[str, float]] = {
     "exact": {"low": 0.48, "high": 0.70, "min_title": 0.32, "min_artist": 0.48},
@@ -34,18 +37,23 @@ STRATEGY_THRESHOLDS: dict[LookupStrategy, dict[str, float]] = {
 
 
 def confidence_to_match_tier(
-    confidence: float,
+    identity_certainty: float,
     *,
     title_score: float,
     artist_score: float,
     attribution: bool,
+    verified: bool,
 ) -> MatchTier:
-    if confidence >= HIGH_CONFIDENCE_MIN and title_score >= 0.45:
+    if identity_certainty >= 0.95 and verified:
         return "high"
-    if confidence >= POSSIBLE_CONFIDENCE_MIN:
+    if identity_certainty >= STRONG_IDENTITY_MIN:
         if attribution:
             return "weak"
         if title_score < 0.22 and artist_score < 0.65:
+            return "weak"
+        return "possible"
+    if identity_certainty >= 0.60:
+        if attribution:
             return "weak"
         return "possible"
     return "weak"
@@ -133,15 +141,6 @@ def rank_lookup_candidates(
         if has_title_query and strategy == "exact" and title_score < 0.28 and artist_score < 0.72:
             continue
 
-        if title_score >= 0.88:
-            score = min(score + 0.12, 0.98)
-        elif title_score >= 0.65:
-            score = min(score + 0.06, 0.95)
-        if artist_score >= 0.78 and artist_text and not is_attribution_artist(entry.get("artist") or ""):
-            score = min(score + 0.05, 0.98)
-        elif is_attribution_artist(entry.get("artist") or ""):
-            score = min(score, 0.62)
-
         candidate_medium_type = classify_medium(candidate.medium)
         if medium_filter in {"2d", "3d"} and candidate_medium_type != medium_filter:
             continue
@@ -151,7 +150,7 @@ def rank_lookup_candidates(
             medium_match = mediums_match(expected_medium, candidate_medium_type)
             score = min(
                 max(score + medium_score_adjustment(expected_medium, candidate_medium_type), 0.0),
-                0.98,
+                0.94,
             )
             medium_mismatch = medium_match is False
         else:
@@ -159,16 +158,6 @@ def rank_lookup_candidates(
             medium_mismatch = False
 
         attribution = is_attribution_artist(entry.get("artist") or "")
-        match_tier = confidence_to_match_tier(
-            score,
-            title_score=title_score,
-            artist_score=artist_score,
-            attribution=attribution,
-        )
-        if strategy in {"artist_fallback", "broad"} and artist_score >= 0.78 and title_score < 0.35:
-            match_tier = "possible" if score >= POSSIBLE_CONFIDENCE_MIN else "weak"
-        low_confidence = match_tier == "weak" or medium_mismatch
-
         match_reasons = build_match_reasons(
             title_score=title_score,
             artist_score=artist_score,
@@ -181,6 +170,29 @@ def rank_lookup_candidates(
                 *match_reasons,
                 medium_type_label(candidate_medium_type),
             ][:5]
+
+        calibrated = calibrate_candidate_confidence(
+            title_score=title_score,
+            artist_score=artist_score,
+            text_score=score,
+            candidate_title=candidate.title,
+            candidate_artist=candidate.artist,
+            search_title=search_text,
+            search_artist=artist_text,
+            has_title_query=has_title_query,
+            match_reasons=match_reasons,
+            medium_mismatch=medium_mismatch,
+            attribution=attribution,
+        )
+        score = calibrated.identity_certainty
+        match_tier = confidence_to_match_tier(
+            calibrated.identity_certainty,
+            title_score=title_score,
+            artist_score=artist_score,
+            attribution=attribution,
+            verified=calibrated.evidence.exact_title_match or calibrated.evidence.ocr_supported,
+        )
+        low_confidence = calibrated.low_confidence or match_tier == "weak" or medium_mismatch
 
         enriched.append(
             (
@@ -200,14 +212,17 @@ def rank_lookup_candidates(
                     object_url=candidate.object_url,
                     accession_number=candidate.accession_number,
                     source_name=candidate.source_name,
-                    confidence=round(min(score, 0.98), 2),
+                    confidence=calibrated.confidence,
                     rights_label=candidate.rights_label,
                     external_id=candidate.external_id,
                     low_confidence=low_confidence,
                     medium_type=candidate_medium_type,
                     medium_match=medium_match,
-                    match_reasons=tuple(match_reasons),
+                    match_reasons=calibrated.match_reasons,
                     match_tier=match_tier,
+                    identity_certainty=calibrated.identity_certainty,
+                    visual_similarity=calibrated.visual_similarity,
+                    match_explanation=calibrated.match_explanation,
                 ),
             )
         )

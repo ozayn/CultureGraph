@@ -5,8 +5,8 @@ import type { ArtworkIdentification } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const MODE_LABELS: Record<ArtworkIdentification["identification_mode"], string> = {
-  catalog_match: "Collection match",
-  possible_match: "Possible matches",
+  catalog_match: "Verified collection match",
+  possible_match: "Related / possible matches",
   style_subject: "Style & subject analysis",
 };
 
@@ -21,9 +21,14 @@ interface ArtworkIdentificationPanelProps {
 }
 
 function confidenceLabel(level: ArtworkIdentification["confidence_level"]): string {
-  if (level === "high") return "High confidence";
-  if (level === "medium") return "Moderate confidence";
-  return "Low confidence — verify manually";
+  if (level === "high") return "Verified identity";
+  if (level === "medium") return "Strong probable match";
+  return "Visually similar — verify manually";
+}
+
+function formatPercent(value: number | null | undefined): string | null {
+  if (value == null) return null;
+  return `${Math.round(value * 100)}%`;
 }
 
 export function ArtworkIdentificationPanel({
@@ -39,6 +44,10 @@ export function ArtworkIdentificationPanel({
     top_candidate,
     alternative_matches = [],
     match_reasons = [],
+    match_explanation,
+    uncertainty_notes = [],
+    identity_certainty,
+    visual_similarity,
     suggested_title,
     suggested_artist,
   } = identification;
@@ -63,6 +72,37 @@ export function ArtworkIdentificationPanel({
       </div>
 
       <p className="text-sm leading-relaxed text-foreground">{display_summary}</p>
+
+      {(identity_certainty != null || visual_similarity != null) && (
+        <dl className="grid gap-2 text-xs sm:grid-cols-2">
+          {identity_certainty != null ? (
+            <div>
+              <dt className="font-medium text-muted-foreground">Identity certainty</dt>
+              <dd>{formatPercent(identity_certainty)}</dd>
+            </div>
+          ) : null}
+          {visual_similarity != null ? (
+            <div>
+              <dt className="font-medium text-muted-foreground">Visual similarity</dt>
+              <dd>{formatPercent(visual_similarity)}</dd>
+            </div>
+          ) : null}
+        </dl>
+      )}
+
+      {match_explanation ? (
+        <p className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm leading-relaxed text-muted-foreground">
+          {match_explanation}
+        </p>
+      ) : null}
+
+      {uncertainty_notes.length > 0 ? (
+        <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+          {uncertainty_notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      ) : null}
 
       {showExactSuggestion ? (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm">
@@ -145,6 +185,22 @@ export function ArtworkIdentificationPanel({
   );
 }
 
+function candidateRelationLabel(
+  candidate: NonNullable<ArtworkIdentification["top_candidate"]>
+): string {
+  const identity = candidate.identity_certainty ?? candidate.confidence;
+  if (candidate.match_tier === "high" && identity >= 0.95) {
+    return "Verified match";
+  }
+  if (identity >= 0.8) {
+    return "Strong probable match";
+  }
+  if ((candidate.visual_similarity ?? 0) >= 0.35) {
+    return "Visually similar";
+  }
+  return "Related work";
+}
+
 function CandidatePreview({
   candidate,
   compact = false,
@@ -152,6 +208,9 @@ function CandidatePreview({
   candidate: NonNullable<ArtworkIdentification["top_candidate"]>;
   compact?: boolean;
 }) {
+  const identity = candidate.identity_certainty ?? candidate.confidence;
+  const visual = candidate.visual_similarity;
+
   return (
     <div
       className={cn(
@@ -171,10 +230,15 @@ function CandidatePreview({
         ) : null}
         <p className="text-xs text-muted-foreground">
           {candidate.source_name}
-          {candidate.confidence != null
-            ? ` · ${Math.round(candidate.confidence * 100)}% match`
-            : null}
+          {identity != null ? ` · identity ${Math.round(identity * 100)}%` : null}
+          {visual != null ? ` · visual ${Math.round(visual * 100)}%` : null}
         </p>
+        <p className="text-[11px] text-muted-foreground">{candidateRelationLabel(candidate)}</p>
+        {candidate.match_explanation ? (
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            {candidate.match_explanation}
+          </p>
+        ) : null}
       </div>
     </div>
   );

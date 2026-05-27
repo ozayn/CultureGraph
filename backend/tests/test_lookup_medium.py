@@ -57,10 +57,10 @@ def test_degas_pastel_query_ranks_2d_above_little_dancer_sculpture() -> None:
         source="nga",
     )
     result = lookup_artwork_candidates(query)
-    assert result.candidates
-
-    titles = [candidate.title for candidate in result.candidates]
     matches = _all_matches(result)
+    assert matches
+
+    titles = [candidate.title for candidate in matches]
     match_titles = [candidate.title for candidate in matches]
     assert "Little Dancer Aged Fourteen" in match_titles
     assert any("Girl in Red" == title or "Woman Ironing" == title for title in titles)

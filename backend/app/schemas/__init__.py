@@ -491,6 +491,20 @@ class ArtworkLookupCandidateRead(BaseModel):
     medium_match: bool | None = None
     match_reasons: list[str] = Field(default_factory=list)
     match_tier: Literal["high", "possible", "weak"] = "weak"
+    identity_certainty: float | None = Field(default=None, ge=0.0, le=1.0)
+    visual_similarity: float | None = Field(default=None, ge=0.0, le=1.0)
+    match_explanation: str | None = None
+
+
+class IdentityEvidenceRead(BaseModel):
+    exact_title_match: bool = False
+    ocr_supported: bool = False
+    artist_aligned: bool = False
+    clip_similarity: float | None = Field(default=None, ge=0.0, le=1.0)
+    reverse_image_similarity: float | None = Field(default=None, ge=0.0, le=1.0)
+    museum_context_match: bool = False
+    composition_overlap: bool = False
+    subject_overlap: bool = False
 
 
 class ArtworkLookupResponse(BaseModel):
@@ -532,6 +546,11 @@ class ArtworkIdentificationRead(BaseModel):
     suggested_artist: str | None = None
     visual_keywords: list[str] = Field(default_factory=list)
     catalog_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    identity_certainty: float | None = Field(default=None, ge=0.0, le=1.0)
+    visual_similarity: float | None = Field(default=None, ge=0.0, le=1.0)
+    match_explanation: str | None = None
+    uncertainty_notes: list[str] = Field(default_factory=list)
+    evidence: IdentityEvidenceRead | None = None
 
 
 class ArtworkEnrichmentRead(BaseModel):
