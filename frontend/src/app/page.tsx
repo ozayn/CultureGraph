@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ButtonLink } from "@/components/ui/button-link";
 import { api } from "@/lib/api";
 import type { Visit } from "@/lib/types";
-import { format } from "date-fns";
+import { formatCalendarDate } from "@/lib/calendar-date";
 
 export default async function HomePage() {
   let visits: Visit[] = [];
@@ -66,7 +66,7 @@ export default async function HomePage() {
                   <p className="font-medium">{visit.museum_name}</p>
                   <p className="mt-1 text-sm text-muted-foreground">{visit.city}</p>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    {format(new Date(visit.visit_date), "MMMM d, yyyy")}
+                    {formatCalendarDate(visit.visit_date)}
                   </p>
                 </Link>
               </li>

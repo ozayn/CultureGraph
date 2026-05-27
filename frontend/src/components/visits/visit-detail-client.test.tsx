@@ -42,7 +42,7 @@ const visit = {
   id: 1,
   museum_name: "National Gallery of Art",
   city: "Washington, DC",
-  visit_date: "2026-05-25",
+  visit_date: "2026-05-23",
   notes: null,
   created_at: "2026-05-25T12:00:00Z",
 };
@@ -97,6 +97,18 @@ const artworks = [
 ];
 
 describe("VisitDetailClient artwork delete", () => {
+  it("renders visit calendar date without timezone shift", async () => {
+    render(
+      <AuthProvider googleConfigured={false}>
+        <VisitDetailClient visit={visit} artworks={artworks} culturalEntities={[]} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/May 23, 2026/)).toBeInTheDocument();
+    });
+  });
+
   it("shows delete control for signed-in admin and removes artwork after confirm", async () => {
     deleteMock.mockResolvedValueOnce(undefined);
 

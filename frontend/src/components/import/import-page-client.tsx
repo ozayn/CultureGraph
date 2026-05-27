@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, IMPORT_REQUEST_TIMEOUT_MS } from "@/lib/api";
+import { todayCalendarDate } from "@/lib/calendar-date";
 import { useAuth } from "@/contexts/auth-context";
 import { mapImportRequestError } from "@/lib/import-errors";
 import {
@@ -118,7 +119,7 @@ export function ImportPageClient() {
   const [notesText, setNotesText] = useState("");
   const [museumName, setMuseumName] = useState("Smithsonian American Art Museum");
   const [city, setCity] = useState("Washington, DC");
-  const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0, 10));
+  const [visitDate, setVisitDate] = useState(() => todayCalendarDate());
 
   const [saveVisit, setSaveVisit] = useState(true);
   const [visitSummary, setVisitSummary] = useState("");

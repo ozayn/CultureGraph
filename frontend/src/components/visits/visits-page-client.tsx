@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { format } from "date-fns";
+import { formatCalendarDate } from "@/lib/calendar-date";
 
 import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { VisitForm } from "@/components/visits/visit-form";
@@ -51,7 +51,7 @@ export function VisitsPageClient({ visits, showForm, error }: VisitsPageClientPr
                 >
                   <p className="font-medium">{visit.museum_name}</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {visit.city} · {format(new Date(visit.visit_date), "MMMM d, yyyy")}
+                    {visit.city} · {formatCalendarDate(visit.visit_date)}
                   </p>
                   {visit.notes ? (
                     <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">

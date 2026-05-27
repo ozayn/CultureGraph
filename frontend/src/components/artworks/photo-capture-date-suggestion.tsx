@@ -1,10 +1,10 @@
 "use client";
 
-import { format } from "date-fns";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { formatCalendarDate, isoToCalendarDate } from "@/lib/calendar-date";
 import type { Artwork, Visit } from "@/lib/types";
 
 interface PhotoCaptureDateSuggestionProps {
@@ -15,12 +15,13 @@ interface PhotoCaptureDateSuggestionProps {
 }
 
 function formatCaptureDate(iso: string): string {
-  return format(new Date(iso), "MMMM d, yyyy");
+  const calendar = isoToCalendarDate(iso);
+  if (calendar) return formatCalendarDate(calendar);
+  return iso;
 }
 
 function captureDateOnly(iso: string): string {
-  const match = iso.match(/^(\d{4}-\d{2}-\d{2})/);
-  return match ? match[1] : iso.slice(0, 10);
+  return isoToCalendarDate(iso) ?? iso.slice(0, 10);
 }
 
 export function PhotoCaptureDateSuggestion({

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
+import { todayCalendarDate } from "@/lib/calendar-date";
 import type { Visit } from "@/lib/types";
 
 interface VisitFormProps {
@@ -29,7 +30,7 @@ export function VisitForm({
   const [museumName, setMuseumName] = useState(visit?.museum_name ?? "");
   const [city, setCity] = useState(visit?.city ?? "");
   const [visitDate, setVisitDate] = useState(
-    visit?.visit_date ?? new Date().toISOString().slice(0, 10)
+    visit?.visit_date ?? todayCalendarDate()
   );
   const [notes, setNotes] = useState(visit?.notes ?? "");
 

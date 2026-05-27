@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { format } from "date-fns";
+import { formatCalendarDate } from "@/lib/calendar-date";
 import { Plus } from "lucide-react";
 
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
@@ -212,7 +212,7 @@ export function VisitDetailClient({
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                {format(new Date(visit.visit_date), "MMMM d, yyyy")} · {visit.city}
+                {formatCalendarDate(visit.visit_date)} · {visit.city}
               </p>
               <h1 className="font-heading text-2xl font-normal sm:text-3xl">{visit.museum_name}</h1>
             </div>
