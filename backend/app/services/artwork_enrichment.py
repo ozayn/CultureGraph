@@ -31,9 +31,7 @@ from app.services.research import (
     serialize_research_draft,
 )
 from app.services.visual_analysis import VisualAnalysis
-from app.sources.nga import should_search_nga
 from app.sources.routing import resolve_lookup_sources, sources_searched_labels
-from app.sources.smithsonian import should_search_smithsonian
 from app.schemas import ArtworkLookupCandidateRead
 
 logger = logging.getLogger(__name__)
@@ -89,12 +87,9 @@ def _build_lookup_response(db: Session, artwork: Artwork, draft: ResearchDraft) 
     elif not candidates:
         if not built.query_used.strip():
             notice = "Add a title, label text, or clearer photo to improve collection matching."
-        elif should_search_smithsonian(built.query) and not should_search_nga(built.query):
-            notice = "No close matches found in the Smithsonian Open Access index."
-        elif should_search_nga(built.query) and not should_search_smithsonian(built.query):
-            notice = "No close matches found in the National Gallery open collection index."
         else:
-            notice = "No close matches found in the open collection indexes."
+            searched = ", ".join(sources_searched) if sources_searched else "open collections"
+            notice = f"No close matches found in {searched}."
 
     return ArtworkLookupResponse(
         candidates=[

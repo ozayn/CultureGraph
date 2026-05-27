@@ -18,6 +18,12 @@ ALLOWED_IMAGE_HOST_SUFFIXES = (
     "si.edu",
     "smithsonian.edu",
     "americanart.si.edu",
+    "metmuseum.org",
+    "images.metmuseum.org",
+    "artic.edu",
+    "www.artic.edu",
+    "upload.wikimedia.org",
+    "commons.wikimedia.org",
 )
 
 USER_AGENT = "CultureGraph/1.0 (+https://github.com/ozayn/CultureGraph)"

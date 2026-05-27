@@ -30,8 +30,6 @@ from app.services.image_upload import (
     remove_artwork_image_files,
 )
 from app.services.record_cleanup import delete_artwork as delete_artwork_record
-from app.sources.nga import should_search_nga
-from app.sources.smithsonian import should_search_smithsonian
 
 logger = logging.getLogger(__name__)
 
@@ -135,12 +133,9 @@ def lookup_artwork_image(
     elif not candidates:
         if not built.query_used.strip():
             notice = "Add a title or artist to improve collection matching."
-        elif should_search_smithsonian(query) and not should_search_nga(query):
-            notice = "No close matches found in the Smithsonian Open Access index."
-        elif should_search_nga(query) and not should_search_smithsonian(query):
-            notice = "No close matches found in the National Gallery open collection index."
         else:
-            notice = "No close matches found in the open collection indexes."
+            searched = ", ".join(sources_searched) if sources_searched else "open collections"
+            notice = f"No close matches found in {searched}."
 
     return ArtworkLookupResponse(
         candidates=[

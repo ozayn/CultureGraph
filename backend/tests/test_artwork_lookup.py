@@ -499,9 +499,40 @@ async def test_apply_official_image_persists_url_and_catalog_metadata(
 
 
 @pytest.mark.asyncio
-async def test_lookup_image_unsupported_museum_returns_empty(
+async def test_lookup_image_met_museum_searches_met_source(
     auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from app.sources.base import ArtworkLookupCandidate
+
+    def fake_met(_query):
+        return [
+            (
+                0.8,
+                {"title": "Test Met Work", "artist": "Artist"},
+                ArtworkLookupCandidate(
+                    title="Test Met Work",
+                    artist="Artist",
+                    date="1900",
+                    medium="Oil",
+                    image_url="https://images.metmuseum.org/example.jpg",
+                    image_thumbnail_url="https://images.metmuseum.org/example-thumb.jpg",
+                    object_url="https://www.metmuseum.org/art/collection/search/1",
+                    accession_number="1.1",
+                    source_name="The Metropolitan Museum of Art",
+                    confidence=0.8,
+                    rights_label="Public Domain",
+                    external_id="1",
+                ),
+            )
+        ]
+
+    monkeypatch.setattr("app.services.lookup_stages.collect_met_scored_candidates", fake_met)
+    monkeypatch.setattr("app.services.lookup_stages.collect_nga_scored_candidates", lambda _q: [])
+    monkeypatch.setattr("app.services.lookup_stages.collect_smithsonian_scored_candidates", lambda _q: [])
+    monkeypatch.setattr("app.services.lookup_stages.collect_aic_scored_candidates", lambda _q: [])
+    monkeypatch.setattr("app.services.lookup_stages.collect_wikimedia_scored_candidates", lambda _q: [])
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         visit_response = await client.post(
@@ -510,6 +541,42 @@ async def test_lookup_image_unsupported_museum_returns_empty(
             json={
                 "museum_name": "The Met",
                 "city": "New York, NY",
+                "visit_date": "2026-05-25",
+            },
+        )
+        visit_id = visit_response.json()["id"]
+
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={"title": "Test Met Work", "artist": "Artist", "visit_id": visit_id},
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        lookup_response = await client.get(
+            f"/api/artworks/{artwork_id}/lookup-image",
+            headers=auth_headers,
+        )
+
+    assert lookup_response.status_code == 200
+    payload = lookup_response.json()
+    assert payload["candidates"]
+    assert "The Metropolitan Museum of Art" in payload["sources_searched"]
+    assert payload["candidates"][0]["object_url"]
+
+
+@pytest.mark.asyncio
+async def test_lookup_image_unsupported_museum_searches_all_open_collections(
+    auth_headers: dict[str, str],
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        visit_response = await client.post(
+            "/api/visits",
+            headers=auth_headers,
+            json={
+                "museum_name": "British Museum",
+                "city": "London",
                 "visit_date": "2026-05-25",
             },
         )
@@ -529,8 +596,7 @@ async def test_lookup_image_unsupported_museum_returns_empty(
 
     assert lookup_response.status_code == 200
     payload = lookup_response.json()
-    assert payload["candidates"] == []
-    assert payload["sources_searched"] == []
+    assert len(payload["sources_searched"]) >= 2
 
 
 @pytest.mark.asyncio

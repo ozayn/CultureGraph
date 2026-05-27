@@ -336,6 +336,7 @@ export function ArtworkEnrichmentPanel({
           <LookupCandidateList
             artwork={artwork}
             lookup={state.lookup}
+            identification={state.identification ?? null}
             canEdit={canEdit}
             onApplied={(updated) => onArtworkUpdated?.(updated)}
           />

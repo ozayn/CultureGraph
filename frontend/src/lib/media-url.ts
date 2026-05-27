@@ -5,6 +5,10 @@ const MUSEUM_IMAGE_HOST_SUFFIXES = [
   "si.edu",
   "smithsonian.edu",
   "americanart.si.edu",
+  "metmuseum.org",
+  "images.metmuseum.org",
+  "artic.edu",
+  "upload.wikimedia.org",
 ] as const;
 
 const LOCAL_PATH_MARKERS = ["/Users/", "/home/", "file://", "C:\\", "D:\\"];
