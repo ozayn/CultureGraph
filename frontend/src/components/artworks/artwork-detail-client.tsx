@@ -18,6 +18,7 @@ import {
 import { AuthGate } from "@/components/auth/auth-gate";
 import { SignInInlineHint } from "@/components/auth/sign-in-inline-hint";
 import { ArtworkRegionSheet } from "@/components/artworks/artwork-region-sheet";
+import { ArtworkImageDebug } from "@/components/artworks/artwork-image-debug";
 import { ArtworkImage, ArtworkImagePlaceholder } from "@/components/artworks/artwork-image";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
@@ -29,7 +30,7 @@ import { Button } from "@/components/ui/button";
 import { CameraUpload } from "@/components/ui/camera-upload";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
-import { displayImageUrl } from "@/lib/media-url";
+import { artworkDisplaySrc, pickArtworkDisplayRaw } from "@/lib/thumbnails";
 import { artworkDisplayTitle } from "@/lib/artwork-metadata";
 import { artworkHasImageRegion } from "@/lib/artwork-region";
 import { useAuth } from "@/contexts/auth-context";
@@ -97,11 +98,9 @@ export function ArtworkDetailClient({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const resolvedDisplayUrl = useMemo(
-    () => displayImageUrl(artwork.image_url),
-    [artwork.image_url]
-  );
-  const hasImage = Boolean(artwork.image_url);
+  const displayRaw = useMemo(() => pickArtworkDisplayRaw(artwork), [artwork]);
+  const resolvedDisplayUrl = useMemo(() => artworkDisplaySrc(artwork), [artwork]);
+  const hasImage = Boolean(displayRaw);
 
   const openApplyReviewRef = useRef<(() => void) | null>(null);
   const [researchHints, setResearchHints] = useState<ResearchMetadataHints | null>(null);
@@ -258,15 +257,17 @@ export function ArtworkDetailClient({
       <ArtworkImageLookupDebug
         canEdit={canEdit}
         hasImage={hasImage}
-        imageUrl={artwork.image_url}
+        imageUrl={displayRaw}
         lookupMounted
       />
+
+      <ArtworkImageDebug artwork={artwork} />
 
       <section className="overflow-hidden bg-[#f3efe8] sm:rounded-xl sm:border sm:border-border">
         {hasImage ? (
           <>
             <ArtworkImage
-              imageUrl={artwork.image_url}
+              imageUrl={displayRaw}
               imgClassName="max-h-[min(70dvh,640px)]"
               fallback={
                 <div className="flex min-h-48 flex-col items-center justify-center gap-2 px-6 py-10 text-center text-sm text-muted-foreground">

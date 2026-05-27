@@ -1,6 +1,6 @@
 import { getAuthToken } from "@/lib/auth-storage";
 import { mapGoogleSignInError, parseApiErrorDetail } from "@/lib/auth-errors";
-import { apiUrl, getApiBase } from "@/lib/api-config";
+import { apiUrl } from "@/lib/api-config";
 import { displayImageUrl, resolveImageUrl } from "@/lib/media-url";
 
 export { apiUrl, getApiBase } from "@/lib/api-config";

@@ -132,6 +132,8 @@ class ArtworkBase(BaseModel):
     captured_at: datetime | None = None
     captured_date_source: str = "none"
     catalog_source: str | None = None
+    catalog_image_url: str | None = None
+    catalog_thumbnail_url: str | None = None
     catalog_object_url: str | None = None
     catalog_accession_number: str | None = None
     catalog_rights_label: str | None = None
@@ -157,6 +159,10 @@ class ArtworkUpdate(BaseModel):
     image_url: str | None = None
     image_thumbnail_url: str | None = None
     catalog_source: str | None = None
+    catalog_image_url: str | None = None
+    catalog_thumbnail_url: str | None = None
+    catalog_image_url: str | None = None
+    catalog_thumbnail_url: str | None = None
     catalog_object_url: str | None = None
     catalog_accession_number: str | None = None
     catalog_rights_label: str | None = None
@@ -174,6 +180,15 @@ class ArtworkRead(ArtworkBase):
 
     id: int
     created_at: datetime
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def normalize_public_image_urls(cls, value, handler):  # type: ignore[no-untyped-def]
+        from app.services.artwork_image_urls import normalize_artwork_image_fields
+
+        parsed = handler(value)
+        normalized = normalize_artwork_image_fields(parsed.model_dump())
+        return cls.model_construct(**normalized)
 
 
 class ArtworkImageRegionUpdate(BaseModel):

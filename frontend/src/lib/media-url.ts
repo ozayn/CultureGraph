@@ -7,6 +7,8 @@ const MUSEUM_IMAGE_HOST_SUFFIXES = [
   "americanart.si.edu",
 ] as const;
 
+const LOCAL_PATH_MARKERS = ["/Users/", "/home/", "file://", "C:\\", "D:\\"];
+
 function encodeMediaUrl(url: string): string {
   try {
     return new URL(url).href;
@@ -24,15 +26,34 @@ function coerceBrowserSafeUrl(url: string): string {
   return url;
 }
 
+export function isInvalidImageReference(path: string | null | undefined): boolean {
+  if (!path?.trim()) return true;
+  const trimmed = path.trim();
+  if (trimmed.startsWith("blob:") || trimmed.startsWith("data:")) return false;
+  if (/^https?:\/\//i.test(trimmed)) return false;
+  const normalized = trimmed.replace(/\\/g, "/");
+  if (normalized.startsWith("/uploads/") || normalized.startsWith("uploads/")) {
+    return false;
+  }
+  return LOCAL_PATH_MARKERS.some((marker) => trimmed.includes(marker));
+}
+
+function normalizeUploadPath(trimmed: string): string | null {
+  const normalized = trimmed.replace(/\\/g, "/");
+  if (normalized.startsWith("/uploads/")) return normalized;
+  if (normalized.startsWith("uploads/")) return `/${normalized}`;
+  return null;
+}
+
 /**
  * Resolve artwork/entity image paths to a browser-loadable absolute URL.
  * - `/uploads/...` → prefixed with the public API base URL
- * - `https://...` museum URLs → used as-is (optionally proxied for display)
+ * - `https://...` → used as-is (optionally proxied for display)
  */
 export function resolveImageUrl(path: string | null | undefined): string | null {
-  if (!path?.trim()) return null;
+  if (isInvalidImageReference(path)) return null;
 
-  const trimmed = path.trim();
+  const trimmed = path!.trim();
   if (trimmed.startsWith("blob:") || trimmed.startsWith("data:")) {
     return trimmed;
   }
@@ -45,12 +66,12 @@ export function resolveImageUrl(path: string | null | undefined): string | null 
     return coerceBrowserSafeUrl(encodeMediaUrl(trimmed));
   }
 
-  const normalizedPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  if (normalizedPath.startsWith("/uploads/")) {
-    return coerceBrowserSafeUrl(encodeMediaUrl(apiUrl(normalizedPath)));
+  const uploadPath = normalizeUploadPath(trimmed);
+  if (uploadPath) {
+    return coerceBrowserSafeUrl(encodeMediaUrl(apiUrl(uploadPath)));
   }
 
-  return coerceBrowserSafeUrl(encodeMediaUrl(apiUrl(normalizedPath)));
+  return null;
 }
 
 /** @deprecated Use resolveImageUrl */
@@ -91,7 +112,7 @@ function withMuseumProxy(resolved: string): string {
   return resolved;
 }
 
-/** Card thumbnails — thumbnail_url preferred by caller. */
+/** Card thumbnails — pass the first valid raw URL from pickArtworkThumbnailRaw. */
 export function thumbnailDisplayUrl(path: string | null | undefined): string | null {
   const resolved = resolveImageUrl(path);
   if (!resolved) return null;

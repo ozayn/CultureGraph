@@ -61,6 +61,8 @@ const artwork: Artwork = {
   captured_at: null,
   captured_date_source: "none",
   catalog_source: null,
+  catalog_image_url: null,
+  catalog_thumbnail_url: null,
   catalog_object_url: null,
   catalog_accession_number: null,
   catalog_rights_label: null,

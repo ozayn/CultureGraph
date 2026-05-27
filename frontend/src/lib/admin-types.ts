@@ -35,6 +35,8 @@ export interface AdminArtworkRecord {
   year_period: string | null;
   image_url: string | null;
   image_thumbnail_url: string | null;
+  catalog_image_url?: string | null;
+  catalog_thumbnail_url?: string | null;
   catalog_source: string | null;
   created_at: string;
 }

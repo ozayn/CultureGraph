@@ -8,6 +8,7 @@ vi.mock("@/lib/api-config", () => ({
 
 import {
   displayImageUrl,
+  isInvalidImageReference,
   resolveImageUrl,
   shouldProxyExternalImage,
   thumbnailDisplayUrl,
@@ -41,6 +42,15 @@ describe("resolveImageUrl", () => {
   it("returns null for empty values", () => {
     expect(resolveImageUrl(null)).toBeNull();
     expect(resolveImageUrl("  ")).toBeNull();
+  });
+
+  it("rejects local filesystem paths", () => {
+    expect(isInvalidImageReference("/Users/oz/photo.jpg")).toBe(true);
+    expect(resolveImageUrl("/Users/oz/photo.jpg")).toBeNull();
+  });
+
+  it("rejects unknown relative paths", () => {
+    expect(resolveImageUrl("var/data/photo.jpg")).toBeNull();
   });
 });
 

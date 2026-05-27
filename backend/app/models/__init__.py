@@ -72,6 +72,8 @@ class Artwork(Base):
     captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     captured_date_source: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
     catalog_source: Mapped[str | None] = mapped_column(String(128))
+    catalog_image_url: Mapped[str | None] = mapped_column(String(512))
+    catalog_thumbnail_url: Mapped[str | None] = mapped_column(String(512))
     catalog_object_url: Mapped[str | None] = mapped_column(String(512))
     catalog_accession_number: Mapped[str | None] = mapped_column(String(64))
     catalog_rights_label: Mapped[str | None] = mapped_column(String(255))

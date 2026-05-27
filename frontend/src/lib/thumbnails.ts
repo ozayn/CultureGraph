@@ -1,17 +1,53 @@
-import { thumbnailDisplayUrl } from "@/lib/media-url";
+import { displayImageUrl, thumbnailDisplayUrl } from "@/lib/media-url";
 import type { Artwork, CulturalEntity, CulturalEntityType } from "@/lib/types";
 
-export function artworkThumbnailUrl(
-  artwork: Pick<Artwork, "image_thumbnail_url" | "image_url">
+export type ArtworkImageFields = {
+  image_thumbnail_url?: string | null;
+  image_url?: string | null;
+  catalog_thumbnail_url?: string | null;
+  catalog_image_url?: string | null;
+};
+
+/** First valid raw thumbnail path/URL for an artwork (API field precedence). */
+export function pickArtworkThumbnailRaw(
+  artwork: ArtworkImageFields
 ): string | null {
-  return artwork.image_thumbnail_url ?? artwork.image_url ?? null;
+  for (const value of [
+    artwork.image_thumbnail_url,
+    artwork.catalog_thumbnail_url,
+    artwork.image_url,
+    artwork.catalog_image_url,
+  ]) {
+    if (value?.trim()) return value.trim();
+  }
+  return null;
+}
+
+/** First valid raw display path/URL for detail hero. */
+export function pickArtworkDisplayRaw(artwork: ArtworkImageFields): string | null {
+  for (const value of [
+    artwork.image_url,
+    artwork.catalog_image_url,
+    artwork.image_thumbnail_url,
+    artwork.catalog_thumbnail_url,
+  ]) {
+    if (value?.trim()) return value.trim();
+  }
+  return null;
+}
+
+export function artworkThumbnailUrl(artwork: ArtworkImageFields): string | null {
+  return pickArtworkThumbnailRaw(artwork);
 }
 
 /** Resolved src for cards/lists (API base + optional museum proxy). */
-export function artworkThumbnailSrc(
-  artwork: Pick<Artwork, "image_thumbnail_url" | "image_url">
-): string | null {
-  return thumbnailDisplayUrl(artworkThumbnailUrl(artwork));
+export function artworkThumbnailSrc(artwork: ArtworkImageFields): string | null {
+  return thumbnailDisplayUrl(pickArtworkThumbnailRaw(artwork));
+}
+
+/** Resolved src for artwork detail hero. */
+export function artworkDisplaySrc(artwork: ArtworkImageFields): string | null {
+  return displayImageUrl(pickArtworkDisplayRaw(artwork));
 }
 
 export function entityThumbnailUrl(

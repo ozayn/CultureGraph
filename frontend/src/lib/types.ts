@@ -60,6 +60,8 @@ export interface Artwork {
   captured_at: string | null;
   captured_date_source: "exif" | "none";
   catalog_source: string | null;
+  catalog_image_url: string | null;
+  catalog_thumbnail_url: string | null;
   catalog_object_url: string | null;
   catalog_accession_number: string | null;
   catalog_rights_label: string | null;

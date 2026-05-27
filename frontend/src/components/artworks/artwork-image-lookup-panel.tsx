@@ -480,8 +480,12 @@ export function ArtworkImageLookupPanel({
     try {
       const payload: Partial<Artwork> = {};
       if (fields.image && candidate.image_url) {
-        payload.image_url = candidate.image_url;
-        payload.image_thumbnail_url = candidate.image_thumbnail_url ?? candidate.image_url;
+        const displayUrl = candidate.image_url;
+        const thumbUrl = candidate.image_thumbnail_url ?? candidate.image_url;
+        payload.image_url = displayUrl;
+        payload.image_thumbnail_url = thumbUrl;
+        payload.catalog_image_url = displayUrl;
+        payload.catalog_thumbnail_url = thumbUrl;
         payload.catalog_source = candidate.source_name;
         payload.catalog_accession_number = candidate.accession_number;
         payload.catalog_rights_label = candidate.rights_label;

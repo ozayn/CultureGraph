@@ -174,7 +174,10 @@ def update_artwork(
         if not db.get(Visit, data["visit_id"]):
             raise HTTPException(status_code=400, detail="Visit not found")
 
-    data = normalize_artwork_image_update(data)
+    try:
+        data = normalize_artwork_image_update(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     for key, value in data.items():
         setattr(artwork, key, value)

@@ -37,7 +37,8 @@ def collect_nga_scored_candidates(
         return []
 
     scored: list[tuple[float, dict, ArtworkLookupCandidate]] = []
-    for entry in _load_index():
+    for raw_entry in _load_index():
+        entry = _normalize_nga_index_entry(raw_entry)
         score = score_artwork_entry(entry, search_text, artist_text, query.year_period)
         if score < 0.15:
             continue
@@ -72,6 +73,26 @@ def search_nga_collection(
     scored = collect_nga_scored_candidates(query)
     scored.sort(key=lambda item: item[0], reverse=True)
     return [item[2] for item in scored[:limit]]
+
+
+def _normalize_nga_index_entry(entry: dict) -> dict:
+    """Legacy index rows may only store the IIIF thumb URL in image_url."""
+    from app.services.artwork_image_urls import upgrade_nga_iiif_display_url
+
+    thumb = (entry.get("image_thumbnail_url") or entry.get("image_url") or "").strip()
+    display = (entry.get("image_url") or thumb).strip()
+    if thumb and "api.nga.gov/iiif" in thumb:
+        display = upgrade_nga_iiif_display_url(thumb) or display
+        if display == thumb and "/full/!" in thumb:
+            import re
+
+            match = re.search(r"(https://api\.nga\.gov/iiif/[0-9a-f-]{36})", thumb)
+            if match:
+                display = f"{match.group(1)}/full/!1600,1600/0/default.jpg"
+    normalized = dict(entry)
+    normalized["image_url"] = display or thumb
+    normalized["image_thumbnail_url"] = thumb or display
+    return normalized
 
 
 @lru_cache(maxsize=1)

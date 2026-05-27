@@ -36,8 +36,11 @@ def main() -> None:
             object_id = row.get("depictstmsobjectid")
             if not object_id or object_id in obj_image:
                 continue
+            iiif_url = (row.get("iiifurl") or "").strip()
+            iiif_thumb = (row.get("iiifthumburl") or "").strip()
             obj_image[object_id] = {
-                "image_url": row.get("iiifthumburl") or row.get("iiifurl") or "",
+                "image_url": iiif_url or iiif_thumb,
+                "image_thumbnail_url": iiif_thumb or iiif_url,
                 "rights_label": "CC0 — National Gallery of Art Open Access",
             }
             if len(obj_image) >= MAX_ENTRIES:
@@ -93,6 +96,7 @@ def main() -> None:
                     "begin_year": row.get("beginyear") or None,
                     "end_year": row.get("endyear") or None,
                     "image_url": obj_image[object_id]["image_url"],
+                    "image_thumbnail_url": obj_image[object_id]["image_thumbnail_url"],
                     "object_url": (
                         f"https://www.nga.gov/collection/art-object-page.html?objectid={object_id}"
                     ),
