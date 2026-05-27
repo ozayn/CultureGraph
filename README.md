@@ -200,16 +200,37 @@ Until persistent storage is configured, treat uploaded artwork photos as **best-
 
 ## Manual QA checklist
 
-### Artwork annotations
+### Manual annotation placement
 
 1. Sign in with an approved Google account.
-2. Create or open an artwork with a photo attached.
-3. Open **Annotate** from the artwork detail page.
-4. Click or tap the image — the new annotation sheet should open.
-5. Choose a category, enter a note, and tap **Save pin**.
-6. Confirm the pin appears immediately on the canvas and in the list below.
-7. Refresh the page — the pin should still be there.
-8. Log out and confirm the annotate page shows **Sign in to add annotations.**
+2. Open an artwork with a photo on **desktop** and **mobile**.
+3. Tap **Annotate** (or **Add annotation** on desktop).
+4. Confirm the banner reads **Tap image to place pin** (placement mode is active).
+5. Tap the artwork image — the new-annotation sheet opens with coordinates saved.
+6. Enter a note and tap **Save pin** — the pin appears on the canvas and in the list.
+7. Tap an **existing pin** during placement mode — it must **not** open a second pin.
+8. Scroll the page while placement mode is active — scrolling must **not** place a pin.
+9. Tap **Cancel placement** — placement mode exits with no new pin.
+10. Refresh the page — the pin stays in the same visual spot (0–100% of the image).
+11. Use **Add text-only observation** (no image) or save without tapping — annotation saves with null coordinates and appears under **Annotations to place**.
+12. Tap **Place on image** for that annotation, tap the image, confirm coordinates update after refresh.
+
+### AI suggested annotation placement
+
+1. Run **Research with AI** on an artwork with an image.
+2. On a suggestion without a pin, tap **Place on image**.
+3. On the annotate page, confirm the AI note appears in the placement banner.
+4. Tap the image, save the annotation.
+5. Return to research — the suggestion should no longer appear as pending.
+6. Refresh — the pin remains; the suggestion stays accepted/hidden.
+
+### Dev placement debug (local only)
+
+With `npm run dev`, open the annotate page during placement mode. A **Placement debug** panel shows displayed image size, tap pixels, computed `x_percent` / `y_percent`, and the AI suggestion key when applicable.
+
+### Auth
+
+- Log out and confirm the annotate page shows **Sign in to add annotations.**
 
 ## Roadmap / future work
 

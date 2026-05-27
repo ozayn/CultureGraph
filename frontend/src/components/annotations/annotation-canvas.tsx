@@ -1,10 +1,12 @@
 "use client";
 
+import type { KonvaEventObject } from "konva/lib/Node";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AnnotationPinForm } from "@/components/annotations/annotation-pin-form";
 import { AnnotationPinMeta } from "@/components/annotations/annotation-pin-meta";
+import { PlacementDebugPanel } from "@/components/annotations/placement-debug";
 import { CATEGORY_COLORS } from "@/components/annotations/konva-canvas-stage";
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
@@ -20,13 +22,22 @@ import {
 } from "@/lib/annotation-form";
 import { buildAnnotationTagSuggestions } from "@/lib/annotation-suggestions";
 import { splitAnnotationsByPlacement } from "@/lib/annotation-placement";
+import { percentFromStagePoint } from "@/lib/annotation-coordinates";
 import { logAnnotationRequest } from "@/lib/annotation-debug";
 import { api } from "@/lib/api";
-import { consumePendingAiAnnotation } from "@/lib/pending-ai-annotation";
+import { emptyPlacementDebug } from "@/lib/placement-debug";
+import {
+  clearPendingAiAnnotation,
+  consumePendingAiAnnotation,
+} from "@/lib/pending-ai-annotation";
 import {
   consumePendingAnnotationPlacement,
 } from "@/lib/pending-annotation-placement";
-import { suggestedAnnotationToFormValues } from "@/lib/research-suggestions";
+import { persistAcceptedAiSuggestion } from "@/lib/persist-ai-suggestion";
+import {
+  suggestedAnnotationToFormValues,
+  suggestionMatchKey,
+} from "@/lib/research-suggestions";
 import { useAuth } from "@/contexts/auth-context";
 import {
   CATEGORY_LABELS,
@@ -59,6 +70,24 @@ interface PendingPin {
 
 const SIGN_IN_MESSAGE = "Sign in to add annotations.";
 
+function readInitialPlacement(artworkId: number, initialAnnotations: Annotation[]) {
+  if (typeof window === "undefined") {
+    return { pendingAi: null, placing: null, newPinMode: true };
+  }
+
+  const pendingAi = consumePendingAiAnnotation(artworkId);
+  const annotationId = consumePendingAnnotationPlacement(artworkId);
+  const placing = annotationId
+    ? initialAnnotations.find((annotation) => annotation.id === annotationId) ?? null
+    : null;
+
+  return {
+    pendingAi,
+    placing,
+    newPinMode: !pendingAi && !placing,
+  };
+}
+
 export function AnnotationCanvas({
   artworkId,
   imageUrl,
@@ -72,24 +101,31 @@ export function AnnotationCanvas({
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [pendingPin, setPendingPin] = useState<PendingPin | null>(null);
+  const [pinFormOpen, setPinFormOpen] = useState(false);
   const [formValues, setFormValues] = useState<AnnotationPinFormValues>(
     emptyAnnotationPinFormValues()
   );
+  const [placementTapDebug, setPlacementTapDebug] = useState<{
+    tapX: number;
+    tapY: number;
+    xPercent: number;
+    yPercent: number;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingAnnotation, setEditingAnnotation] = useState<Annotation | null>(null);
   const [deletingAnnotation, setDeletingAnnotation] = useState<Annotation | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [pendingAiSuggestion, setPendingAiSuggestion] = useState<AiSuggestedAnnotation | null>(
-    () => (typeof window !== "undefined" ? consumePendingAiAnnotation(artworkId) : null)
+  const [placementInit] = useState(() =>
+    readInitialPlacement(artworkId, initialAnnotations)
   );
-  const [placingAnnotation, setPlacingAnnotation] = useState<Annotation | null>(() => {
-    if (typeof window === "undefined") return null;
-    const annotationId = consumePendingAnnotationPlacement(artworkId);
-    if (!annotationId) return null;
-    return initialAnnotations.find((annotation) => annotation.id === annotationId) ?? null;
-  });
-  const [newPinMode, setNewPinMode] = useState(false);
+  const [pendingAiSuggestion, setPendingAiSuggestion] = useState<AiSuggestedAnnotation | null>(
+    placementInit.pendingAi
+  );
+  const [placingAnnotation, setPlacingAnnotation] = useState<Annotation | null>(
+    placementInit.placing
+  );
+  const [newPinMode, setNewPinMode] = useState(placementInit.newPinMode);
 
   const { placed: placedAnnotations, unplaced: unplacedAnnotations } = useMemo(
     () => splitAnnotationsByPlacement(annotations),
@@ -100,6 +136,47 @@ export function AnnotationCanvas({
     () => buildAnnotationTagSuggestions(culturalEntities),
     [culturalEntities]
   );
+
+  const placementModeActive = Boolean(placingAnnotation || pendingAiSuggestion || newPinMode);
+
+  const placementDebug = useMemo(() => {
+    if (process.env.NODE_ENV !== "development") return null;
+    return emptyPlacementDebug({
+      imageWidth: image?.naturalWidth ?? 0,
+      imageHeight: image?.naturalHeight ?? 0,
+      stageWidth: size.width,
+      stageHeight: size.height,
+      tapX: placementTapDebug?.tapX ?? null,
+      tapY: placementTapDebug?.tapY ?? null,
+      xPercent: placementTapDebug?.xPercent ?? null,
+      yPercent: placementTapDebug?.yPercent ?? null,
+      suggestionKey: pendingAiSuggestion
+        ? suggestionMatchKey(pendingAiSuggestion)
+        : null,
+    });
+  }, [image, pendingAiSuggestion, placementTapDebug, size.height, size.width]);
+
+  const refetchAnnotations = useCallback(async () => {
+    const refreshed = await api.get<Annotation[]>(
+      `/api/artworks/${artworkId}/annotations`
+    );
+    setAnnotations(refreshed);
+    return refreshed;
+  }, [artworkId]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !placementModeActive) return;
+
+    const preventScroll = (event: TouchEvent) => {
+      if (event.touches.length === 1) {
+        event.preventDefault();
+      }
+    };
+
+    container.addEventListener("touchmove", preventScroll, { passive: false });
+    return () => container.removeEventListener("touchmove", preventScroll);
+  }, [placementModeActive]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -160,40 +237,58 @@ export function AnnotationCanvas({
   }, [imageUrl]);
 
   const openPinForm = useCallback(
-    (xPercent: number, yPercent: number, prefill?: AnnotationPinFormValues) => {
-      setPendingPin({
-        x_percent: Number(xPercent.toFixed(2)),
-        y_percent: Number(yPercent.toFixed(2)),
-      });
+    (
+      xPercent: number | null,
+      yPercent: number | null,
+      prefill?: AnnotationPinFormValues
+    ) => {
+      if (xPercent !== null && yPercent !== null) {
+        setPendingPin({
+          x_percent: Number(xPercent.toFixed(2)),
+          y_percent: Number(yPercent.toFixed(2)),
+        });
+      } else {
+        setPendingPin(null);
+      }
+      setPinFormOpen(true);
       setFormValues(prefill ?? emptyAnnotationPinFormValues());
       setError(null);
     },
     []
   );
 
+  function cancelPlacementMode() {
+    setNewPinMode(false);
+    setPendingPin(null);
+    setPinFormOpen(false);
+    setPlacingAnnotation(null);
+    setPendingAiSuggestion(null);
+    clearPendingAiAnnotation(artworkId);
+    setError(null);
+  }
+
   const saveAnnotationPlacement = useCallback(
     async (annotation: Annotation, xPercent: number, yPercent: number) => {
       setSaving(true);
       setError(null);
       try {
-        const updated = await api.patch<Annotation>(
+        await api.patch<Annotation>(
           `/api/artworks/${artworkId}/annotations/${annotation.id}`,
           {
             x_percent: Number(xPercent.toFixed(2)),
             y_percent: Number(yPercent.toFixed(2)),
           }
         );
-        setAnnotations((current) =>
-          current.map((item) => (item.id === updated.id ? updated : item))
-        );
+        await refetchAnnotations();
         setPlacingAnnotation(null);
+        setNewPinMode(false);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not place annotation on the image.");
       } finally {
         setSaving(false);
       }
     },
-    [artworkId]
+    [artworkId, refetchAnnotations]
   );
 
   const placePin = useCallback(
@@ -206,20 +301,33 @@ export function AnnotationCanvas({
         setError(SIGN_IN_MESSAGE);
         return;
       }
+      if (!placementModeActive) {
+        return;
+      }
       if (size.width <= 0 || size.height <= 0) {
         setError("The canvas is still loading. Try again in a moment.");
         return;
       }
 
-      const xPercent = (x / size.width) * 100;
-      const yPercent = (y / size.height) * 100;
-
-      if (placingAnnotation) {
-        void saveAnnotationPlacement(placingAnnotation, xPercent, yPercent);
+      const percent = percentFromStagePoint({ x, y }, size);
+      if (!percent) {
+        setError("Could not read tap position. Try again.");
         return;
       }
 
-      if (!pendingAiSuggestion && !newPinMode) {
+      if (process.env.NODE_ENV === "development") {
+        setPlacementTapDebug({
+          tapX: x,
+          tapY: y,
+          xPercent: percent.x_percent,
+          yPercent: percent.y_percent,
+        });
+      }
+
+      const { x_percent: xPercent, y_percent: yPercent } = percent;
+
+      if (placingAnnotation) {
+        void saveAnnotationPlacement(placingAnnotation, xPercent, yPercent);
         return;
       }
 
@@ -235,21 +343,14 @@ export function AnnotationCanvas({
       openPinForm,
       pendingAiSuggestion,
       placingAnnotation,
-      newPinMode,
+      placementModeActive,
       saveAnnotationPlacement,
-      size.height,
-      size.width,
+      size,
     ]
   );
 
   const handleStagePointer = useCallback(
-    (event: {
-      target: {
-        getStage: () => {
-          getPointerPosition: () => { x: number; y: number } | null;
-        } | null;
-      };
-    }) => {
+    (event: KonvaEventObject<MouseEvent | TouchEvent>) => {
       const stage = event.target.getStage();
       const pointer = stage?.getPointerPosition();
       if (!pointer) return;
@@ -282,13 +383,16 @@ export function AnnotationCanvas({
       setError(SIGN_IN_MESSAGE);
       return;
     }
-    if (!pendingPin || !formValues.text.trim()) return;
+    if (!pinFormOpen || !formValues.text.trim()) return;
 
     const endpoint = `/api/artworks/${artworkId}/annotations`;
     const payload = {
-      ...pendingPin,
+      x_percent: pendingPin?.x_percent ?? null,
+      y_percent: pendingPin?.y_percent ?? null,
       ...formValuesToAnnotationPayload(formValues),
     };
+
+    const aiSuggestion = pendingAiSuggestion;
 
     setSaving(true);
     setError(null);
@@ -296,10 +400,21 @@ export function AnnotationCanvas({
 
     try {
       const created = await api.post<Annotation>(endpoint, payload);
-      setAnnotations((current) => [...current, created]);
+      await refetchAnnotations();
+
+      if (aiSuggestion) {
+        try {
+          await persistAcceptedAiSuggestion(artworkId, aiSuggestion, created.id);
+        } catch {
+          // Annotation saved; suggestion status can be fixed on research panel.
+        }
+      }
+
       setPendingPin(null);
+      setPinFormOpen(false);
       setFormValues(emptyAnnotationPinFormValues());
       setPendingAiSuggestion(null);
+      clearPendingAiAnnotation(artworkId);
       setNewPinMode(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save annotation.");
@@ -319,13 +434,11 @@ export function AnnotationCanvas({
     setSaving(true);
     setError(null);
     try {
-      const updated = await api.patch<Annotation>(
+      await api.patch<Annotation>(
         `/api/artworks/${artworkId}/annotations/${editingAnnotation.id}`,
         formValuesToAnnotationPayload(formValues)
       );
-      setAnnotations((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item))
-      );
+      await refetchAnnotations();
       setEditingAnnotation(null);
       setFormValues(emptyAnnotationPinFormValues());
     } catch (e) {
@@ -343,9 +456,7 @@ export function AnnotationCanvas({
       await api.delete(
         `/api/artworks/${artworkId}/annotations/${deletingAnnotation.id}`
       );
-      setAnnotations((current) =>
-        current.filter((item) => item.id !== deletingAnnotation.id)
-      );
+      await refetchAnnotations();
       setDeletingAnnotation(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not delete annotation.");
@@ -358,25 +469,31 @@ export function AnnotationCanvas({
   const activeImage = imageUrl ? image : null;
   const activeImageLoadFailed = imageUrl ? imageLoadFailed : false;
   const showImageCanvas = Boolean(imageUrl) && !activeImageLoadFailed;
-  const placementModeActive = Boolean(placingAnnotation || pendingAiSuggestion || newPinMode);
-
   return (
     <div className="space-y-5">
       {!canEdit && !authLoading ? <AuthGate /> : null}
 
-      {placingAnnotation ? (
-        <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground">Place annotation on the image</p>
-          <p className="mt-1">{placingAnnotation.text}</p>
-          <p className="mt-2 text-xs">Tap the artwork to choose where this pin should go.</p>
-        </div>
-      ) : null}
-
-      {pendingAiSuggestion ? (
-        <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground">Place AI suggestion on the image</p>
-          <p className="mt-1">{pendingAiSuggestion.note}</p>
-          <p className="mt-2 text-xs">Tap the artwork to choose where this pin should go.</p>
+      {placementModeActive && showImageCanvas ? (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          <p className="font-medium text-foreground">Tap image to place pin</p>
+          {placingAnnotation ? (
+            <p className="mt-1 text-muted-foreground">{placingAnnotation.text}</p>
+          ) : null}
+          {pendingAiSuggestion ? (
+            <p className="mt-1 text-muted-foreground">{pendingAiSuggestion.note}</p>
+          ) : null}
+          <p className="mt-2 text-xs text-muted-foreground">
+            Tap anywhere on the artwork. Taps on existing pins are ignored.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="touch"
+            className="mt-3"
+            onClick={cancelPlacementMode}
+          >
+            Cancel placement
+          </Button>
         </div>
       ) : null}
 
@@ -387,46 +504,24 @@ export function AnnotationCanvas({
             ? showImageCanvas
               ? placementModeActive
                 ? "Tap the image to place a pin at that spot."
-                : "Start placement mode, then tap the image to add a pin."
+                : "Add an image before placing pins, or add a text-only observation below."
               : "Add an image before placing pins, or add a text-only observation below."
             : SIGN_IN_MESSAGE}
       </p>
 
-      {canEdit && showImageCanvas && !placingAnnotation && !pendingAiSuggestion ? (
-        <div className="flex flex-wrap gap-2">
-          {!newPinMode ? (
-            <Button type="button" size="touch" onClick={() => setNewPinMode(true)}>
-              Place pin
-            </Button>
-          ) : (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="touch"
-                onClick={() => {
-                  setNewPinMode(false);
-                  setPendingPin(null);
-                }}
-              >
-                Cancel placement
-              </Button>
-              <span className="self-center text-sm text-muted-foreground">
-                Tap the artwork to choose a spot.
-              </span>
-            </>
-          )}
-        </div>
+      {process.env.NODE_ENV === "development" && placementModeActive ? (
+        <PlacementDebugPanel state={placementDebug} />
       ) : null}
 
-      {error && !pendingPin && !editingAnnotation ? (
+      {error && !pinFormOpen && !editingAnnotation ? (
         <p className="text-sm text-destructive">{error}</p>
       ) : null}
 
       <div
         ref={containerRef}
         className={cn(
-          "w-full overflow-hidden rounded-xl border border-border bg-[#f3efe8] touch-none",
+          "w-full overflow-hidden rounded-xl border border-border bg-[#f3efe8]",
+          placementModeActive && "touch-none",
           showImageCanvas && canEdit && !placementModeActive && "opacity-90"
         )}
       >
@@ -437,6 +532,7 @@ export function AnnotationCanvas({
             image={activeImage}
             pins={pins}
             pendingPin={pendingPin}
+            placementModeActive={placementModeActive && canEdit}
             onStagePointer={handleStagePointer}
           />
         ) : (
@@ -454,7 +550,7 @@ export function AnnotationCanvas({
                 type="button"
                 variant="outline"
                 size="touch"
-                onClick={() => openPinForm(50, 50)}
+                onClick={() => openPinForm(null, null)}
               >
                 Add text-only observation
               </Button>
@@ -546,12 +642,19 @@ export function AnnotationCanvas({
       </div>
 
       <BottomSheet
-        open={pendingPin !== null}
+        open={pinFormOpen}
         onOpenChange={(open) => {
-          if (!open) setPendingPin(null);
+          if (!open) {
+            setPinFormOpen(false);
+            setPendingPin(null);
+          }
         }}
-        title="New annotation"
-        description="What did you notice at this spot?"
+        title={pendingPin ? "New annotation" : "Text-only annotation"}
+        description={
+          pendingPin
+            ? "What did you notice at this spot?"
+            : "Save without a pin, or place it on the image later."
+        }
         footer={
           <>
             {error ? <p className="mb-3 text-sm text-destructive">{error}</p> : null}
@@ -562,7 +665,7 @@ export function AnnotationCanvas({
               onClick={() => void saveAnnotation()}
               disabled={saving || !formValues.text.trim() || !canEdit}
             >
-              {saving ? "Saving…" : "Save pin"}
+              {saving ? "Saving…" : pendingPin ? "Save pin" : "Save annotation"}
             </Button>
           </>
         }

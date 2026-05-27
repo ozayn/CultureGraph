@@ -1,10 +1,13 @@
 "use client";
 
+import type { KonvaEventObject } from "konva/lib/Node";
 import { Circle, Group, Image as KonvaImage, Layer, Rect, Stage, Text } from "react-konva";
 
 import type { AnnotationCategory } from "@/lib/types";
 
-export const PIN_RADIUS = 14;
+/** Visual pin radius (pixels). */
+export const PIN_RADIUS = 16;
+/** Minimum 44px tap target diameter → 22px radius hit area. */
 export const HIT_RADIUS = 22;
 
 export const CATEGORY_COLORS: Record<AnnotationCategory, string> = {
@@ -26,13 +29,7 @@ export interface PinView {
   text: string;
 }
 
-type StagePointerEvent = {
-  target: {
-    getStage: () => {
-      getPointerPosition: () => { x: number; y: number } | null;
-    } | null;
-  };
-};
+type StagePointerEvent = KonvaEventObject<MouseEvent | TouchEvent>;
 
 interface KonvaCanvasStageProps {
   width: number;
@@ -40,6 +37,7 @@ interface KonvaCanvasStageProps {
   image: HTMLImageElement | null;
   pins: PinView[];
   pendingPin: { x_percent: number; y_percent: number } | null;
+  placementModeActive: boolean;
   onStagePointer: (event: StagePointerEvent) => void;
 }
 
@@ -49,23 +47,30 @@ export default function KonvaCanvasStage({
   image,
   pins,
   pendingPin,
+  placementModeActive,
   onStagePointer,
 }: KonvaCanvasStageProps) {
+  function handleStagePointer(event: StagePointerEvent) {
+    if (!placementModeActive) return;
+    event.evt.preventDefault();
+    onStagePointer(event);
+  }
+
   return (
     <Stage
       width={width}
       height={height}
-      onClick={onStagePointer}
-      onTap={onStagePointer}
+      onClick={placementModeActive ? handleStagePointer : undefined}
+      onTap={placementModeActive ? handleStagePointer : undefined}
     >
       <Layer>
         {image ? (
-          <KonvaImage image={image} width={width} height={height} listening />
+          <KonvaImage image={image} width={width} height={height} listening={placementModeActive} />
         ) : (
-          <Rect width={width} height={height} fill="#f3efe8" listening />
+          <Rect width={width} height={height} fill="#f3efe8" listening={placementModeActive} />
         )}
         {pins.map((pin) => (
-          <PinMarker key={pin.id} pin={pin} />
+          <PinMarker key={pin.id} pin={pin} blockPlacement={placementModeActive} />
         ))}
         {pendingPin ? (
           <Circle
@@ -83,10 +88,27 @@ export default function KonvaCanvasStage({
   );
 }
 
-function PinMarker({ pin }: { pin: PinView }) {
+function PinMarker({
+  pin,
+  blockPlacement,
+}: {
+  pin: PinView;
+  blockPlacement: boolean;
+}) {
+  function stopPlacement(event: StagePointerEvent) {
+    if (!blockPlacement) return;
+    event.cancelBubble = true;
+  }
+
   return (
-    <Group x={pin.x} y={pin.y} listening={false}>
-      <Circle radius={HIT_RADIUS} fill="rgba(0,0,0,0.001)" listening={false} />
+    <Group
+      x={pin.x}
+      y={pin.y}
+      listening={blockPlacement}
+      onClick={stopPlacement}
+      onTap={stopPlacement}
+    >
+      <Circle radius={HIT_RADIUS} fill="rgba(0,0,0,0.001)" />
       <Circle
         radius={PIN_RADIUS}
         fill={pin.color}
