@@ -47,7 +47,12 @@ export interface Artwork {
   medium: string | null;
   museum_gallery: string | null;
   image_url: string | null;
+  image_master_url: string | null;
   image_thumbnail_url: string | null;
+  crop_x_percent: number | null;
+  crop_y_percent: number | null;
+  crop_width_percent: number | null;
+  crop_height_percent: number | null;
   image_width: number | null;
   image_height: number | null;
   image_mime_type: string | null;

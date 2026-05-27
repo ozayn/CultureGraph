@@ -119,7 +119,12 @@ class ArtworkBase(BaseModel):
     medium: str | None = None
     museum_gallery: str | None = None
     image_url: str | None = None
+    image_master_url: str | None = None
     image_thumbnail_url: str | None = None
+    crop_x_percent: float | None = Field(default=None, ge=0, le=100)
+    crop_y_percent: float | None = Field(default=None, ge=0, le=100)
+    crop_width_percent: float | None = Field(default=None, gt=0, le=100)
+    crop_height_percent: float | None = Field(default=None, gt=0, le=100)
     image_width: int | None = None
     image_height: int | None = None
     image_mime_type: str | None = None
@@ -169,6 +174,25 @@ class ArtworkRead(ArtworkBase):
 
     id: int
     created_at: datetime
+
+
+class ArtworkImageRegionUpdate(BaseModel):
+    x_percent: float | None = Field(default=None, ge=0, le=100)
+    y_percent: float | None = Field(default=None, ge=0, le=100)
+    width_percent: float | None = Field(default=None, gt=0, le=100)
+    height_percent: float | None = Field(default=None, gt=0, le=100)
+    use_full_image: bool = False
+
+    @model_validator(mode="after")
+    def validate_region_payload(self) -> "ArtworkImageRegionUpdate":
+        if self.use_full_image:
+            return self
+        if None in (self.x_percent, self.y_percent, self.width_percent, self.height_percent):
+            raise ValueError(
+                "x_percent, y_percent, width_percent, and height_percent are required "
+                "unless use_full_image is true."
+            )
+        return self
 
 
 class AnnotationBase(BaseModel):

@@ -16,6 +16,7 @@ import {
   ArtworkImageLookupSignInHint,
   useArtworkImageLookup,
 } from "@/components/artworks/artwork-image-lookup-panel";
+import { ArtworkRegionSheet } from "@/components/artworks/artwork-region-sheet";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
 import { ResearchPanel } from "@/components/artworks/research-panel";
@@ -28,6 +29,7 @@ import { CameraUpload } from "@/components/ui/camera-upload";
 import { Textarea } from "@/components/ui/textarea";
 import { api, mediaUrl } from "@/lib/api";
 import { artworkDisplayTitle } from "@/lib/artwork-metadata";
+import { artworkHasImageRegion } from "@/lib/artwork-region";
 import { useAuth } from "@/contexts/auth-context";
 import {
   annotationToFormValues,
@@ -69,6 +71,7 @@ export function ArtworkDetailClient({
   const [imageSrc, setImageSrc] = useState(initialImageSrc);
   const [noteOpen, setNoteOpen] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
+  const [regionOpen, setRegionOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -106,6 +109,12 @@ export function ArtworkDetailClient({
   }
 
   function handleLookupApplied(updated: Artwork) {
+    setArtwork(updated);
+    setImageSrc(mediaUrl(updated.image_url));
+    router.refresh();
+  }
+
+  function handleRegionSaved(updated: Artwork) {
     setArtwork(updated);
     setImageSrc(mediaUrl(updated.image_url));
     router.refresh();
@@ -149,6 +158,7 @@ export function ArtworkDetailClient({
       setPhotoOpen(false);
       setPhoto(null);
       setPreviewUrl(null);
+      setRegionOpen(true);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not upload photo.");
@@ -269,9 +279,23 @@ export function ArtworkDetailClient({
               </div>
             )}
             {!authLoading && canEdit ? (
-              <div className="border-t border-border/60 bg-background px-4 py-3">
+              <div className="flex flex-col gap-2 border-t border-border/60 bg-background px-4 py-3">
                 <ArtworkImageLookupAction variant="replace" fullWidth primary />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="touch"
+                  className="w-full"
+                  onClick={() => setRegionOpen(true)}
+                >
+                  {artworkHasImageRegion(artwork) ? "Adjust artwork area" : "Set artwork area"}
+                </Button>
               </div>
+            ) : null}
+            {artworkHasImageRegion(artwork) ? (
+              <p className="border-t border-border/60 bg-muted/30 px-4 py-2 text-center text-xs text-muted-foreground">
+                Showing cropped artwork area · full photo preserved
+              </p>
             ) : null}
           </>
         ) : (
@@ -646,6 +670,15 @@ export function ArtworkDetailClient({
       </Button>
     </BottomSheet>
       </>
+    ) : null}
+
+    {canEdit && hasImage ? (
+      <ArtworkRegionSheet
+        open={regionOpen}
+        onOpenChange={setRegionOpen}
+        artwork={artwork}
+        onSaved={handleRegionSaved}
+      />
     ) : null}
 
     <ConfirmDeleteDialog

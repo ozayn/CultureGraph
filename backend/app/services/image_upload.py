@@ -28,17 +28,12 @@ EXIF_DATETIME_ORIGINAL = 36867
 EXIF_DATETIME_DIGITIZED = 36868
 EXIF_DATETIME = 306
 EXIF_DATE_TAGS = (EXIF_DATETIME_ORIGINAL, EXIF_DATETIME_DIGITIZED, EXIF_DATETIME)
-ACCEPTED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
-MASTER_MAX_EDGE = 2000
-DISPLAY_MAX_EDGE = 1600
-THUMBNAIL_MAX_EDGE = 400
-WEBP_QUALITY = 85
-THUMB_WEBP_QUALITY = 80
 
 
 @dataclass(frozen=True)
 class SavedArtworkImages:
     image_url: str
+    image_master_url: str
     image_thumbnail_url: str
     image_width: int
     image_height: int
@@ -46,6 +41,19 @@ class SavedArtworkImages:
     image_file_size: int
     captured_at: datetime | None
     captured_date_source: str
+    crop_x_percent: float | None = None
+    crop_y_percent: float | None = None
+    crop_width_percent: float | None = None
+    crop_height_percent: float | None = None
+
+
+def image_token_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    name = Path(url).name
+    if "_" not in name:
+        return None
+    return name.split("_", 1)[0]
 
 
 async def read_upload_with_limit(file: UploadFile, max_bytes: int | None = None) -> bytes:
@@ -200,9 +208,11 @@ def process_and_store_artwork_image(
     _save_webp(thumbnail, thumb_path, quality=THUMB_WEBP_QUALITY)
 
     display_width, display_height = display.size
+    base = f"/uploads/artworks/{artwork_id}"
     return SavedArtworkImages(
-        image_url=f"/uploads/artworks/{artwork_id}/{display_path.name}",
-        image_thumbnail_url=f"/uploads/artworks/{artwork_id}/{thumb_path.name}",
+        image_url=f"{base}/{display_path.name}",
+        image_master_url=f"{base}/{master_path.name}",
+        image_thumbnail_url=f"{base}/{thumb_path.name}",
         image_width=display_width,
         image_height=display_height,
         image_mime_type="image/webp",

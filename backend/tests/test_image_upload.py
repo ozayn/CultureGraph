@@ -56,6 +56,7 @@ async def test_upload_normalizes_artwork_image(auth_headers: dict[str, str]) -> 
     assert upload_response.status_code == 200
     payload = upload_response.json()
     assert payload["image_url"].endswith("_display.webp")
+    assert payload["image_master_url"].endswith("_master.webp")
     assert payload["image_thumbnail_url"].endswith("_thumb.webp")
     assert payload["image_mime_type"] == "image/webp"
     assert payload["image_width"] <= 1600

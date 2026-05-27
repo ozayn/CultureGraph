@@ -8,6 +8,7 @@ import { CameraUpload } from "@/components/ui/camera-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ArtworkRegionSheet } from "@/components/artworks/artwork-region-sheet";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { api } from "@/lib/api";
 import { validateArtworkUploadFile } from "@/lib/upload-validation";
@@ -38,12 +39,29 @@ export function ProgressiveArtworkForm({
   const [museumGallery, setMuseumGallery] = useState(artwork?.museum_gallery ?? "");
   const [photo, setPhoto] = useState<File | null>(null);
   const [savedArtwork, setSavedArtwork] = useState<Artwork | null>(null);
+  const [regionArtwork, setRegionArtwork] = useState<Artwork | null>(null);
+  const [pendingRedirectId, setPendingRedirectId] = useState<number | null>(null);
   const previewUrl = useMemo(
     () => (photo ? URL.createObjectURL(photo) : null),
     [photo]
   );
 
   const canSaveStepOne = Boolean(photo || title.trim() || artwork);
+
+  function finishRegionFlow(updated?: Artwork) {
+    const target = updated ?? regionArtwork;
+    const redirectId = pendingRedirectId;
+    setRegionArtwork(null);
+    setPendingRedirectId(null);
+    if (!target) return;
+    setSavedArtwork(target);
+    if (redirectId) {
+      router.push(`/artworks/${target.id}`);
+      router.refresh();
+      return;
+    }
+    onComplete?.(target);
+  }
 
   useEffect(() => {
     return () => {
@@ -89,6 +107,14 @@ export function ProgressiveArtworkForm({
       }
 
       setSavedArtwork(saved);
+
+      if (photo && saved.image_url) {
+        setRegionArtwork(saved);
+        if (redirectOnSave) {
+          setPendingRedirectId(saved.id);
+        }
+        return;
+      }
 
       if (redirectOnSave) {
         router.push(`/artworks/${saved.id}`);
@@ -176,11 +202,22 @@ export function ProgressiveArtworkForm({
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      {savedArtwork && !redirectOnSave ? (
+      {savedArtwork && !redirectOnSave && !regionArtwork ? (
         <PhotoCaptureDateSuggestion
           artwork={savedArtwork}
           onDismiss={() => onComplete?.(savedArtwork)}
           onVisitUpdated={() => onComplete?.(savedArtwork)}
+        />
+      ) : null}
+
+      {regionArtwork ? (
+        <ArtworkRegionSheet
+          open
+          artwork={regionArtwork}
+          onOpenChange={(open) => {
+            if (!open) finishRegionFlow();
+          }}
+          onSaved={(updated) => finishRegionFlow(updated)}
         />
       ) : null}
 

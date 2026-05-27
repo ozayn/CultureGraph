@@ -10,11 +10,13 @@ from app.database import get_db
 from app.models import Artwork, Visit
 from app.schemas import (
     ArtworkCreate,
+    ArtworkImageRegionUpdate,
     ArtworkLookupCandidateRead,
     ArtworkLookupResponse,
     ArtworkRead,
     ArtworkUpdate,
 )
+from app.services.artwork_image_region import ArtworkImageRegion, regenerate_artwork_derivatives
 from app.services.artwork_images import normalize_artwork_image_update
 from app.services.artwork_lookup import lookup_artwork_candidates
 from app.services.lookup_query import build_artwork_lookup_query
@@ -222,6 +224,7 @@ async def upload_artwork_image(
     )
 
     artwork.image_url = saved.image_url
+    artwork.image_master_url = saved.image_master_url
     artwork.image_thumbnail_url = saved.image_thumbnail_url
     artwork.image_width = saved.image_width
     artwork.image_height = saved.image_height
@@ -229,6 +232,10 @@ async def upload_artwork_image(
     artwork.image_file_size = saved.image_file_size
     artwork.captured_at = saved.captured_at
     artwork.captured_date_source = saved.captured_date_source
+    artwork.crop_x_percent = None
+    artwork.crop_y_percent = None
+    artwork.crop_width_percent = None
+    artwork.crop_height_percent = None
     db.commit()
     db.refresh(artwork)
 
@@ -238,4 +245,45 @@ async def upload_artwork_image(
         saved.image_url,
         saved.image_file_size,
     )
+    return artwork
+
+
+@router.patch("/{artwork_id}/image-region", response_model=ArtworkRead)
+def set_artwork_image_region(
+    artwork_id: int,
+    payload: ArtworkImageRegionUpdate,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
+) -> Artwork:
+    artwork = _get_artwork_or_404(db, artwork_id)
+    if not artwork.image_url:
+        raise HTTPException(status_code=400, detail="Upload an image before selecting a region.")
+
+    if payload.use_full_image:
+        region = None
+    else:
+        region = ArtworkImageRegion(
+            x_percent=payload.x_percent or 0,
+            y_percent=payload.y_percent or 0,
+            width_percent=payload.width_percent or 0,
+            height_percent=payload.height_percent or 0,
+        )
+
+    regenerated = regenerate_artwork_derivatives(
+        artwork_id=artwork_id,
+        image_url=artwork.image_url,
+        image_thumbnail_url=artwork.image_thumbnail_url or artwork.image_url,
+        image_master_url=artwork.image_master_url,
+        region=region,
+    )
+
+    artwork.image_width = regenerated.image_width
+    artwork.image_height = regenerated.image_height
+    artwork.image_file_size = regenerated.image_file_size
+    artwork.crop_x_percent = regenerated.crop_x_percent
+    artwork.crop_y_percent = regenerated.crop_y_percent
+    artwork.crop_width_percent = regenerated.crop_width_percent
+    artwork.crop_height_percent = regenerated.crop_height_percent
+    db.commit()
+    db.refresh(artwork)
     return artwork
