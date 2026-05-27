@@ -37,7 +37,9 @@ interface KonvaCanvasStageProps {
   image: HTMLImageElement | null;
   pins: PinView[];
   pendingPin: { x_percent: number; y_percent: number } | null;
-  placementModeActive: boolean;
+  canvasInteractionActive: boolean;
+  highlightedPinId?: number | null;
+  onPinSelect?: (pinId: number) => void;
   onStagePointer: (event: StagePointerEvent) => void;
 }
 
@@ -47,11 +49,13 @@ export default function KonvaCanvasStage({
   image,
   pins,
   pendingPin,
-  placementModeActive,
+  canvasInteractionActive,
+  highlightedPinId = null,
+  onPinSelect,
   onStagePointer,
 }: KonvaCanvasStageProps) {
   function handleStagePointer(event: StagePointerEvent) {
-    if (!placementModeActive) return;
+    if (!canvasInteractionActive) return;
     event.evt.preventDefault();
     onStagePointer(event);
   }
@@ -60,17 +64,33 @@ export default function KonvaCanvasStage({
     <Stage
       width={width}
       height={height}
-      onClick={placementModeActive ? handleStagePointer : undefined}
-      onTap={placementModeActive ? handleStagePointer : undefined}
+      onClick={canvasInteractionActive ? handleStagePointer : undefined}
+      onTap={canvasInteractionActive ? handleStagePointer : undefined}
     >
       <Layer>
         {image ? (
-          <KonvaImage image={image} width={width} height={height} listening={placementModeActive} />
+          <KonvaImage
+            image={image}
+            width={width}
+            height={height}
+            listening={canvasInteractionActive}
+          />
         ) : (
-          <Rect width={width} height={height} fill="#f3efe8" listening={placementModeActive} />
+          <Rect
+            width={width}
+            height={height}
+            fill="#f3efe8"
+            listening={canvasInteractionActive}
+          />
         )}
         {pins.map((pin) => (
-          <PinMarker key={pin.id} pin={pin} blockPlacement={placementModeActive} />
+          <PinMarker
+            key={pin.id}
+            pin={pin}
+            highlighted={pin.id === highlightedPinId}
+            onSelect={onPinSelect}
+            blockPlacement={canvasInteractionActive}
+          />
         ))}
         {pendingPin ? (
           <Circle
@@ -90,25 +110,38 @@ export default function KonvaCanvasStage({
 
 function PinMarker({
   pin,
+  highlighted,
+  onSelect,
   blockPlacement,
 }: {
   pin: PinView;
+  highlighted: boolean;
+  onSelect?: (pinId: number) => void;
   blockPlacement: boolean;
 }) {
-  function stopPlacement(event: StagePointerEvent) {
-    if (!blockPlacement) return;
+  function handlePinPointer(event: StagePointerEvent) {
     event.cancelBubble = true;
+    if (blockPlacement) return;
+    onSelect?.(pin.id);
   }
 
   return (
     <Group
       x={pin.x}
       y={pin.y}
-      listening={blockPlacement}
-      onClick={stopPlacement}
-      onTap={stopPlacement}
+      listening
+      onClick={handlePinPointer}
+      onTap={handlePinPointer}
     >
       <Circle radius={HIT_RADIUS} fill="rgba(0,0,0,0.001)" />
+      {highlighted ? (
+        <Circle
+          radius={HIT_RADIUS + 4}
+          stroke={pin.color}
+          strokeWidth={3}
+          listening={false}
+        />
+      ) : null}
       <Circle
         radius={PIN_RADIUS}
         fill={pin.color}

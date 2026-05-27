@@ -7,7 +7,7 @@ import { useRef, useState, useMemo } from "react";
 
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
-import { AnnotationPinForm } from "@/components/annotations/annotation-pin-form";
+import { AnnotationDetailSheet } from "@/components/annotations/annotation-detail-sheet";
 import { AnnotationPinMeta } from "@/components/annotations/annotation-pin-meta";
 import {
   ArtworkImageLookupAction,
@@ -34,12 +34,7 @@ import { artworkDisplaySrc, pickArtworkDisplayRaw } from "@/lib/thumbnails";
 import { artworkDisplayTitle } from "@/lib/artwork-metadata";
 import { artworkHasImageRegion } from "@/lib/artwork-region";
 import { useAuth } from "@/contexts/auth-context";
-import {
-  annotationToFormValues,
-  emptyAnnotationPinFormValues,
-  formValuesToAnnotationPayload,
-  type AnnotationPinFormValues,
-} from "@/lib/annotation-form";
+import { formValuesToAnnotationPayload, type AnnotationPinFormValues } from "@/lib/annotation-form";
 import { buildAnnotationTagSuggestions } from "@/lib/annotation-suggestions";
 import type { ResearchMetadataHints } from "@/lib/artwork-metadata";
 import { splitAnnotationsByPlacement } from "@/lib/annotation-placement";
@@ -75,13 +70,11 @@ export function ArtworkDetailClient({
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [editingAnnotation, setEditingAnnotation] = useState<Annotation | null>(null);
+  const [selectedAnnotation, setSelectedAnnotation] = useState<Annotation | null>(null);
   const [deletingAnnotation, setDeletingAnnotation] = useState<Annotation | null>(null);
   const [deleteAnnotationLoading, setDeleteAnnotationLoading] = useState(false);
-  const [annotationFormValues, setAnnotationFormValues] = useState<AnnotationPinFormValues>(
-    emptyAnnotationPinFormValues()
-  );
   const [savingAnnotation, setSavingAnnotation] = useState(false);
+  const [annotationSuccess, setAnnotationSuccess] = useState<string | null>(null);
 
   const tagSuggestions = useMemo(
     () => buildAnnotationTagSuggestions(culturalEntities),
@@ -181,26 +174,34 @@ export function ArtworkDetailClient({
     router.push(`/artworks/${artwork.id}/annotate`);
   }
 
-  function openAnnotationEditor(annotation: Annotation) {
-    setEditingAnnotation(annotation);
-    setAnnotationFormValues(annotationToFormValues(annotation));
+  async function refetchAnnotations() {
+    const refreshed = await api.get<Annotation[]>(
+      `/api/artworks/${artwork.id}/annotations`
+    );
+    setAnnotations(refreshed);
+    return refreshed;
+  }
+
+  function openAnnotationDetail(annotation: Annotation) {
+    setSelectedAnnotation(annotation);
+    setAnnotationSuccess(null);
     setError(null);
   }
 
-  async function saveAnnotationEdit() {
-    if (!editingAnnotation || !annotationFormValues.text.trim()) return;
+  async function saveAnnotationDetail(values: AnnotationPinFormValues) {
+    if (!selectedAnnotation || !values.text.trim()) return;
     setSavingAnnotation(true);
     setError(null);
+    setAnnotationSuccess(null);
     try {
-      const updated = await api.patch<Annotation>(
-        `/api/artworks/${artwork.id}/annotations/${editingAnnotation.id}`,
-        formValuesToAnnotationPayload(annotationFormValues)
+      await api.patch<Annotation>(
+        `/api/artworks/${artwork.id}/annotations/${selectedAnnotation.id}`,
+        formValuesToAnnotationPayload(values)
       );
-      setAnnotations((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item))
-      );
-      setEditingAnnotation(null);
-      setAnnotationFormValues(emptyAnnotationPinFormValues());
+      const refreshed = await refetchAnnotations();
+      const updated = refreshed.find((item) => item.id === selectedAnnotation.id);
+      if (updated) setSelectedAnnotation(updated);
+      setAnnotationSuccess("Annotation saved.");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save annotation.");
@@ -217,10 +218,10 @@ export function ArtworkDetailClient({
       await api.delete(
         `/api/artworks/${artwork.id}/annotations/${deletingAnnotation.id}`
       );
-      setAnnotations((current) =>
-        current.filter((item) => item.id !== deletingAnnotation.id)
-      );
+      await refetchAnnotations();
       setDeletingAnnotation(null);
+      setSelectedAnnotation(null);
+      setAnnotationSuccess("Annotation deleted.");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not delete annotation.");
@@ -456,7 +457,7 @@ export function ArtworkDetailClient({
             {unplacedAnnotations.length > 0 ? (
               <div className="space-y-3">
                 <h3 className="text-sm font-medium text-muted-foreground">
-                  Annotations to place
+                  Unplaced annotations
                 </h3>
                 <ul className="space-y-3">
                   {unplacedAnnotations.map((annotation) => (
@@ -464,23 +465,34 @@ export function ArtworkDetailClient({
                       key={annotation.id}
                       className="rounded-xl border border-dashed border-border bg-muted/20 p-4"
                     >
-                      <div className="mb-2 flex items-start justify-between gap-2">
-                        <Badge variant="secondary">
-                          {CATEGORY_LABELS[annotation.category]}
-                        </Badge>
-                        {canEdit ? (
-                          <AdminActionsMenu
-                            label={`Actions for unplaced annotation ${annotation.id}`}
-                            onEdit={() => openAnnotationEditor(annotation)}
-                            onDelete={() => setDeletingAnnotation(annotation)}
-                          />
-                        ) : null}
-                      </div>
-                      <p className="text-base leading-relaxed">{annotation.text}</p>
-                      <AnnotationPinMeta
-                        annotation={annotation}
-                        culturalEntities={culturalEntities}
-                      />
+                      <button
+                        type="button"
+                        className="w-full text-left"
+                        onClick={() => openAnnotationDetail(annotation)}
+                      >
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <Badge variant="secondary">
+                            {CATEGORY_LABELS[annotation.category]}
+                          </Badge>
+                          {canEdit ? (
+                            <span
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                            >
+                              <AdminActionsMenu
+                                label={`Actions for unplaced annotation ${annotation.id}`}
+                                onEdit={() => openAnnotationDetail(annotation)}
+                                onDelete={() => setDeletingAnnotation(annotation)}
+                              />
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="text-base leading-relaxed">{annotation.text}</p>
+                        <AnnotationPinMeta
+                          annotation={annotation}
+                          culturalEntities={culturalEntities}
+                        />
+                      </button>
                       {canEdit && resolvedDisplayUrl ? (
                         <Button
                           type="button"
@@ -499,37 +511,53 @@ export function ArtworkDetailClient({
             ) : null}
 
             {placedAnnotations.length > 0 ? (
-              <ul className="space-y-3">
-                {placedAnnotations.map((annotation, index) => (
-                  <li
-                    key={annotation.id}
-                    className="rounded-xl border border-border bg-card p-4"
-                  >
-                    <div className="mb-2 flex items-start justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                          {index + 1}
-                        </span>
-                        <Badge variant="secondary">
-                          {CATEGORY_LABELS[annotation.category]}
-                        </Badge>
-                      </div>
-                      {canEdit ? (
-                        <AdminActionsMenu
-                          label={`Actions for annotation ${index + 1}`}
-                          onEdit={() => openAnnotationEditor(annotation)}
-                          onDelete={() => setDeletingAnnotation(annotation)}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  Pinned annotations
+                </h3>
+                <ul className="space-y-3">
+                  {placedAnnotations.map((annotation, index) => (
+                    <li
+                      key={annotation.id}
+                      className="rounded-xl border border-border bg-card p-4"
+                    >
+                      <button
+                        type="button"
+                        className="w-full text-left"
+                        onClick={() => openAnnotationDetail(annotation)}
+                      >
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                              {index + 1}
+                            </span>
+                            <Badge variant="secondary">
+                              {CATEGORY_LABELS[annotation.category]}
+                            </Badge>
+                          </div>
+                          {canEdit ? (
+                            <span
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                            >
+                              <AdminActionsMenu
+                                label={`Actions for annotation ${index + 1}`}
+                                onEdit={() => openAnnotationDetail(annotation)}
+                                onDelete={() => setDeletingAnnotation(annotation)}
+                              />
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="text-base leading-relaxed">{annotation.text}</p>
+                        <AnnotationPinMeta
+                          annotation={annotation}
+                          culturalEntities={culturalEntities}
                         />
-                      ) : null}
-                    </div>
-                    <p className="text-base leading-relaxed">{annotation.text}</p>
-                    <AnnotationPinMeta
-                      annotation={annotation}
-                      culturalEntities={culturalEntities}
-                    />
-                  </li>
-                ))}
-              </ul>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
           </div>
         )}
@@ -651,33 +679,50 @@ export function ArtworkDetailClient({
       />
     </BottomSheet>
 
-    <BottomSheet
-      open={editingAnnotation !== null}
-      onOpenChange={(open) => {
-        if (!open) setEditingAnnotation(null);
-      }}
-      title="Edit annotation"
-      description="Update category, note, tags, or links."
-    >
-      <AnnotationPinForm
-        values={annotationFormValues}
-        onChange={setAnnotationFormValues}
-        culturalEntities={culturalEntities}
-        tagSuggestions={tagSuggestions}
-        noteId="edit-annotation-note"
-      />
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      <Button
-        size="touch"
-        className="mt-4 w-full"
-        disabled={savingAnnotation || !annotationFormValues.text.trim()}
-        onClick={() => void saveAnnotationEdit()}
-      >
-        {savingAnnotation ? "Saving…" : "Save changes"}
-      </Button>
-    </BottomSheet>
       </>
     ) : null}
+
+    <AnnotationDetailSheet
+      annotation={selectedAnnotation}
+      open={selectedAnnotation !== null}
+      onOpenChange={(open) => {
+        if (!open) {
+          setSelectedAnnotation(null);
+          setAnnotationSuccess(null);
+          setError(null);
+        }
+      }}
+      canEdit={canEdit}
+      culturalEntities={culturalEntities}
+      tagSuggestions={tagSuggestions}
+      saving={savingAnnotation}
+      error={error}
+      success={annotationSuccess}
+      onSave={saveAnnotationDetail}
+      onDelete={() => {
+        if (selectedAnnotation) setDeletingAnnotation(selectedAnnotation);
+      }}
+      onMovePin={
+        selectedAnnotation &&
+        selectedAnnotation.x_percent != null &&
+        selectedAnnotation.y_percent != null
+          ? () => {
+              placeAnnotationOnImage(selectedAnnotation.id);
+              setSelectedAnnotation(null);
+            }
+          : undefined
+      }
+      onPlaceOnImage={
+        selectedAnnotation?.x_percent == null
+          ? () => {
+              if (selectedAnnotation) {
+                placeAnnotationOnImage(selectedAnnotation.id);
+                setSelectedAnnotation(null);
+              }
+            }
+          : undefined
+      }
+    />
 
     {canEdit && hasImage ? (
       <ArtworkRegionSheet
