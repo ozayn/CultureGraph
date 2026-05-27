@@ -8,7 +8,7 @@ import { useRef, useState, useMemo, useEffect } from "react";
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { AnnotationDetailSheet } from "@/components/annotations/annotation-detail-sheet";
-import { AnnotationPinMeta } from "@/components/annotations/annotation-pin-meta";
+import { AnnotationOverviewList } from "@/components/annotations/annotation-overview-list";
 import {
   ArtworkImageLookupAction,
   ArtworkImageLookupDebug,
@@ -24,7 +24,6 @@ import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-
 import { ArtworkEnrichmentPanel } from "@/components/artworks/artwork-enrichment-panel";
 import { ResearchPanel } from "@/components/artworks/research-panel";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
-import { Badge } from "@/components/ui/badge";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { ButtonLink } from "@/components/ui/button-link";
 import { Button } from "@/components/ui/button";
@@ -42,7 +41,6 @@ import { splitAnnotationsByPlacement } from "@/lib/annotation-placement";
 import { setPendingAnnotationPlacement } from "@/lib/pending-annotation-placement";
 import { validateArtworkUploadFile } from "@/lib/upload-validation";
 import {
-  CATEGORY_LABELS,
   type Annotation,
   type Artwork,
   type CulturalEntity,
@@ -478,105 +476,16 @@ export function ArtworkDetailClient({
             )}
           </div>
         ) : (
-          <div className="space-y-4">
-            {unplacedAnnotations.length > 0 ? (
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Unplaced annotations
-                </h3>
-                <ul className="space-y-3">
-                  {unplacedAnnotations.map((annotation) => (
-                    <li
-                      key={annotation.id}
-                      className="rounded-xl border border-dashed border-border bg-muted/20 p-4"
-                    >
-                      <div className="flex items-start gap-2">
-                        <button
-                          type="button"
-                          className="min-w-0 flex-1 text-left"
-                          onClick={() => openAnnotationDetail(annotation)}
-                        >
-                          <div className="mb-2">
-                            <Badge variant="secondary">
-                              {CATEGORY_LABELS[annotation.category]}
-                            </Badge>
-                          </div>
-                          <p className="text-base leading-relaxed">{annotation.text}</p>
-                          <AnnotationPinMeta
-                            annotation={annotation}
-                            culturalEntities={culturalEntities}
-                          />
-                        </button>
-                        {canEdit ? (
-                          <AdminActionsMenu
-                            label={`Actions for unplaced annotation ${annotation.id}`}
-                            onEdit={() => openAnnotationDetail(annotation)}
-                            onDelete={() => setDeletingAnnotation(annotation)}
-                          />
-                        ) : null}
-                      </div>
-                      {canEdit && resolvedDisplayUrl ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mt-3 min-h-10"
-                          onClick={() => placeAnnotationOnImage(annotation.id)}
-                        >
-                          Place on image
-                        </Button>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {placedAnnotations.length > 0 ? (
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Pinned annotations
-                </h3>
-                <ul className="space-y-3">
-                  {placedAnnotations.map((annotation, index) => (
-                    <li
-                      key={annotation.id}
-                      className="rounded-xl border border-border bg-card p-4"
-                    >
-                      <div className="flex items-start gap-2">
-                        <button
-                          type="button"
-                          className="min-w-0 flex-1 text-left"
-                          onClick={() => openAnnotationDetail(annotation)}
-                        >
-                          <div className="mb-2 flex flex-wrap items-center gap-2">
-                            <span className="inline-flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                              {index + 1}
-                            </span>
-                            <Badge variant="secondary">
-                              {CATEGORY_LABELS[annotation.category]}
-                            </Badge>
-                          </div>
-                          <p className="text-base leading-relaxed">{annotation.text}</p>
-                          <AnnotationPinMeta
-                            annotation={annotation}
-                            culturalEntities={culturalEntities}
-                          />
-                        </button>
-                        {canEdit ? (
-                          <AdminActionsMenu
-                            label={`Actions for annotation ${index + 1}`}
-                            onEdit={() => openAnnotationDetail(annotation)}
-                            onDelete={() => setDeletingAnnotation(annotation)}
-                          />
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
+          <AnnotationOverviewList
+            placed={placedAnnotations}
+            unplaced={unplacedAnnotations}
+            canEdit={canEdit}
+            culturalEntities={culturalEntities}
+            onOpenDetail={openAnnotationDetail}
+            onDelete={setDeletingAnnotation}
+            onPlaceOnImage={placeAnnotationOnImage}
+            showPlaceOnImage={Boolean(canEdit && resolvedDisplayUrl)}
+          />
         )}
       </section>
 

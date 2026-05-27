@@ -5,14 +5,12 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AnnotationDetailSheet } from "@/components/annotations/annotation-detail-sheet";
+import { AnnotationOverviewList } from "@/components/annotations/annotation-overview-list";
 import { AnnotationPinForm } from "@/components/annotations/annotation-pin-form";
-import { AnnotationPinMeta } from "@/components/annotations/annotation-pin-meta";
 import { PlacementDebugPanel } from "@/components/annotations/placement-debug";
 import { CATEGORY_COLORS } from "@/components/annotations/konva-canvas-stage";
-import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { AuthGate } from "@/components/auth/auth-gate";
-import { Badge } from "@/components/ui/badge";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,7 +39,6 @@ import {
 } from "@/lib/research-suggestions";
 import { useAuth } from "@/contexts/auth-context";
 import {
-  CATEGORY_LABELS,
   type AiSuggestedAnnotation,
   type Annotation,
   type CulturalEntity,
@@ -675,106 +672,20 @@ export function AnnotationCanvas({
         )}
       </div>
 
-      <div className="space-y-4">
-        {unplacedAnnotations.length > 0 ? (
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground">Unplaced annotations</h3>
-            <ul className="space-y-3">
-              {unplacedAnnotations.map((annotation) => (
-                <li
-                  key={annotation.id}
-                  className="rounded-xl border border-dashed border-border bg-muted/20 p-4"
-                >
-                  <button
-                    type="button"
-                    className="w-full text-left"
-                    onClick={() => openAnnotationDetail(annotation)}
-                  >
-                  <div className="mb-2 flex items-start justify-between gap-2">
-                    <Badge variant="secondary">{CATEGORY_LABELS[annotation.category]}</Badge>
-                    {canEdit ? (
-                      <span onClick={(event) => event.stopPropagation()}>
-                        <AdminActionsMenu
-                          label={`Actions for unplaced annotation ${annotation.id}`}
-                          onEdit={() => openAnnotationDetail(annotation)}
-                          onDelete={() => setDeletingAnnotation(annotation)}
-                        />
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="text-base leading-relaxed">{annotation.text}</p>
-                  </button>
-                  <AnnotationPinMeta
-                    annotation={annotation}
-                    culturalEntities={culturalEntities}
-                  />
-                  {canEdit && showImageCanvas ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="touch"
-                      className="mt-3"
-                      disabled={saving}
-                      onClick={() => startPlacingAnnotation(annotation)}
-                    >
-                      Place on image
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <ul className="space-y-3">
-          {placedAnnotations.length === 0 && unplacedAnnotations.length === 0 ? (
-            <li className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-              No annotations yet.
-            </li>
-          ) : (
-            <>
-              <h3 className="text-sm font-medium text-muted-foreground">Pinned annotations</h3>
-              {placedAnnotations.map((annotation, index) => (
-              <li
-                key={annotation.id}
-                className="rounded-xl border border-border bg-card p-4"
-              >
-                <button
-                  type="button"
-                  className="w-full text-left"
-                  onClick={() => openAnnotationDetail(annotation)}
-                >
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                      {index + 1}
-                    </span>
-                    <Badge variant="secondary">
-                      {CATEGORY_LABELS[annotation.category]}
-                    </Badge>
-                  </div>
-                  {canEdit ? (
-                    <span onClick={(event) => event.stopPropagation()}>
-                      <AdminActionsMenu
-                        label={`Actions for annotation ${index + 1}`}
-                        onEdit={() => openAnnotationDetail(annotation)}
-                        onDelete={() => setDeletingAnnotation(annotation)}
-                      />
-                    </span>
-                  ) : null}
-                </div>
-                <p className="text-base leading-relaxed">{annotation.text}</p>
-                <AnnotationPinMeta
-                  annotation={annotation}
-                  culturalEntities={culturalEntities}
-                />
-                </button>
-              </li>
-            ))}
-            </>
-          )}
-        </ul>
-      </div>
+      <AnnotationOverviewList
+        placed={placedAnnotations}
+        unplaced={unplacedAnnotations}
+        canEdit={canEdit}
+        culturalEntities={culturalEntities}
+        onOpenDetail={openAnnotationDetail}
+        onDelete={setDeletingAnnotation}
+        onPlaceOnImage={(annotationId) => {
+          const annotation = annotations.find((item) => item.id === annotationId);
+          if (annotation) startPlacingAnnotation(annotation);
+        }}
+        showPlaceOnImage={canEdit && showImageCanvas}
+        placeOnImageDisabled={saving}
+      />
 
       <BottomSheet
         open={pinFormOpen}
