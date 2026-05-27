@@ -19,6 +19,11 @@ if command -v docker >/dev/null 2>&1; then
   until docker compose exec -T db pg_isready -U culturegraph >/dev/null 2>&1; do
     sleep 1
   done
+  if ! docker compose exec -T db psql -U culturegraph -d postgres -tAc \
+    "SELECT 1 FROM pg_database WHERE datname = 'culturegraph_test'" | grep -q 1; then
+    docker compose exec -T db psql -U culturegraph -d postgres -c \
+      "CREATE DATABASE culturegraph_test OWNER culturegraph;"
+  fi
 elif command -v pg_isready >/dev/null 2>&1; then
   echo "Waiting for local PostgreSQL..."
   until pg_isready -h localhost >/dev/null 2>&1; do

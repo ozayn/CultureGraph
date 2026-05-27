@@ -2,10 +2,10 @@ import json
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.orm import Session
 
-from app.database import SessionLocal
 from app.main import app
-from app.models import Annotation, Artwork, ResearchNote
+from app.models import Annotation, ResearchNote
 from app.services.suggested_annotations import (
     infer_accepted_suggestions,
     load_note_suggestions,
@@ -78,6 +78,7 @@ def test_pending_suggestions_excludes_accepted_and_dismissed() -> None:
 @pytest.mark.asyncio
 async def test_patch_research_suggestions_persists_status(
     auth_headers: dict[str, str],
+    db_session: Session,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -88,25 +89,21 @@ async def test_patch_research_suggestions_persists_status(
         )
         artwork_id = artwork_response.json()["id"]
 
-        db = SessionLocal()
-        try:
-            suggestion = _pending_suggestion()
-            note = ResearchNote(
-                artwork_id=artwork_id,
-                short_summary="Summary",
-                historical_context="Context",
-                visual_elements_to_notice="[]",
-                related_questions="[]",
-                suggested_annotations=json.dumps(
-                    [suggestion.model_dump(mode="json")]
-                ),
-            )
-            db.add(note)
-            db.commit()
-            db.refresh(note)
-            note_id = note.id
-        finally:
-            db.close()
+        suggestion = _pending_suggestion()
+        note = ResearchNote(
+            artwork_id=artwork_id,
+            short_summary="Summary",
+            historical_context="Context",
+            visual_elements_to_notice="[]",
+            related_questions="[]",
+            suggested_annotations=json.dumps(
+                [suggestion.model_dump(mode="json")]
+            ),
+        )
+        db_session.add(note)
+        db_session.commit()
+        db_session.refresh(note)
+        note_id = note.id
 
         accepted = suggestion.model_copy(
             update={"status": "accepted", "accepted_annotation_id": 42}
@@ -129,6 +126,7 @@ async def test_patch_research_suggestions_persists_status(
 @pytest.mark.asyncio
 async def test_list_research_migrates_matching_annotation_to_accepted(
     auth_headers: dict[str, str],
+    db_session: Session,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -139,37 +137,33 @@ async def test_list_research_migrates_matching_annotation_to_accepted(
         )
         artwork_id = artwork_response.json()["id"]
 
-        db = SessionLocal()
-        try:
-            suggestion = _pending_suggestion("Matching saved annotation text.")
-            note = ResearchNote(
-                artwork_id=artwork_id,
-                short_summary="Summary",
-                historical_context="Context",
-                visual_elements_to_notice="[]",
-                related_questions="[]",
-                suggested_annotations=json.dumps(
-                    [suggestion.model_dump(mode="json")]
-                ),
-            )
-            db.add(note)
-            db.flush()
+        suggestion = _pending_suggestion("Matching saved annotation text.")
+        note = ResearchNote(
+            artwork_id=artwork_id,
+            short_summary="Summary",
+            historical_context="Context",
+            visual_elements_to_notice="[]",
+            related_questions="[]",
+            suggested_annotations=json.dumps(
+                [suggestion.model_dump(mode="json")]
+            ),
+        )
+        db_session.add(note)
+        db_session.flush()
 
-            db.add(
-                Annotation(
-                    artwork_id=artwork_id,
-                    x_percent=12.0,
-                    y_percent=34.0,
-                    category="composition",
-                    text="Matching saved annotation text.",
-                    tags="[]",
-                    linked_entity_ids="[]",
-                    linked_concept_names="[]",
-                )
+        db_session.add(
+            Annotation(
+                artwork_id=artwork_id,
+                x_percent=12.0,
+                y_percent=34.0,
+                category="composition",
+                text="Matching saved annotation text.",
+                tags="[]",
+                linked_entity_ids="[]",
+                linked_concept_names="[]",
             )
-            db.commit()
-        finally:
-            db.close()
+        )
+        db_session.commit()
 
         notes_response = await client.get(f"/api/artworks/{artwork_id}/research")
         assert notes_response.status_code == 200

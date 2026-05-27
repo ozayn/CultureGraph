@@ -109,6 +109,44 @@ cp frontend/.env.example frontend/.env.local
 cd frontend && npm run icons
 ```
 
+## Testing
+
+Backend tests **must not** run against your local development database (`culturegraph`). Pytest uses a separate Postgres database configured via `TEST_DATABASE_URL` (default: `culturegraph_test` on the same host as `DATABASE_URL`).
+
+```bash
+cd backend
+source .venv/bin/activate
+pytest
+```
+
+### One-time test database setup
+
+**Docker (recommended):** `./scripts/dev.sh` creates `culturegraph_test` automatically when Docker Postgres is running. Fresh Docker volumes also get it from `docker/postgres/init-test-db.sql`.
+
+**Local Postgres without Docker:** create the database once as a superuser:
+
+```bash
+psql -h localhost -d postgres -c "CREATE DATABASE culturegraph_test OWNER culturegraph;"
+```
+
+Set `TEST_DATABASE_URL` in `backend/.env` if you use a non-default name or host.
+
+Each pytest run resets the test schema (`drop_all` / `create_all` at session start). Each test executes inside a transaction that is rolled back afterward, so test records never persist.
+
+`backend/scripts/seed.py` seeds **development only** (Metropolitan Museum sample visit). It is not used by pytest.
+
+Frontend unit tests (`cd frontend && npm test`) mock the API and do not write to Postgres.
+
+### Cleaning accidental test records from dev
+
+If pytest was previously pointed at the dev database, you may see visits like **Test Museum**, **Delete Museum**, or notes **Admin CRUD visit** in the local app. Remove them with:
+
+```bash
+./scripts/cleanup-test-data.sh
+```
+
+This deletes known pytest fixture names from `DATABASE_URL` in `backend/.env`. It does **not** touch `culturegraph_test`.
+
 ## Development notes
 
 ### Node `[DEP0205] module.register()` warning (harmless)
