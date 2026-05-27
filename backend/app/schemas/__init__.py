@@ -270,6 +270,9 @@ class SuggestedAnnotationPosition(BaseModel):
         return self
 
 
+SuggestedAnnotationStatus = Literal["pending", "accepted", "dismissed"]
+
+
 class AiSuggestedAnnotation(BaseModel):
     category: AnnotationCategory
     note: str = Field(min_length=1)
@@ -279,6 +282,8 @@ class AiSuggestedAnnotation(BaseModel):
     suggested_position: SuggestedAnnotationPosition = Field(
         default_factory=SuggestedAnnotationPosition
     )
+    status: SuggestedAnnotationStatus = "pending"
+    accepted_annotation_id: int | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -310,6 +315,11 @@ class AiSuggestedAnnotation(BaseModel):
         normalized.setdefault("tags", [])
         normalized.setdefault("linked_concept_names", [])
         normalized.setdefault("confidence", 0.5)
+        normalized.setdefault("status", "pending")
+        if normalized.get("status") not in {"pending", "accepted", "dismissed"}:
+            normalized["status"] = "pending"
+        if normalized.get("status") != "accepted":
+            normalized["accepted_annotation_id"] = None
         return normalized
 
 
@@ -340,6 +350,10 @@ class ClaudeResearchResponse(BaseModel):
     historical_context: str = Field(min_length=1)
     confidence: float = Field(ge=0.0, le=1.0)
     suggested_annotations: list[ClaudeSuggestedAnnotation] = Field(default_factory=list)
+
+
+class ResearchSuggestionsUpdate(BaseModel):
+    suggested_annotations: list[AiSuggestedAnnotation] = Field(default_factory=list)
 
 
 class ResearchNoteRead(BaseModel):

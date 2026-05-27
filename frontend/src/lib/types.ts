@@ -12,6 +12,8 @@ export interface SuggestedAnnotationPosition {
   reason: string | null;
 }
 
+export type SuggestedAnnotationStatus = "pending" | "accepted" | "dismissed";
+
 export interface AiSuggestedAnnotation {
   category: AnnotationCategory;
   note: string;
@@ -19,6 +21,8 @@ export interface AiSuggestedAnnotation {
   linked_concept_names: string[];
   confidence: number;
   suggested_position: SuggestedAnnotationPosition;
+  status?: SuggestedAnnotationStatus;
+  accepted_annotation_id?: number | null;
 }
 
 export interface Visit {

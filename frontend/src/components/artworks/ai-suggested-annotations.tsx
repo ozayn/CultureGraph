@@ -15,8 +15,12 @@ import { setPendingAiAnnotation } from "@/lib/pending-ai-annotation";
 import {
   formValuesToSuggestedAnnotation,
   hasSuggestedCoordinates,
+  markSuggestionAccepted,
+  markSuggestionDismissed,
+  pendingSuggestions,
   suggestedAnnotationToAnnotationPayload,
   suggestedAnnotationToFormValues,
+  suggestionMatchKey,
 } from "@/lib/research-suggestions";
 import { CATEGORY_LABELS, type AiSuggestedAnnotation, type Annotation, type CulturalEntity } from "@/lib/types";
 
@@ -26,6 +30,7 @@ interface AiSuggestedAnnotationsProps {
   culturalEntities?: CulturalEntity[];
   hasImage?: boolean;
   onSuggestionsChange: (suggestions: AiSuggestedAnnotation[]) => void;
+  onPersistSuggestions?: (suggestions: AiSuggestedAnnotation[]) => Promise<void>;
   onAnnotationAccepted?: (annotation: Annotation) => void;
 }
 
@@ -35,7 +40,7 @@ interface IndexedSuggestion {
 }
 
 function suggestionId(suggestion: AiSuggestedAnnotation, index: number): string {
-  return `${suggestion.category}-${suggestion.note.slice(0, 24)}-${index}`;
+  return `${suggestionMatchKey(suggestion)}-${index}`;
 }
 
 export function AiSuggestedAnnotations({
@@ -44,6 +49,7 @@ export function AiSuggestedAnnotations({
   culturalEntities = [],
   hasImage = false,
   onSuggestionsChange,
+  onPersistSuggestions,
   onAnnotationAccepted,
 }: AiSuggestedAnnotationsProps) {
   const router = useRouter();
@@ -59,19 +65,18 @@ export function AiSuggestedAnnotations({
 
   const indexedSuggestions = useMemo(
     () =>
-      suggestions.map((suggestion, index) => ({
+      pendingSuggestions(suggestions).map((suggestion, index) => ({
         id: suggestionId(suggestion, index),
         suggestion,
       })),
     [suggestions]
   );
 
-  function removeSuggestion(id: string) {
-    onSuggestionsChange(
-      indexedSuggestions
-        .filter((item) => item.id !== id)
-        .map((item) => item.suggestion)
-    );
+  async function persistAll(next: AiSuggestedAnnotation[]) {
+    onSuggestionsChange(next);
+    if (onPersistSuggestions) {
+      await onPersistSuggestions(next);
+    }
   }
 
   async function acceptSuggestion(item: IndexedSuggestion) {
@@ -92,7 +97,8 @@ export function AiSuggestedAnnotations({
             : null
         )
       );
-      removeSuggestion(item.id);
+      const next = markSuggestionAccepted(suggestions, suggestion, created.id);
+      await persistAll(next);
       onAnnotationAccepted?.(created);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save annotation.");
@@ -101,8 +107,14 @@ export function AiSuggestedAnnotations({
     }
   }
 
-  function dismissSuggestion(id: string) {
-    removeSuggestion(id);
+  async function dismissSuggestion(item: IndexedSuggestion) {
+    setError(null);
+    try {
+      const next = markSuggestionDismissed(suggestions, item.suggestion);
+      await persistAll(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not dismiss suggestion.");
+    }
   }
 
   function startEdit(item: IndexedSuggestion) {
@@ -114,9 +126,9 @@ export function AiSuggestedAnnotations({
   function saveEdit() {
     if (!editing || !editValues) return;
     const updated = formValuesToSuggestedAnnotation(editValues, editing.suggestion);
-    onSuggestionsChange(
-      indexedSuggestions.map((item) =>
-        item.id === editing.id ? updated : item.suggestion
+    void persistAll(
+      suggestions.map((item) =>
+        suggestionMatchKey(item) === suggestionMatchKey(editing.suggestion) ? updated : item
       )
     );
     setEditing(null);
@@ -212,7 +224,7 @@ export function AiSuggestedAnnotations({
                   type="button"
                   size="touch"
                   variant="ghost"
-                  onClick={() => dismissSuggestion(item.id)}
+                  onClick={() => void dismissSuggestion(item)}
                 >
                   Dismiss
                 </Button>

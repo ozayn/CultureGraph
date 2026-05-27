@@ -64,17 +64,44 @@ export function ResearchPanel({
   const artworkId = artwork.id;
   const [notes, setNotes] = useState<ResearchNote[]>([]);
   const [draft, setDraft] = useState<ResearchDraft | null>(null);
-  const [visibleSuggestions, setVisibleSuggestions] = useState<AiSuggestedAnnotation[]>([]);
+  const [activeNoteId, setActiveNoteId] = useState<number | null>(null);
+  const [allSuggestions, setAllSuggestions] = useState<AiSuggestedAnnotation[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingNote, setDeletingNote] = useState<ResearchNote | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  function loadDraft(nextDraft: ResearchDraft) {
+  function loadDraft(nextDraft: ResearchDraft, noteId: number | null = null) {
     setDraft(nextDraft);
-    setVisibleSuggestions(nextDraft.suggested_annotations ?? []);
+    setActiveNoteId(noteId);
+    setAllSuggestions(nextDraft.suggested_annotations ?? []);
   }
+
+  const persistSuggestions = useCallback(
+    async (suggestions: AiSuggestedAnnotation[]) => {
+      if (!activeNoteId) return;
+
+      const saved = await api.patch<{ suggested_annotations: AiSuggestedAnnotation[] }>(
+        `/api/artworks/${artworkId}/research/${activeNoteId}/suggestions`,
+        { suggested_annotations: suggestions }
+      );
+
+      const next = saved.suggested_annotations;
+      setAllSuggestions(next);
+      setDraft((current) =>
+        current ? { ...current, suggested_annotations: next } : current
+      );
+      setNotes((current) =>
+        current.map((note) =>
+          note.id === activeNoteId
+            ? { ...note, suggested_annotations: JSON.stringify(next) }
+            : note
+        )
+      );
+    },
+    [activeNoteId, artworkId]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +113,8 @@ export function ResearchPanel({
         if (cancelled) return;
         setNotes(result);
         if (result.length > 0) {
-          loadDraft(parseResearchNote(result[0]));
+          const first = result[0];
+          loadDraft(parseResearchNote(first), first.id);
         }
       } catch (e) {
         if (!cancelled) {
@@ -111,9 +139,14 @@ export function ResearchPanel({
     setError(null);
     try {
       const result = await api.post<ResearchDraft>(`/api/artworks/${artworkId}/research`);
-      loadDraft(result);
       const saved = await api.get<ResearchNote[]>(`/api/artworks/${artworkId}/research`);
       setNotes(saved);
+      const latest = saved[0];
+      if (latest) {
+        loadDraft(parseResearchNote(latest), latest.id);
+      } else {
+        loadDraft(result);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not generate research.");
     } finally {
@@ -139,10 +172,11 @@ export function ResearchPanel({
       if (notes[0]?.id === deletingNote.id) {
         const remaining = notes.filter((note) => note.id !== deletingNote.id);
         if (remaining[0]) {
-          loadDraft(parseResearchNote(remaining[0]));
+          loadDraft(parseResearchNote(remaining[0]), remaining[0].id);
         } else {
           setDraft(null);
-          setVisibleSuggestions([]);
+          setActiveNoteId(null);
+          setAllSuggestions([]);
         }
       }
       setDeletingNote(null);
@@ -190,7 +224,7 @@ export function ResearchPanel({
               <button
                 type="button"
                 className="min-w-0 flex-1 text-left"
-                onClick={() => loadDraft(parseResearchNote(note))}
+                onClick={() => loadDraft(parseResearchNote(note), note.id)}
               >
                 <span className="block truncate font-medium">{note.short_summary}</span>
                 <span className="text-xs text-muted-foreground">
@@ -245,10 +279,11 @@ export function ResearchPanel({
 
           <AiSuggestedAnnotations
             artworkId={artworkId}
-            suggestions={visibleSuggestions}
+            suggestions={allSuggestions}
             culturalEntities={culturalEntities}
             hasImage={hasImage}
-            onSuggestionsChange={setVisibleSuggestions}
+            onSuggestionsChange={setAllSuggestions}
+            onPersistSuggestions={canEdit ? persistSuggestions : undefined}
             onAnnotationAccepted={onAnnotationAccepted}
           />
         </div>

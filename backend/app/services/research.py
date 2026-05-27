@@ -3,6 +3,7 @@ from typing import Protocol
 
 from app.config import settings
 from app.schemas import AiSuggestedAnnotation, ResearchDraft, SuggestedAnnotationPosition
+from app.services.suggested_annotations import ensure_pending_defaults
 
 
 class ResearchConfigurationError(Exception):
@@ -95,7 +96,10 @@ def serialize_research_draft(draft: ResearchDraft) -> dict[str, str | None]:
         "visual_elements_to_notice": json.dumps(draft.visual_elements_to_notice),
         "related_questions": json.dumps(draft.related_questions),
         "suggested_annotations": json.dumps(
-            [item.model_dump(mode="json") for item in draft.suggested_annotations]
+            [
+                item.model_dump(mode="json")
+                for item in ensure_pending_defaults(draft.suggested_annotations)
+            ]
         ),
         "possible_title": draft.possible_title,
         "possible_artist": draft.possible_artist,

@@ -1,5 +1,10 @@
 import type { AnnotationPinFormValues } from "@/lib/annotation-form";
-import type { AiSuggestedAnnotation, AnnotationCategory } from "@/lib/types";
+import type {
+  AiSuggestedAnnotation,
+  Annotation,
+  AnnotationCategory,
+  SuggestedAnnotationStatus,
+} from "@/lib/types";
 
 const VALID_CATEGORIES = new Set<AnnotationCategory>([
   "observation",
@@ -20,6 +25,81 @@ function normalizeCategory(value: unknown): AnnotationCategory {
 function normalizeStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map(String).filter(Boolean);
+}
+
+function normalizeStatus(value: unknown): SuggestedAnnotationStatus {
+  if (value === "accepted" || value === "dismissed" || value === "pending") {
+    return value;
+  }
+  return "pending";
+}
+
+export function suggestionMatchKey(suggestion: Pick<AiSuggestedAnnotation, "category" | "note">): string {
+  const note = suggestion.note.trim().toLowerCase().replace(/\s+/g, " ");
+  return `${suggestion.category}::${note}`;
+}
+
+export function pendingSuggestions(suggestions: AiSuggestedAnnotation[]): AiSuggestedAnnotation[] {
+  return suggestions.filter((item) => normalizeStatus(item.status) === "pending");
+}
+
+export function inferAcceptedSuggestions(
+  suggestions: AiSuggestedAnnotation[],
+  annotations: Annotation[]
+): AiSuggestedAnnotation[] {
+  if (suggestions.length === 0 || annotations.length === 0) return suggestions;
+
+  const byKey = new Map<string, Annotation>();
+  for (const annotation of annotations) {
+    byKey.set(suggestionMatchKey({ category: annotation.category, note: annotation.text }), annotation);
+  }
+
+  let changed = false;
+  const updated = suggestions.map((suggestion) => {
+    const status = normalizeStatus(suggestion.status);
+    if (status === "accepted" || status === "dismissed") {
+      return suggestion;
+    }
+
+    const match = byKey.get(suggestionMatchKey(suggestion));
+    if (!match) {
+      return { ...suggestion, status: "pending" as const, accepted_annotation_id: null };
+    }
+
+    changed = true;
+    return {
+      ...suggestion,
+      status: "accepted" as const,
+      accepted_annotation_id: match.id,
+    };
+  });
+
+  return changed ? updated : suggestions;
+}
+
+export function markSuggestionAccepted(
+  suggestions: AiSuggestedAnnotation[],
+  target: AiSuggestedAnnotation,
+  annotationId: number
+): AiSuggestedAnnotation[] {
+  const key = suggestionMatchKey(target);
+  return suggestions.map((item) =>
+    suggestionMatchKey(item) === key
+      ? { ...item, status: "accepted" as const, accepted_annotation_id: annotationId }
+      : item
+  );
+}
+
+export function markSuggestionDismissed(
+  suggestions: AiSuggestedAnnotation[],
+  target: AiSuggestedAnnotation
+): AiSuggestedAnnotation[] {
+  const key = suggestionMatchKey(target);
+  return suggestions.map((item) =>
+    suggestionMatchKey(item) === key
+      ? { ...item, status: "dismissed" as const, accepted_annotation_id: null }
+      : item
+  );
 }
 
 function normalizePosition(raw: unknown): AiSuggestedAnnotation["suggested_position"] {
@@ -56,6 +136,9 @@ export function normalizeAiSuggestedAnnotation(raw: unknown): AiSuggestedAnnotat
         : "";
   if (!note.trim()) return null;
 
+  const status = normalizeStatus(item.status);
+  const acceptedId = item.accepted_annotation_id;
+
   return {
     category: normalizeCategory(item.category),
     note: note.trim(),
@@ -66,6 +149,9 @@ export function normalizeAiSuggestedAnnotation(raw: unknown): AiSuggestedAnnotat
         ? Math.min(1, Math.max(0, item.confidence))
         : 0.5,
     suggested_position: normalizePosition(item.suggested_position),
+    status,
+    accepted_annotation_id:
+      status === "accepted" && typeof acceptedId === "number" ? acceptedId : null,
   };
 }
 
