@@ -1,7 +1,7 @@
 import { getAuthToken } from "@/lib/auth-storage";
 import { mapGoogleSignInError, parseApiErrorDetail } from "@/lib/auth-errors";
 import { apiUrl, getApiBase } from "@/lib/api-config";
-import { resolveMediaUrl } from "@/lib/media-url";
+import { displayImageUrl, resolveImageUrl } from "@/lib/media-url";
 
 export { apiUrl, getApiBase } from "@/lib/api-config";
 
@@ -12,12 +12,12 @@ export const IMPORT_REQUEST_TIMEOUT_MS = 120_000;
 export const UPLOAD_REQUEST_TIMEOUT_MS = 120_000;
 
 export function mediaUrl(path: string | null | undefined): string | null {
-  return resolveMediaUrl(path);
+  return resolveImageUrl(path);
 }
 
 /** Local blob/data URLs and remote paths suitable for `<img src>`. */
 export function resolveArtworkImageSrc(url: string): string {
-  return resolveMediaUrl(url) ?? url;
+  return displayImageUrl(url) ?? url;
 }
 
 type ApiRequestOptions = Omit<RequestInit, "signal"> & {

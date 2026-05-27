@@ -15,8 +15,21 @@ function encodeMediaUrl(url: string): string {
   }
 }
 
-/** Resolve artwork/entity image paths to a browser-loadable absolute URL. */
-export function resolveMediaUrl(path: string | null | undefined): string | null {
+/** Upgrade http→https when the page is served over https (avoids mixed-content blocks on mobile). */
+function coerceBrowserSafeUrl(url: string): string {
+  if (typeof window === "undefined") return url;
+  if (window.location.protocol === "https:" && url.startsWith("http://")) {
+    return `https://${url.slice("http://".length)}`;
+  }
+  return url;
+}
+
+/**
+ * Resolve artwork/entity image paths to a browser-loadable absolute URL.
+ * - `/uploads/...` → prefixed with the public API base URL
+ * - `https://...` museum URLs → used as-is (optionally proxied for display)
+ */
+export function resolveImageUrl(path: string | null | undefined): string | null {
   if (!path?.trim()) return null;
 
   const trimmed = path.trim();
@@ -25,16 +38,23 @@ export function resolveMediaUrl(path: string | null | undefined): string | null 
   }
 
   if (trimmed.startsWith("//")) {
-    return encodeMediaUrl(`https:${trimmed}`);
+    return coerceBrowserSafeUrl(encodeMediaUrl(`https:${trimmed}`));
   }
 
   if (/^https?:\/\//i.test(trimmed)) {
-    return encodeMediaUrl(trimmed);
+    return coerceBrowserSafeUrl(encodeMediaUrl(trimmed));
   }
 
   const normalizedPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  return encodeMediaUrl(apiUrl(normalizedPath));
+  if (normalizedPath.startsWith("/uploads/")) {
+    return coerceBrowserSafeUrl(encodeMediaUrl(apiUrl(normalizedPath)));
+  }
+
+  return coerceBrowserSafeUrl(encodeMediaUrl(apiUrl(normalizedPath)));
 }
+
+/** @deprecated Use resolveImageUrl */
+export const resolveMediaUrl = resolveImageUrl;
 
 function isMuseumImageHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
@@ -53,7 +73,6 @@ function isSameApiHost(url: string): boolean {
   }
 }
 
-/** Use API proxy for external museum thumbnails that may block hotlinking. */
 export function shouldProxyExternalImage(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -65,14 +84,23 @@ export function shouldProxyExternalImage(url: string): boolean {
   }
 }
 
-/** Thumbnail/card image src — resolves relative uploads and proxies museum URLs when needed. */
-export function thumbnailDisplayUrl(path: string | null | undefined): string | null {
-  const resolved = resolveMediaUrl(path);
-  if (!resolved) return null;
-
+function withMuseumProxy(resolved: string): string {
   if (shouldProxyExternalImage(resolved)) {
     return `${getApiBase()}/api/image-proxy?url=${encodeURIComponent(resolved)}`;
   }
-
   return resolved;
+}
+
+/** Card thumbnails — thumbnail_url preferred by caller. */
+export function thumbnailDisplayUrl(path: string | null | undefined): string | null {
+  const resolved = resolveImageUrl(path);
+  if (!resolved) return null;
+  return withMuseumProxy(resolved);
+}
+
+/** Detail hero and full-size artwork display. */
+export function displayImageUrl(path: string | null | undefined): string | null {
+  const resolved = resolveImageUrl(path);
+  if (!resolved) return null;
+  return withMuseumProxy(resolved);
 }

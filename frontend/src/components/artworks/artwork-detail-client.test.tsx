@@ -67,7 +67,6 @@ describe("ArtworkDetailClient official image lookup", () => {
       <ArtworkDetailClient
         artwork={artworkWithImage}
         annotations={[]}
-        imageSrc="http://localhost:8000/uploads/artworks/173/display.webp"
       />
     );
 
@@ -81,7 +80,6 @@ describe("ArtworkDetailClient official image lookup", () => {
       <ArtworkDetailClient
         artwork={{ ...artworkWithImage, image_url: null, image_thumbnail_url: null }}
         annotations={[]}
-        imageSrc={null}
       />
     );
 

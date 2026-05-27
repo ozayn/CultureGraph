@@ -74,7 +74,7 @@ describe("ArtworkDetailClient auth messaging", () => {
   });
 
   it("shows one auth gate and no repeated edit CultureGraph headings", () => {
-    render(<ArtworkDetailClient artwork={artwork} annotations={[]} imageSrc={null} />);
+    render(<ArtworkDetailClient artwork={artwork} annotations={[]} />);
 
     expect(
       screen.getByText(

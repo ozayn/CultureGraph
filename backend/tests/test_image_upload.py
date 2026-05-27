@@ -168,3 +168,30 @@ async def test_upload_rejects_oversized_file(
         )
 
     assert upload_response.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_uploaded_image_is_served_from_uploads_route(auth_headers: dict[str, str]) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={"title": "Static file test"},
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        upload_response = await client.post(
+            f"/api/artworks/{artwork_id}/image",
+            headers=auth_headers,
+            files={"file": ("photo.png", _make_png_bytes(400, 300), "image/png")},
+        )
+        assert upload_response.status_code == 200
+        thumb_url = upload_response.json()["image_thumbnail_url"]
+
+        static_response = await client.get(thumb_url)
+
+    assert static_response.status_code == 200
+    assert static_response.headers["content-type"].startswith("image/")
+    assert static_response.headers.get("cache-control", "").startswith("public")
+    assert len(static_response.content) > 0

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Source_Serif_4 } from "next/font/google";
 
 import { AppChrome } from "@/components/layout/app-chrome";
+import { ApiRuntimeConfig } from "@/components/providers/api-runtime-config";
 import { AppProviders } from "@/components/providers/app-providers";
 
 import "./globals.css";
@@ -22,6 +23,8 @@ const sourceSerif = Source_Serif_4({
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const publicApiUrl =
+  process.env.NEXT_PUBLIC_API_URL?.trim() || "http://localhost:8000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -81,7 +84,15 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${sourceSerif.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-background text-foreground">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__CULTUREGRAPH_API_URL__=${JSON.stringify(publicApiUrl)};`,
+          }}
+        />
+      </head>
+      <body className="min-h-full bg-background text-foreground" data-api-url={publicApiUrl}>
+        <ApiRuntimeConfig apiUrl={publicApiUrl} />
         <AppProviders>
           <AppChrome>{children}</AppChrome>
         </AppProviders>

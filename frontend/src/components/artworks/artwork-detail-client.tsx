@@ -18,6 +18,7 @@ import {
 import { AuthGate } from "@/components/auth/auth-gate";
 import { SignInInlineHint } from "@/components/auth/sign-in-inline-hint";
 import { ArtworkRegionSheet } from "@/components/artworks/artwork-region-sheet";
+import { ArtworkImage, ArtworkImagePlaceholder } from "@/components/artworks/artwork-image";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
 import { ResearchPanel } from "@/components/artworks/research-panel";
@@ -27,7 +28,8 @@ import { ButtonLink } from "@/components/ui/button-link";
 import { Button } from "@/components/ui/button";
 import { CameraUpload } from "@/components/ui/camera-upload";
 import { Textarea } from "@/components/ui/textarea";
-import { api, mediaUrl } from "@/lib/api";
+import { api } from "@/lib/api";
+import { displayImageUrl } from "@/lib/media-url";
 import { artworkDisplayTitle } from "@/lib/artwork-metadata";
 import { artworkHasImageRegion } from "@/lib/artwork-region";
 import { useAuth } from "@/contexts/auth-context";
@@ -53,14 +55,12 @@ interface ArtworkDetailClientProps {
   artwork: Artwork;
   annotations: Annotation[];
   culturalEntities?: CulturalEntity[];
-  imageSrc: string | null;
 }
 
 export function ArtworkDetailClient({
   artwork: initialArtwork,
   annotations: initialAnnotations,
   culturalEntities = [],
-  imageSrc: initialImageSrc,
 }: ArtworkDetailClientProps) {
   const router = useRouter();
   const { canEdit, loading: authLoading } = useAuth();
@@ -68,7 +68,6 @@ export function ArtworkDetailClient({
   const generateResearchRef = useRef<(() => Promise<void>) | null>(null);
   const [artwork, setArtwork] = useState(initialArtwork);
   const [annotations, setAnnotations] = useState(initialAnnotations);
-  const [imageSrc, setImageSrc] = useState(initialImageSrc);
   const [noteOpen, setNoteOpen] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [regionOpen, setRegionOpen] = useState(false);
@@ -98,7 +97,11 @@ export function ArtworkDetailClient({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const hasImage = Boolean(artwork.image_url ?? imageSrc);
+  const resolvedDisplayUrl = useMemo(
+    () => displayImageUrl(artwork.image_url),
+    [artwork.image_url]
+  );
+  const hasImage = Boolean(artwork.image_url);
 
   const openApplyReviewRef = useRef<(() => void) | null>(null);
   const [researchHints, setResearchHints] = useState<ResearchMetadataHints | null>(null);
@@ -110,13 +113,11 @@ export function ArtworkDetailClient({
 
   function handleLookupApplied(updated: Artwork) {
     setArtwork(updated);
-    setImageSrc(mediaUrl(updated.image_url));
     router.refresh();
   }
 
   function handleRegionSaved(updated: Artwork) {
     setArtwork(updated);
-    setImageSrc(mediaUrl(updated.image_url));
     router.refresh();
   }
 
@@ -154,7 +155,6 @@ export function ArtworkDetailClient({
         photo
       );
       setArtwork(updated);
-      setImageSrc(mediaUrl(updated.image_url));
       setPhotoOpen(false);
       setPhoto(null);
       setPreviewUrl(null);
@@ -265,19 +265,16 @@ export function ArtworkDetailClient({
       <section className="overflow-hidden bg-[#f3efe8] sm:rounded-xl sm:border sm:border-border">
         {hasImage ? (
           <>
-            {imageSrc ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={imageSrc}
-                alt={artworkDisplayTitle(artwork.title)}
-                className="block w-full object-contain"
-                style={{ maxHeight: "min(70dvh, 640px)" }}
-              />
-            ) : (
-              <div className="flex min-h-48 items-center justify-center px-6 py-10 text-sm text-muted-foreground">
-                Image file unavailable — you can still replace it with an official museum image.
-              </div>
-            )}
+            <ArtworkImage
+              imageUrl={artwork.image_url}
+              imgClassName="max-h-[min(70dvh,640px)]"
+              fallback={
+                <div className="flex min-h-48 flex-col items-center justify-center gap-2 px-6 py-10 text-center text-sm text-muted-foreground">
+                  <ArtworkImagePlaceholder />
+                  <p>Image unavailable — you can still replace it with an official museum image.</p>
+                </div>
+              }
+            />
             {!authLoading && canEdit ? (
               <div className="flex flex-col gap-2 border-t border-border/60 bg-background px-4 py-3">
                 <ArtworkImageLookupAction variant="replace" fullWidth primary />
@@ -483,7 +480,7 @@ export function ArtworkDetailClient({
                         annotation={annotation}
                         culturalEntities={culturalEntities}
                       />
-                      {canEdit && imageSrc ? (
+                      {canEdit && resolvedDisplayUrl ? (
                         <Button
                           type="button"
                           variant="outline"
@@ -541,7 +538,7 @@ export function ArtworkDetailClient({
         <ResearchPanel
           artwork={artwork}
           canEdit={canEdit}
-          hasImage={Boolean(imageSrc)}
+          hasImage={hasImage}
           culturalEntities={culturalEntities}
           onReady={(generate) => {
             generateResearchRef.current = generate;
@@ -605,7 +602,7 @@ export function ArtworkDetailClient({
     >
       <div className="space-y-4 pb-2">
         <CameraUpload
-          previewUrl={previewUrl ?? imageSrc}
+          previewUrl={previewUrl ?? resolvedDisplayUrl}
           selectedFile={photo}
           disabled={uploadingPhoto}
           error={error}

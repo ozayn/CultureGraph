@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { ArtworkDetailClient } from "@/components/artworks/artwork-detail-client";
-import { api, mediaUrl } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { Annotation, Artwork, CulturalEntity } from "@/lib/types";
 
 export default async function ArtworkDetailPage({
@@ -35,7 +35,6 @@ export default async function ArtworkDetailPage({
       artwork={artwork}
       annotations={annotations}
       culturalEntities={culturalEntities}
-      imageSrc={mediaUrl(artwork.image_url)}
     />
   );
 }

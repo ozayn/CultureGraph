@@ -2,9 +2,8 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-
 from app.config import settings
+from app.static_files import CachedStaticFiles
 from app.routers import (
     admin,
     annotations,
@@ -30,7 +29,7 @@ app.add_middleware(
 
 upload_path = Path(settings.upload_dir)
 upload_path.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(upload_path)), name="uploads")
+app.mount("/uploads", CachedStaticFiles(directory=str(upload_path)), name="uploads")
 
 app.include_router(media.router, prefix="/api")
 app.include_router(visits.router, prefix="/api")
