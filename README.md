@@ -109,6 +109,24 @@ cp frontend/.env.example frontend/.env.local
 cd frontend && npm run icons
 ```
 
+## Database migrations
+
+Alembic lives in `backend/` and must run with the **backend virtualenv** (Python 3.11+). Do not use a global `alembic` from Python 3.9 — it will fail on modern type syntax.
+
+```bash
+./scripts/migrate.sh
+```
+
+Equivalent manual steps:
+
+```bash
+cd backend
+source .venv/bin/activate
+alembic upgrade head
+```
+
+`./scripts/dev.sh` runs migrations automatically on startup.
+
 ## Testing
 
 Backend tests **must not** run against your local development database (`culturegraph`). Pytest uses a separate Postgres database configured via `TEST_DATABASE_URL` (default: `culturegraph_test` on the same host as `DATABASE_URL`).
@@ -143,6 +161,8 @@ If pytest was previously pointed at the dev database, you may see visits like **
 
 ```bash
 ./scripts/cleanup-test-data.sh
+# or
+python scripts/cleanup_test_data.py
 ```
 
 This deletes known pytest fixture names from `DATABASE_URL` in `backend/.env`. It does **not** touch `culturegraph_test`.

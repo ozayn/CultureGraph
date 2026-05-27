@@ -490,34 +490,31 @@ export function ArtworkDetailClient({
                       key={annotation.id}
                       className="rounded-xl border border-dashed border-border bg-muted/20 p-4"
                     >
-                      <button
-                        type="button"
-                        className="w-full text-left"
-                        onClick={() => openAnnotationDetail(annotation)}
-                      >
-                        <div className="mb-2 flex items-start justify-between gap-2">
-                          <Badge variant="secondary">
-                            {CATEGORY_LABELS[annotation.category]}
-                          </Badge>
-                          {canEdit ? (
-                            <span
-                              onClick={(event) => event.stopPropagation()}
-                              onKeyDown={(event) => event.stopPropagation()}
-                            >
-                              <AdminActionsMenu
-                                label={`Actions for unplaced annotation ${annotation.id}`}
-                                onEdit={() => openAnnotationDetail(annotation)}
-                                onDelete={() => setDeletingAnnotation(annotation)}
-                              />
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="text-base leading-relaxed">{annotation.text}</p>
-                        <AnnotationPinMeta
-                          annotation={annotation}
-                          culturalEntities={culturalEntities}
-                        />
-                      </button>
+                      <div className="flex items-start gap-2">
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left"
+                          onClick={() => openAnnotationDetail(annotation)}
+                        >
+                          <div className="mb-2">
+                            <Badge variant="secondary">
+                              {CATEGORY_LABELS[annotation.category]}
+                            </Badge>
+                          </div>
+                          <p className="text-base leading-relaxed">{annotation.text}</p>
+                          <AnnotationPinMeta
+                            annotation={annotation}
+                            culturalEntities={culturalEntities}
+                          />
+                        </button>
+                        {canEdit ? (
+                          <AdminActionsMenu
+                            label={`Actions for unplaced annotation ${annotation.id}`}
+                            onEdit={() => openAnnotationDetail(annotation)}
+                            onDelete={() => setDeletingAnnotation(annotation)}
+                          />
+                        ) : null}
+                      </div>
                       {canEdit && resolvedDisplayUrl ? (
                         <Button
                           type="button"
@@ -546,13 +543,13 @@ export function ArtworkDetailClient({
                       key={annotation.id}
                       className="rounded-xl border border-border bg-card p-4"
                     >
-                      <button
-                        type="button"
-                        className="w-full text-left"
-                        onClick={() => openAnnotationDetail(annotation)}
-                      >
-                        <div className="mb-2 flex items-start justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-start gap-2">
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left"
+                          onClick={() => openAnnotationDetail(annotation)}
+                        >
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
                             <span className="inline-flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
                               {index + 1}
                             </span>
@@ -560,25 +557,20 @@ export function ArtworkDetailClient({
                               {CATEGORY_LABELS[annotation.category]}
                             </Badge>
                           </div>
-                          {canEdit ? (
-                            <span
-                              onClick={(event) => event.stopPropagation()}
-                              onKeyDown={(event) => event.stopPropagation()}
-                            >
-                              <AdminActionsMenu
-                                label={`Actions for annotation ${index + 1}`}
-                                onEdit={() => openAnnotationDetail(annotation)}
-                                onDelete={() => setDeletingAnnotation(annotation)}
-                              />
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="text-base leading-relaxed">{annotation.text}</p>
-                        <AnnotationPinMeta
-                          annotation={annotation}
-                          culturalEntities={culturalEntities}
-                        />
-                      </button>
+                          <p className="text-base leading-relaxed">{annotation.text}</p>
+                          <AnnotationPinMeta
+                            annotation={annotation}
+                            culturalEntities={culturalEntities}
+                          />
+                        </button>
+                        {canEdit ? (
+                          <AdminActionsMenu
+                            label={`Actions for annotation ${index + 1}`}
+                            onEdit={() => openAnnotationDetail(annotation)}
+                            onDelete={() => setDeletingAnnotation(annotation)}
+                          />
+                        ) : null}
+                      </div>
                     </li>
                   ))}
                 </ul>

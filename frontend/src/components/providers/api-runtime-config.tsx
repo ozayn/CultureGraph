@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-/** Copies server-injected API URL onto window for getApiBase() before hydration. */
+/** Mirrors server-injected API URL on window for callers that read it directly. */
 export function ApiRuntimeConfig({ apiUrl }: { apiUrl: string }) {
   useEffect(() => {
     window.__CULTUREGRAPH_API_URL__ = apiUrl;

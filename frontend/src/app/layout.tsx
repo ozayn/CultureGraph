@@ -84,13 +84,6 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${sourceSerif.variable} h-full antialiased`}
     >
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `window.__CULTUREGRAPH_API_URL__=${JSON.stringify(publicApiUrl)};`,
-          }}
-        />
-      </head>
       <body className="min-h-full bg-background text-foreground" data-api-url={publicApiUrl}>
         <ApiRuntimeConfig apiUrl={publicApiUrl} />
         <AppProviders>
