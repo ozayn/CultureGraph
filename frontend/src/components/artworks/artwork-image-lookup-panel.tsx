@@ -20,6 +20,7 @@ import type {
   Artwork,
   ArtworkLookupCandidate,
   ArtworkLookupQuerySource,
+  ArtworkLookupQueryStrategy,
   ArtworkLookupResponse,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -33,9 +34,17 @@ const QUERY_SOURCE_LABELS: Record<ArtworkLookupQuerySource, string> = {
   manual: "Manual search",
 };
 
+const QUERY_STRATEGY_LABELS: Record<ArtworkLookupQueryStrategy, string> = {
+  exact: "Exact title match",
+  fuzzy: "Fuzzy title match",
+  artist_fallback: "Related works by artist",
+  broad: "Broad collection search",
+};
+
 interface LookupSearchParams {
   title?: string;
   artist?: string;
+  searchMode?: "broad";
 }
 
 interface ApplyFields {
@@ -82,6 +91,9 @@ function lookupEndpoint(artworkId: number, params: LookupSearchParams = {}): str
   }
   if (params.artist?.trim()) {
     query.set("artist_override", params.artist.trim());
+  }
+  if (params.searchMode === "broad") {
+    query.set("search_mode", "broad");
   }
   return `/api/artworks/${artworkId}/lookup-image?${query.toString()}`;
 }
@@ -325,8 +337,9 @@ export function ArtworkImageLookupPanel({
     try {
       const result = await api.get<ArtworkLookupResponse>(lookupEndpoint(artwork.id));
       setResponse(result);
-
-      if (!result.candidates.length && !result.query_used?.trim()) {
+      if (!result.candidates.length && !result.query_used?.trim() && result.notice) {
+        setError(result.notice);
+      } else if (!result.candidates.length && !result.query_used?.trim()) {
         setError(MISSING_METADATA_HINT);
       } else if (!result.candidates.length && result.notice) {
         setError(result.notice);
@@ -356,8 +369,9 @@ export function ArtworkImageLookupPanel({
         })
       );
       setResponse(result);
-
-      if (!result.candidates.length && !result.query_used?.trim()) {
+      if (!result.candidates.length && !result.query_used?.trim() && result.notice) {
+        setError(result.notice);
+      } else if (!result.candidates.length && !result.query_used?.trim()) {
         setError(MISSING_METADATA_HINT);
       } else if (!result.candidates.length && result.notice) {
         setError(result.notice);
@@ -369,6 +383,31 @@ export function ArtworkImageLookupPanel({
         e instanceof Error ? e.message : "Lookup failed. Check your connection and try again."
       );
       setResponse(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [artwork.id, manualArtist, manualTitle]);
+
+  const runBroaderLookup = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setPendingApply(null);
+    try {
+      const result = await api.get<ArtworkLookupResponse>(
+        lookupEndpoint(artwork.id, {
+          title: manualTitle || undefined,
+          artist: manualArtist || undefined,
+          searchMode: "broad",
+        })
+      );
+      setResponse(result);
+      if (!result.candidates.length && result.notice) {
+        setError(result.notice);
+      } else if (!result.candidates.length) {
+        setError("No matches found even with a broader search.");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Lookup failed.");
     } finally {
       setLoading(false);
     }
@@ -477,6 +516,13 @@ export function ArtworkImageLookupPanel({
               <p className="mt-0.5 text-muted-foreground">
                 Query source: {QUERY_SOURCE_LABELS[response.query_source] ?? response.query_source}
               </p>
+              {response.query_strategy ? (
+                <p className="mt-0.5 text-muted-foreground">
+                  Match strategy:{" "}
+                  {QUERY_STRATEGY_LABELS[response.query_strategy as ArtworkLookupQueryStrategy] ??
+                    response.query_strategy}
+                </p>
+              ) : null}
               {response.sources_searched?.length ? (
                 <p className="mt-0.5 text-muted-foreground">
                   Collections: {response.sources_searched.join(" · ")}
@@ -583,6 +629,12 @@ export function ArtworkImageLookupPanel({
             </div>
           ) : null}
 
+          {response?.artist_fallback && response.notice ? (
+            <p className="rounded-lg border border-amber-300/40 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+              {response.notice}
+            </p>
+          ) : null}
+
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
           {pendingApply ? (
@@ -643,9 +695,32 @@ export function ArtworkImageLookupPanel({
           ) : null}
 
           {!loading && response && !response.candidates.length && !error ? (
-            <p className="py-4 text-sm text-muted-foreground">
-              No matches found. Adjust the title or artist above, then search again.
-            </p>
+            <div className="space-y-2">
+              <p className="py-2 text-sm text-muted-foreground">
+                No matches found. Adjust the title or artist above, or try a broader search.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="touch"
+                className="w-full"
+                onClick={() => void runBroaderLookup()}
+              >
+                Try broader search
+              </Button>
+            </div>
+          ) : null}
+
+          {!loading && response?.candidates.length ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-9 w-full"
+              onClick={() => void runBroaderLookup()}
+            >
+              Try broader search
+            </Button>
           ) : null}
         </div>
       </BottomSheet>

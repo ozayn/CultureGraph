@@ -39,7 +39,7 @@ def collect_nga_scored_candidates(
     scored: list[tuple[float, dict, ArtworkLookupCandidate]] = []
     for entry in _load_index():
         score = score_artwork_entry(entry, search_text, artist_text, query.year_period)
-        if score < 0.25:
+        if score < 0.15:
             continue
         scored.append(
             (

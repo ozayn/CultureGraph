@@ -622,7 +622,7 @@ async def test_lookup_image_returns_notice_when_no_matches(
         artwork_response = await client.post(
             "/api/artworks",
             headers=auth_headers,
-            json={"title": "ZZZ Nonexistent Artwork XYZ", "artist": "Nobody Known"},
+            json={"title": "ZZZ Nonexistent Artwork XYZ", "artist": "ZZZZZZ Nobody Known"},
         )
         artwork_id = artwork_response.json()["id"]
 
@@ -636,3 +636,44 @@ async def test_lookup_image_returns_notice_when_no_matches(
     payload = lookup_response.json()
     assert payload["candidates"] == []
     assert payload["notice"]
+
+
+@pytest.mark.asyncio
+async def test_lookup_approximate_ai_title_returns_degas_matches(
+    auth_headers: dict[str, str],
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        visit_response = await client.post(
+            "/api/visits",
+            headers=auth_headers,
+            json={
+                "museum_name": "National Gallery of Art",
+                "city": "Washington, DC",
+                "visit_date": "2026-05-25",
+            },
+        )
+        visit_id = visit_response.json()["id"]
+
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={
+                "title": "Four Dancers",
+                "artist": "Edgar Degas",
+                "visit_id": visit_id,
+            },
+        )
+        artwork_id = artwork_response.json()["id"]
+
+        lookup_response = await client.get(
+            f"/api/artworks/{artwork_id}/lookup-image",
+            headers=auth_headers,
+            params={"source": "nga"},
+        )
+
+    assert lookup_response.status_code == 200
+    payload = lookup_response.json()
+    assert payload["candidates"]
+    assert payload["query_strategy"] in {"exact", "fuzzy", "artist_fallback", "broad"}
+    assert any("degas" in (c.get("artist") or "").lower() for c in payload["candidates"])

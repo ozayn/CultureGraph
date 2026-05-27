@@ -80,6 +80,10 @@ def lookup_artwork_image(
     source: str | None = Query(default=None, description="Explicit source, e.g. nga or all"),
     title_override: str | None = Query(default=None, description="Manual title search override"),
     artist_override: str | None = Query(default=None, description="Manual artist search override"),
+    search_mode: str | None = Query(
+        default=None,
+        description="Force broader matching, e.g. broad",
+    ),
 ) -> ArtworkLookupResponse:
     artwork = _get_artwork_or_404(db, artwork_id)
     museum_name = artwork.visit.museum_name if artwork.visit else None
@@ -103,11 +107,18 @@ def lookup_artwork_image(
             alternate_title=built.alternate_title,
         )
 
-    candidates = lookup_artwork_candidates(query)
+    lookup_result = lookup_artwork_candidates(
+        query,
+        force_broad=(search_mode or "").strip().lower() == "broad",
+    )
+    candidates = lookup_result.candidates
     sources_searched = sources_searched_labels(query)
 
     notice: str | None = None
-    if not candidates:
+    if lookup_result.artist_fallback and candidates:
+        artist_label = (query.artist or "").strip() or "this artist"
+        notice = f"No exact title match found. Showing related works by {artist_label}."
+    elif not candidates:
         if not built.query_used.strip():
             notice = "Add a title or artist to improve collection matching."
         elif should_search_smithsonian(query) and not should_search_nga(query):
@@ -125,6 +136,8 @@ def lookup_artwork_image(
         sources_searched=sources_searched,
         query_used=built.query_used,
         query_source=built.query_source,
+        query_strategy=lookup_result.query_strategy,
+        artist_fallback=lookup_result.artist_fallback,
         alternate_title=built.alternate_title,
         notice=notice,
     )

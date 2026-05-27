@@ -407,6 +407,8 @@ class ArtworkLookupResponse(BaseModel):
     sources_searched: list[str]
     query_used: str = ""
     query_source: Literal["ai_title", "saved_title", "artist_notes", "manual"] = "saved_title"
+    query_strategy: Literal["exact", "fuzzy", "artist_fallback", "broad"] | None = None
+    artist_fallback: bool = False
     alternate_title: str | None = None
     disclaimer: str = (
         "Matches are suggestions from open museum collection data. "

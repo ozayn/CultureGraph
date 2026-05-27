@@ -84,11 +84,19 @@ export type ArtworkLookupQuerySource =
   | "artist_notes"
   | "manual";
 
+export type ArtworkLookupQueryStrategy =
+  | "exact"
+  | "fuzzy"
+  | "artist_fallback"
+  | "broad";
+
 export interface ArtworkLookupResponse {
   candidates: ArtworkLookupCandidate[];
   sources_searched: string[];
   query_used: string;
   query_source: ArtworkLookupQuerySource;
+  query_strategy?: ArtworkLookupQueryStrategy | null;
+  artist_fallback?: boolean;
   alternate_title?: string | null;
   disclaimer: string;
   notice?: string | null;
