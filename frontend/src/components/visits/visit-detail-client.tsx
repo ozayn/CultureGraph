@@ -317,11 +317,13 @@ export function VisitDetailClient({
             open={addOpen}
             onOpenChange={setAddOpen}
             title="Add artwork"
-            description="Start with a title and photo — details can wait."
+            description="Photo first — save a draft and enrich later."
+            footer={null}
           >
             <ProgressiveArtworkForm
               visitId={visit.id}
               compact
+              returnToVisitAfterDraft
               onComplete={() => {
                 setAddOpen(false);
                 router.refresh();

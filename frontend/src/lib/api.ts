@@ -5,6 +5,8 @@ const DEFAULT_API_BASE = "http://localhost:8000";
 const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
 /** Museum-note import can call Claude and needs a longer client timeout than CRUD. */
 export const IMPORT_REQUEST_TIMEOUT_MS = 120_000;
+/** Photo uploads on mobile need more time after client-side normalization. */
+export const UPLOAD_REQUEST_TIMEOUT_MS = 120_000;
 
 function normalizeApiBase(raw: string | undefined): string {
   const value = raw?.trim();
@@ -62,6 +64,14 @@ async function request<T>(
       },
       cache: "no-store",
     });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    if (error instanceof TypeError) {
+      throw error;
+    }
+    throw error;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -110,6 +120,10 @@ export const api = {
   upload: <T>(path: string, file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return request<T>(path, { method: "POST", body: form });
+    return request<T>(path, {
+      method: "POST",
+      body: form,
+      timeoutMs: UPLOAD_REQUEST_TIMEOUT_MS,
+    });
   },
 };

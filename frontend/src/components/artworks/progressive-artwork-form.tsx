@@ -8,18 +8,28 @@ import { CameraUpload } from "@/components/ui/camera-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArtworkRegionSheet } from "@/components/artworks/artwork-region-sheet";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { api } from "@/lib/api";
+import { prepareArtworkUploadFile } from "@/lib/prepare-artwork-upload";
+import {
+  logUploadError,
+  mapUploadError,
+  mapValidationUploadError,
+  type FriendlyUploadError,
+} from "@/lib/upload-errors";
 import { validateArtworkUploadFile } from "@/lib/upload-validation";
 import type { Artwork } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface ProgressiveArtworkFormProps {
   visitId?: number;
   artwork?: Artwork;
   onComplete?: (artwork?: Artwork) => void;
   compact?: boolean;
+  /** When true, navigate to artwork detail after draft save (edit mode). */
   redirectOnSave?: boolean;
+  /** Mobile quick-add: return to visit after saving draft. */
+  returnToVisitAfterDraft?: boolean;
 }
 
 export function ProgressiveArtworkForm({
@@ -28,40 +38,28 @@ export function ProgressiveArtworkForm({
   onComplete,
   compact,
   redirectOnSave = !artwork,
+  returnToVisitAfterDraft = Boolean(visitId && !artwork),
 }: ProgressiveArtworkFormProps) {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2>(1);
+  const isQuickCapture = Boolean(visitId && !artwork);
+  const [step, setStep] = useState<1 | 2>(isQuickCapture ? 1 : 1);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [error, setError] = useState<FriendlyUploadError | null>(null);
   const [title, setTitle] = useState(artwork?.title ?? "");
   const [artist, setArtist] = useState(artwork?.artist ?? "");
   const [yearPeriod, setYearPeriod] = useState(artwork?.year_period ?? "");
   const [museumGallery, setMuseumGallery] = useState(artwork?.museum_gallery ?? "");
   const [photo, setPhoto] = useState<File | null>(null);
   const [savedArtwork, setSavedArtwork] = useState<Artwork | null>(null);
-  const [regionArtwork, setRegionArtwork] = useState<Artwork | null>(null);
-  const [pendingRedirectId, setPendingRedirectId] = useState<number | null>(null);
+  const [lastAction, setLastAction] = useState<"draft" | "details" | null>(null);
   const previewUrl = useMemo(
     () => (photo ? URL.createObjectURL(photo) : null),
     [photo]
   );
 
-  const canSaveStepOne = Boolean(photo || title.trim() || artwork);
-
-  function finishRegionFlow(updated?: Artwork) {
-    const target = updated ?? regionArtwork;
-    const redirectId = pendingRedirectId;
-    setRegionArtwork(null);
-    setPendingRedirectId(null);
-    if (!target) return;
-    setSavedArtwork(target);
-    if (redirectId) {
-      router.push(`/artworks/${target.id}`);
-      router.refresh();
-      return;
-    }
-    onComplete?.(target);
-  }
+  const canSaveDraft = isQuickCapture ? Boolean(photo) : Boolean(photo || title.trim() || artwork);
+  const busy = loading || preparing;
 
   useEffect(() => {
     return () => {
@@ -69,14 +67,57 @@ export function ProgressiveArtworkForm({
     };
   }, [previewUrl]);
 
+  function clearPhoto() {
+    setPhoto(null);
+    setError(null);
+  }
+
+  async function preparePhotoForUpload(file: File): Promise<File> {
+    setPreparing(true);
+    try {
+      const prepared = await prepareArtworkUploadFile(file);
+      return prepared.file;
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  function finishAfterSave(saved: Artwork) {
+    setSavedArtwork(saved);
+
+    if (returnToVisitAfterDraft && visitId) {
+      onComplete?.(saved);
+      router.push(`/visits/${visitId}`);
+      router.refresh();
+      return;
+    }
+
+    if (redirectOnSave) {
+      router.push(`/artworks/${saved.id}`);
+      router.refresh();
+      return;
+    }
+
+    if (saved.captured_date_source !== "exif" || !saved.captured_at) {
+      onComplete?.(saved);
+    }
+  }
+
   async function saveArtwork(includeDetails: boolean) {
-    if (!canSaveStepOne) {
-      setError("Add a photo to capture this work, or enter a title.");
+    if (!canSaveDraft) {
+      setError({
+        kind: "unknown",
+        message: isQuickCapture
+          ? "Add a photo to save a draft."
+          : "Add a photo or title to continue.",
+        canRetry: false,
+      });
       return;
     }
 
     setLoading(true);
     setError(null);
+    setLastAction(includeDetails ? "details" : "draft");
 
     const payload = {
       title: title.trim() || null,
@@ -88,67 +129,144 @@ export function ProgressiveArtworkForm({
       visit_id: visitId ?? artwork?.visit_id ?? null,
     };
 
-    if (photo) {
-      const uploadError = validateArtworkUploadFile(photo);
-      if (uploadError) {
-        setError(uploadError);
-        setLoading(false);
-        return;
-      }
-    }
-
     try {
       let saved = artwork
         ? await api.put<Artwork>(`/api/artworks/${artwork.id}`, payload)
         : await api.post<Artwork>("/api/artworks", payload);
 
       if (photo) {
-        saved = await api.upload<Artwork>(`/api/artworks/${saved.id}/image`, photo);
-      }
-
-      setSavedArtwork(saved);
-
-      if (photo && saved.image_url) {
-        setRegionArtwork(saved);
-        if (redirectOnSave) {
-          setPendingRedirectId(saved.id);
+        const validationMessage = validateArtworkUploadFile(photo);
+        if (validationMessage) {
+          setError(mapValidationUploadError(validationMessage));
+          return;
         }
-        return;
+        const uploadFile = await preparePhotoForUpload(photo);
+        try {
+          saved = await api.upload<Artwork>(`/api/artworks/${saved.id}/image`, uploadFile);
+        } catch (uploadError) {
+          logUploadError("artwork image upload", uploadError);
+          setError(mapUploadError(uploadError, "upload"));
+          return;
+        }
       }
 
-      if (redirectOnSave) {
-        router.push(`/artworks/${saved.id}`);
-        router.refresh();
-        return;
-      }
-
-      if (saved.captured_date_source !== "exif" || !saved.captured_at) {
-        onComplete?.(saved);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save artwork.");
+      finishAfterSave(saved);
+    } catch (saveError) {
+      logUploadError("save artwork", saveError);
+      setError(mapUploadError(saveError, "save"));
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <div className={compact ? "space-y-4" : "space-y-5"}>
-      <p className="text-sm text-muted-foreground">
-        Step {step} of 2 · {step === 1 ? "Photo & quick note" : "Optional details"}
-      </p>
+  function retryLastSave() {
+    if (lastAction === "details") {
+      void saveArtwork(true);
+    } else if (lastAction === "draft") {
+      void saveArtwork(false);
+    }
+  }
+
+  const footer = (
+    <div className="flex flex-col gap-2">
+      {error ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p>{error.message}</p>
+          {error.canRetry ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2 min-h-9"
+              disabled={busy}
+              onClick={retryLastSave}
+            >
+              Try again
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {step === 1 ? (
-        <div className="space-y-4">
+        <>
+          <Button
+            type="button"
+            size="touch"
+            className="w-full"
+            data-testid="save-draft"
+            disabled={busy || !canSaveDraft}
+            onClick={() => void saveArtwork(false)}
+          >
+            {busy ? (preparing ? "Preparing photo…" : "Saving draft…") : "Save draft"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="touch"
+            className="w-full"
+            disabled={busy}
+            onClick={() => setStep(2)}
+          >
+            Add details first
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button
+            type="button"
+            size="touch"
+            className="w-full"
+            disabled={busy || !canSaveDraft}
+            onClick={() => void saveArtwork(true)}
+          >
+            {busy ? (preparing ? "Preparing photo…" : "Saving…") : "Save with details"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="touch"
+            className="w-full"
+            disabled={busy}
+            onClick={() => setStep(1)}
+          >
+            Back
+          </Button>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      className={cn(
+        compact ? "space-y-3" : "space-y-4",
+        isQuickCapture && "pb-2"
+      )}
+    >
+      {!isQuickCapture ? (
+        <p className="text-sm text-muted-foreground">
+          Step {step} of 2 · {step === 1 ? "Photo & quick note" : "Details"}
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {step === 1
+            ? "Snap the work now — identify it later."
+            : "Optional details — crop & AI on the artwork page."}
+        </p>
+      )}
+
+      {step === 1 ? (
+        <div className="space-y-3">
           <CameraUpload
+            variant={isQuickCapture ? "compact" : "default"}
             previewUrl={previewUrl}
             selectedFile={photo}
-            error={error}
-            disabled={loading}
+            disabled={busy}
+            onRemove={photo ? clearPhoto : undefined}
             onSelect={(file) => {
               const uploadError = validateArtworkUploadFile(file);
               if (uploadError) {
-                setError(uploadError);
+                setError(mapValidationUploadError(uploadError));
                 setPhoto(null);
                 return;
               }
@@ -157,21 +275,25 @@ export function ProgressiveArtworkForm({
             }}
           />
 
-          <div className="space-y-2">
-            <Label htmlFor="artwork-title">Title or quick note</Label>
-            <p className="text-xs text-muted-foreground">
-              Optional — you can identify it later.
-            </p>
+          <div className="space-y-1.5">
+            <Label htmlFor="artwork-title" className="sr-only">
+              Title or quick note
+            </Label>
             <Input
               id="artwork-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="e.g. dancer studies, north gallery"
+              placeholder="Title or quick note (optional)"
+              className="min-h-11"
             />
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            You can set the artwork area, run AI research, and find an official image after
+            saving.
+          </p>
           <div className="space-y-2">
             <Label htmlFor="artwork-artist">Artist</Label>
             <Input
@@ -192,7 +314,7 @@ export function ProgressiveArtworkForm({
           </div>
           <MuseumAutocomplete
             id="artwork-museum"
-            label="Museum / gallery"
+            label="Museum / gallery room"
             value={museumGallery}
             onValueChange={setMuseumGallery}
             placeholder="Optional — e.g. West Building"
@@ -200,9 +322,7 @@ export function ProgressiveArtworkForm({
         </div>
       )}
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-      {savedArtwork && !redirectOnSave && !regionArtwork ? (
+      {savedArtwork && !redirectOnSave && !returnToVisitAfterDraft ? (
         <PhotoCaptureDateSuggestion
           artwork={savedArtwork}
           onDismiss={() => onComplete?.(savedArtwork)}
@@ -210,77 +330,16 @@ export function ProgressiveArtworkForm({
         />
       ) : null}
 
-      {regionArtwork ? (
-        <ArtworkRegionSheet
-          open
-          artwork={regionArtwork}
-          onOpenChange={(open) => {
-            if (!open) finishRegionFlow();
-          }}
-          onSaved={(updated) => finishRegionFlow(updated)}
-        />
-      ) : null}
-
-      <div className="flex flex-col gap-2 sm:flex-row">
-        {step === 2 ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="touch"
-            className="sm:flex-1"
-            disabled={loading}
-            onClick={() => setStep(1)}
-          >
-            Back
-          </Button>
-        ) : null}
-
-        {step === 1 ? (
-          <>
-            <Button
-              type="button"
-              size="touch"
-              className="sm:flex-1"
-              disabled={loading || !canSaveStepOne}
-              onClick={() => setStep(2)}
-            >
-              Add details
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="touch"
-              className="sm:flex-1"
-              disabled={loading || !canSaveStepOne}
-              onClick={() => saveArtwork(false)}
-            >
-              {loading ? "Saving…" : "Save now"}
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="touch"
-              className="sm:flex-1"
-              disabled={loading}
-              onClick={() => saveArtwork(false)}
-            >
-              Skip details
-            </Button>
-            <Button
-              type="button"
-              size="touch"
-              className="sm:flex-1"
-              disabled={loading}
-              onClick={() => saveArtwork(true)}
-            >
-              {loading ? "Saving…" : "Save artwork"}
-            </Button>
-          </>
-        )}
-      </div>
+      {isQuickCapture ? (
+        <div
+          className="sticky bottom-0 -mx-4 border-t border-border bg-popover px-4 pt-3"
+          style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+        >
+          {footer}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 sm:flex-row">{footer}</div>
+      )}
     </div>
   );
 }

@@ -1,13 +1,15 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
 
 const postMock = vi.fn();
 const uploadMock = vi.fn();
+const pushMock = vi.fn();
+const prepareMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push: pushMock, refresh: vi.fn() }),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -18,7 +20,15 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
+vi.mock("@/lib/prepare-artwork-upload", () => ({
+  prepareArtworkUploadFile: (...args: unknown[]) => prepareMock(...args),
+}));
+
 describe("ProgressiveArtworkForm", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.stubGlobal("URL", {
       ...URL,
@@ -27,18 +37,31 @@ describe("ProgressiveArtworkForm", () => {
     });
     postMock.mockReset();
     uploadMock.mockReset();
+    pushMock.mockReset();
+    prepareMock.mockReset();
+    prepareMock.mockImplementation(async (file: File) => ({
+      file,
+      wasNormalized: false,
+      originalSize: file.size,
+      outputSize: file.size,
+    }));
   });
 
-  it("creates untitled artwork when saving with photo only", async () => {
+  it("creates untitled draft when saving with photo only", async () => {
     postMock.mockResolvedValueOnce({ id: 42, title: null, captured_date_source: "none" });
+    uploadMock.mockResolvedValueOnce({
+      id: 42,
+      title: null,
+      captured_date_source: "none",
+    });
 
-    render(<ProgressiveArtworkForm visitId={1} redirectOnSave={false} />);
+    render(<ProgressiveArtworkForm visitId={1} returnToVisitAfterDraft />);
 
     const file = new File(["pixels"], "photo.png", { type: "image/png" });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [file] } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Save now" }));
+    fireEvent.click(screen.getByTestId("save-draft"));
 
     await waitFor(() => {
       expect(postMock).toHaveBeenCalledWith("/api/artworks", {
@@ -50,6 +73,28 @@ describe("ProgressiveArtworkForm", () => {
         personal_notes: null,
         visit_id: 1,
       });
+      expect(prepareMock).toHaveBeenCalled();
+      expect(uploadMock).toHaveBeenCalled();
+      expect(pushMock).toHaveBeenCalledWith("/visits/1");
+    });
+  });
+
+  it("shows friendly message instead of raw Failed to fetch", async () => {
+    postMock.mockResolvedValueOnce({ id: 42, title: null, captured_date_source: "none" });
+    uploadMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    render(<ProgressiveArtworkForm visitId={1} redirectOnSave={false} />);
+
+    const file = new File(["pixels"], "photo.png", { type: "image/png" });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByTestId("save-draft"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Connection issue — try again.")).toBeInTheDocument();
+      expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
     });
   });
 });
