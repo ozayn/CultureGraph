@@ -23,7 +23,7 @@ import {
   groupVisitDetailEntities,
 } from "@/lib/entity-types";
 import { artworkDisplayTitle } from "@/lib/artwork-metadata";
-import { artworkThumbnailUrl, entityThumbnailUrl } from "@/lib/thumbnails";
+import { entityThumbnailUrl } from "@/lib/thumbnails";
 import type { Artwork, CulturalEntity, Visit } from "@/lib/types";
 
 interface VisitDetailClientProps {
@@ -54,7 +54,8 @@ function ArtworkCard({ artwork, canEdit, onDelete }: ArtworkCardProps) {
           className="flex min-h-11 min-w-0 flex-1 items-center gap-3 transition-colors active:opacity-80"
         >
           <EntryThumbnail
-            imageUrl={artworkThumbnailUrl(artwork)}
+            artwork={artwork}
+            imageKind="thumbnail"
             alt={artworkDisplayTitle(artwork.title)}
             entityType="artwork"
             size="md"

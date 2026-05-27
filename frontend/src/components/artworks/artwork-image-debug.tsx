@@ -3,10 +3,8 @@
 import { useEffect, useState } from "react";
 
 import {
-  artworkDisplaySrc,
-  artworkThumbnailSrc,
-  pickArtworkDisplayRaw,
-  pickArtworkThumbnailRaw,
+  resolveArtworkImageRaw,
+  resolveArtworkImageUrl,
 } from "@/lib/thumbnails";
 import type { Artwork } from "@/lib/types";
 import { getApiBase } from "@/lib/api-config";
@@ -19,10 +17,10 @@ export function ArtworkImageDebug({ artwork }: ArtworkImageDebugProps) {
   const [thumbStatus, setThumbStatus] = useState<"idle" | "ok" | "error">("idle");
   const [displayStatus, setDisplayStatus] = useState<"idle" | "ok" | "error">("idle");
 
-  const thumbRaw = pickArtworkThumbnailRaw(artwork);
-  const displayRaw = pickArtworkDisplayRaw(artwork);
-  const thumbResolved = artworkThumbnailSrc(artwork);
-  const displayResolved = artworkDisplaySrc(artwork);
+  const thumbRaw = resolveArtworkImageRaw(artwork, "thumbnail");
+  const displayRaw = resolveArtworkImageRaw(artwork, "detail");
+  const thumbResolved = resolveArtworkImageUrl(artwork, "thumbnail");
+  const displayResolved = resolveArtworkImageUrl(artwork, "detail");
 
   useEffect(() => {
     setThumbStatus("idle");

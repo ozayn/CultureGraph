@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+from app.config import settings
 
 NGA_IIIF_BASE_RE = re.compile(
     r"^https://api\.nga\.gov/iiif/[0-9a-f-]{36}",
@@ -27,6 +30,55 @@ def is_upload_path(value: str | None) -> bool:
         return False
     normalized = value.strip().replace("\\", "/")
     return normalized.startswith("/uploads/") or normalized.startswith("uploads/")
+
+
+def upload_relative_path(value: str) -> str | None:
+    normalized = value.strip().replace("\\", "/")
+    if normalized.startswith("/uploads/"):
+        return normalized.removeprefix("/uploads/").lstrip("/")
+    if normalized.startswith("uploads/"):
+        return normalized.removeprefix("uploads/").lstrip("/")
+    return None
+
+
+def upload_file_exists(value: str | None, upload_dir: Path | None = None) -> bool:
+    if not is_upload_path(value):
+        return False
+    rel = upload_relative_path(value or "")
+    if not rel:
+        return False
+    root = (upload_dir or Path(settings.upload_dir)).resolve()
+    target = (root / rel).resolve()
+    if not str(target).startswith(str(root)):
+        return False
+    return target.is_file()
+
+
+def strip_missing_upload_files(
+    data: dict[str, Any],
+    upload_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Drop upload paths whose files are absent (e.g. ephemeral deploy disk)."""
+    root = upload_dir or Path(settings.upload_dir)
+    result = dict(data)
+    for key in ("image_url", "image_thumbnail_url", "image_master_url"):
+        value = result.get(key)
+        if is_upload_path(value) and not upload_file_exists(value, root):
+            result[key] = None
+
+    if not result.get("image_url"):
+        catalog_display = data.get("catalog_image_url")
+        if is_public_http_url(catalog_display):
+            result["image_url"] = upgrade_nga_iiif_display_url(catalog_display.strip())
+
+    if not result.get("image_thumbnail_url"):
+        for key in ("catalog_thumbnail_url", "catalog_image_url", "image_url"):
+            catalog_thumb = data.get(key)
+            if is_public_http_url(catalog_thumb):
+                result["image_thumbnail_url"] = catalog_thumb.strip()
+                break
+
+    return result
 
 
 def is_invalid_image_reference(value: str | None) -> bool:
@@ -102,7 +154,7 @@ def normalize_artwork_image_fields(data: dict[str, Any]) -> dict[str, Any]:
     elif is_invalid_image_reference(normalized.get("image_thumbnail_url")):
         normalized["image_thumbnail_url"] = None
 
-    return normalized
+    return strip_missing_upload_files(normalized)
 
 
 def normalize_artwork_image_update(data: dict) -> dict:

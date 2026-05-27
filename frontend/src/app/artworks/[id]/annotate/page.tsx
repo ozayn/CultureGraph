@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 
 import { AnnotationCanvas } from "@/components/annotations/annotation-canvas";
 import { AnnotatePageChrome } from "@/components/annotations/annotate-page-chrome";
-import { api, mediaUrl } from "@/lib/api";
+import { api } from "@/lib/api";
+import { resolveArtworkImageUrl } from "@/lib/thumbnails";
 import type { Annotation, Artwork, CulturalEntity } from "@/lib/types";
 
 export default async function AnnotateArtworkPage({
@@ -35,7 +36,7 @@ export default async function AnnotateArtworkPage({
     <AnnotatePageChrome artwork={artwork}>
       <AnnotationCanvas
         artworkId={artwork.id}
-        imageUrl={mediaUrl(artwork.image_url)}
+        imageUrl={resolveArtworkImageUrl(artwork, "detail")}
         initialAnnotations={annotations}
         culturalEntities={culturalEntities}
       />

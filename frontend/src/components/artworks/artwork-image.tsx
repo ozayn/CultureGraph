@@ -3,11 +3,13 @@
 import { ImageIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { resolveArtworkImageUrl, type ArtworkImageFields } from "@/lib/thumbnails";
 import { displayImageUrl } from "@/lib/media-url";
 import { cn } from "@/lib/utils";
 
 interface ArtworkImageProps {
   imageUrl?: string | null;
+  artwork?: ArtworkImageFields;
   className?: string;
   imgClassName?: string;
   /** Shown when the image is missing or fails to load — never a broken icon. */
@@ -29,16 +31,19 @@ export function ArtworkImagePlaceholder({ className }: { className?: string }) {
 
 export function ArtworkImage({
   imageUrl,
+  artwork,
   className,
   imgClassName,
   fallback,
 }: ArtworkImageProps) {
   const [broken, setBroken] = useState(false);
-  const src = displayImageUrl(imageUrl);
+  const src = artwork
+    ? resolveArtworkImageUrl(artwork, "detail")
+    : displayImageUrl(imageUrl);
 
   useEffect(() => {
     setBroken(false);
-  }, [imageUrl]);
+  }, [imageUrl, artwork]);
 
   if (!src || broken) {
     return (

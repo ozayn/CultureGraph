@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 
 import { ENTITY_TYPE_ICONS, ENTITY_TYPE_LABELS } from "@/lib/entity-types";
 import { thumbnailDisplayUrl } from "@/lib/media-url";
-import type { ThumbnailEntityType } from "@/lib/thumbnails";
+import {
+  resolveArtworkImageUrl,
+  type ArtworkImageFields,
+  type ThumbnailEntityType,
+} from "@/lib/thumbnails";
 import { cn } from "@/lib/utils";
 
 export type EntryThumbnailSize = "sm" | "md" | "lg";
@@ -22,7 +26,11 @@ const ICON_CLASSES: Record<EntryThumbnailSize, string> = {
 };
 
 interface EntryThumbnailProps {
+  /** Raw path/URL (entities, import drafts). */
   imageUrl?: string | null;
+  /** Prefer for artworks — applies field precedence and API base resolution. */
+  artwork?: ArtworkImageFields;
+  imageKind?: "thumbnail" | "detail";
   alt?: string;
   entityType?: ThumbnailEntityType;
   size?: EntryThumbnailSize;
@@ -31,13 +39,17 @@ interface EntryThumbnailProps {
 
 export function EntryThumbnail({
   imageUrl,
+  artwork,
+  imageKind = "thumbnail",
   alt,
   entityType = "artwork",
   size = "md",
   className,
 }: EntryThumbnailProps) {
   const [broken, setBroken] = useState(false);
-  const src = thumbnailDisplayUrl(imageUrl);
+  const src = artwork
+    ? resolveArtworkImageUrl(artwork, imageKind)
+    : thumbnailDisplayUrl(imageUrl);
   const Icon = ENTITY_TYPE_ICONS[entityType];
   const typeLabel = ENTITY_TYPE_LABELS[entityType];
   const sizeClass = SIZE_CLASSES[size];
@@ -46,7 +58,7 @@ export function EntryThumbnail({
 
   useEffect(() => {
     setBroken(false);
-  }, [imageUrl]);
+  }, [imageUrl, artwork, imageKind]);
 
   if (src && !broken) {
     return (

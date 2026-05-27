@@ -36,6 +36,7 @@ export function pickArtworkDisplayRaw(artwork: ArtworkImageFields): string | nul
   return null;
 }
 
+/** @deprecated Use resolveArtworkImageRaw(artwork, "thumbnail") */
 export function artworkThumbnailUrl(artwork: ArtworkImageFields): string | null {
   return pickArtworkThumbnailRaw(artwork);
 }
@@ -48,6 +49,22 @@ export function artworkThumbnailSrc(artwork: ArtworkImageFields): string | null 
 /** Resolved src for artwork detail hero. */
 export function artworkDisplaySrc(artwork: ArtworkImageFields): string | null {
   return displayImageUrl(pickArtworkDisplayRaw(artwork));
+}
+
+/** Single entry point: raw API fields → browser-ready image URL. */
+export function resolveArtworkImageUrl(
+  artwork: ArtworkImageFields,
+  kind: "thumbnail" | "detail"
+): string | null {
+  return kind === "thumbnail" ? artworkThumbnailSrc(artwork) : artworkDisplaySrc(artwork);
+}
+
+/** Raw path/URL chosen for a given display kind (debugging). */
+export function resolveArtworkImageRaw(
+  artwork: ArtworkImageFields,
+  kind: "thumbnail" | "detail"
+): string | null {
+  return kind === "thumbnail" ? pickArtworkThumbnailRaw(artwork) : pickArtworkDisplayRaw(artwork);
 }
 
 export function entityThumbnailUrl(

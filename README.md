@@ -153,6 +153,14 @@ Deploy as **two services** from this monorepo. Configure variables in each servi
 | `UPLOAD_DIR` | No | Default `uploads`; local folder served at `/uploads` |
 | `UPLOAD_MAX_BYTES` | No | Default `10485760` (10 MB) for artwork photo uploads |
 
+**Uploaded photos on Railway:** the API container filesystem is **ephemeral** unless you attach a volume. Without a volume, `/uploads/...` paths in the database survive redeploys but the files return **404**. Fix:
+
+1. Add a Railway **volume** mounted at `/app/uploads` (or your service root + `uploads`).
+2. Set `UPLOAD_DIR=/app/uploads` on the API service.
+3. Re-upload photos or use **Find official image** to attach museum catalog URLs (these load from NGA/Smithsonian over HTTPS).
+
+The API strips missing upload files from responses and falls back to `catalog_*` URLs when present, so the UI shows a clean placeholder instead of a broken image icon.
+
 Do **not** set `NEXT_PUBLIC_*` variables on the API service.
 
 ### Web service

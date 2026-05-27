@@ -11,6 +11,7 @@ import {
   artworkThumbnailSrc,
   pickArtworkDisplayRaw,
   pickArtworkThumbnailRaw,
+  resolveArtworkImageUrl,
 } from "@/lib/thumbnails";
 
 describe("artwork image precedence", () => {
@@ -26,6 +27,11 @@ describe("artwork image precedence", () => {
     expect(artworkThumbnailSrc(artwork)).toBe(
       "https://api.example.com/uploads/artworks/1/thumb.webp"
     );
+  });
+
+  it("resolveArtworkImageUrl delegates to thumbnail and detail helpers", () => {
+    expect(resolveArtworkImageUrl(artwork, "thumbnail")).toBe(artworkThumbnailSrc(artwork));
+    expect(resolveArtworkImageUrl(artwork, "detail")).toBe(artworkDisplaySrc(artwork));
   });
 
   it("prefers display image_url for hero", () => {

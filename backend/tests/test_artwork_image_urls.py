@@ -1,8 +1,12 @@
+from pathlib import Path
+
 from app.services.artwork_image_urls import (
     is_invalid_image_reference,
     is_upload_path,
     normalize_artwork_image_fields,
     normalize_artwork_image_update,
+    strip_missing_upload_files,
+    upload_file_exists,
     upgrade_nga_iiif_display_url,
 )
 
@@ -17,7 +21,15 @@ def test_upgrade_nga_thumb_to_display_size() -> None:
     assert "!200,200" not in display
 
 
-def test_pick_thumbnail_precedence() -> None:
+def test_pick_thumbnail_precedence(tmp_path: Path, monkeypatch) -> None:
+    from app.config import settings
+
+    upload_artwork = tmp_path / "uploads" / "artworks" / "1"
+    upload_artwork.mkdir(parents=True)
+    (upload_artwork / "display.webp").write_bytes(b"display")
+    (upload_artwork / "thumb.webp").write_bytes(b"thumb")
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path / "uploads"))
+
     normalized = normalize_artwork_image_fields(
         {
             "image_url": "/uploads/artworks/1/display.webp",
@@ -75,3 +87,40 @@ def test_upload_path_detection() -> None:
     assert is_upload_path("uploads/artworks/1/thumb.webp")
     assert not is_upload_path("https://example.com/x.jpg")
     assert is_invalid_image_reference("/Users/oz/x.jpg")
+
+
+def test_strip_missing_upload_files_falls_back_to_catalog(tmp_path: Path) -> None:
+    upload_root = tmp_path / "uploads"
+    upload_root.mkdir()
+    assert not upload_file_exists("/uploads/artworks/99/missing.webp", upload_root)
+
+    stripped = strip_missing_upload_files(
+        {
+            "image_url": "/uploads/artworks/99/missing.webp",
+            "image_thumbnail_url": "/uploads/artworks/99/missing.webp",
+            "catalog_image_url": "https://example.com/full.jpg",
+            "catalog_thumbnail_url": "https://example.com/thumb.jpg",
+        },
+        upload_dir=upload_root,
+    )
+    assert stripped["image_url"] == "https://example.com/full.jpg"
+    assert stripped["image_thumbnail_url"] == "https://example.com/thumb.jpg"
+
+
+def test_normalize_clears_missing_upload_paths(tmp_path: Path, monkeypatch) -> None:
+    from app.config import settings
+
+    upload_root = tmp_path / "uploads"
+    upload_root.mkdir()
+    monkeypatch.setattr(settings, "upload_dir", str(upload_root))
+
+    normalized = normalize_artwork_image_fields(
+        {
+            "image_url": "/uploads/artworks/1/ghost.webp",
+            "image_thumbnail_url": "/uploads/artworks/1/ghost.webp",
+            "catalog_image_url": None,
+            "catalog_thumbnail_url": None,
+        }
+    )
+    assert normalized["image_url"] is None
+    assert normalized["image_thumbnail_url"] is None

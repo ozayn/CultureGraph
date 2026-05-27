@@ -26,7 +26,7 @@ import {
   type AdminTab,
   type AdminVisitRecord,
 } from "@/lib/admin-types";
-import { artworkThumbnailUrl, entityThumbnailUrl } from "@/lib/thumbnails";
+import { entityThumbnailUrl } from "@/lib/thumbnails";
 import type { CulturalEntityType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -672,7 +672,8 @@ function AdminTableRow({
         <>
           <td className="px-4 py-3">
             <EntryThumbnail
-              imageUrl={artworkThumbnailUrl(record as AdminArtworkRecord)}
+              artwork={record as AdminArtworkRecord}
+              imageKind="thumbnail"
               alt={(record as AdminArtworkRecord).title}
               entityType="artwork"
               size="sm"
@@ -755,12 +756,10 @@ function AdminMobileCard({
   const detailLink = getDetailLink(tab, record);
   const deleteTarget = getDeleteTarget(tab, record);
   const title = getRecordTitle(tab, record);
+  const artworkRecord = tab === "artworks" ? (record as AdminArtworkRecord) : null;
+  const entityRecord = tab === "entities" ? (record as AdminEntityRecord) : null;
   const thumbnailUrl =
-    tab === "artworks"
-      ? artworkThumbnailUrl(record as AdminArtworkRecord)
-      : tab === "entities"
-        ? entityThumbnailUrl(record as AdminEntityRecord)
-        : null;
+    tab === "entities" ? entityThumbnailUrl(entityRecord!) : null;
   const thumbnailType: CulturalEntityType | "artwork" =
     tab === "entities"
       ? ((record as AdminEntityRecord).entity_type as CulturalEntityType)
@@ -777,7 +776,9 @@ function AdminMobileCard({
           />
           {tab === "artworks" || tab === "entities" ? (
             <EntryThumbnail
-              imageUrl={thumbnailUrl}
+              artwork={artworkRecord ?? undefined}
+              imageUrl={entityRecord ? thumbnailUrl : undefined}
+              imageKind="thumbnail"
               alt={title}
               entityType={thumbnailType}
               size="md"

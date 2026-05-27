@@ -30,7 +30,7 @@ import { Button } from "@/components/ui/button";
 import { CameraUpload } from "@/components/ui/camera-upload";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
-import { artworkDisplaySrc, pickArtworkDisplayRaw } from "@/lib/thumbnails";
+import { resolveArtworkImageRaw, resolveArtworkImageUrl } from "@/lib/thumbnails";
 import { artworkDisplayTitle } from "@/lib/artwork-metadata";
 import { artworkHasImageRegion } from "@/lib/artwork-region";
 import { useAuth } from "@/contexts/auth-context";
@@ -91,8 +91,11 @@ export function ArtworkDetailClient({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const displayRaw = useMemo(() => pickArtworkDisplayRaw(artwork), [artwork]);
-  const resolvedDisplayUrl = useMemo(() => artworkDisplaySrc(artwork), [artwork]);
+  const displayRaw = useMemo(() => resolveArtworkImageRaw(artwork, "detail"), [artwork]);
+  const resolvedDisplayUrl = useMemo(
+    () => resolveArtworkImageUrl(artwork, "detail"),
+    [artwork]
+  );
   const hasImage = Boolean(displayRaw);
 
   const openApplyReviewRef = useRef<(() => void) | null>(null);
@@ -268,7 +271,7 @@ export function ArtworkDetailClient({
         {hasImage ? (
           <>
             <ArtworkImage
-              imageUrl={displayRaw}
+              artwork={artwork}
               imgClassName="max-h-[min(70dvh,640px)]"
               fallback={
                 <div className="flex min-h-48 flex-col items-center justify-center gap-2 px-6 py-10 text-center text-sm text-muted-foreground">
