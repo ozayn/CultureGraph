@@ -47,6 +47,9 @@ class MockLLMProvider:
                 "How does this work compare to others by the same artist?",
                 "What might contemporary viewers have understood differently?",
             ],
+            possible_title=title if title and title != "this artwork" else "Untitled study",
+            possible_artist=artist if artist != "an unknown artist" else None,
+            period_or_movement=year if year != "an unspecified period" else None,
             suggested_annotations=[
                 AiSuggestedAnnotation(
                     category="composition",

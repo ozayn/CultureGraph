@@ -47,7 +47,7 @@ describe("ProgressiveArtworkForm", () => {
     }));
   });
 
-  it("creates untitled draft when saving with photo only", async () => {
+  it("opens artwork detail with enrichment after draft save", async () => {
     postMock.mockResolvedValueOnce({ id: 42, title: null, captured_date_source: "none" });
     uploadMock.mockResolvedValueOnce({
       id: 42,
@@ -55,7 +55,7 @@ describe("ProgressiveArtworkForm", () => {
       captured_date_source: "none",
     });
 
-    render(<ProgressiveArtworkForm visitId={1} returnToVisitAfterDraft />);
+    render(<ProgressiveArtworkForm visitId={1} />);
 
     const file = new File(["pixels"], "photo.png", { type: "image/png" });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -75,6 +75,27 @@ describe("ProgressiveArtworkForm", () => {
       });
       expect(prepareMock).toHaveBeenCalled();
       expect(uploadMock).toHaveBeenCalled();
+      expect(pushMock).toHaveBeenCalledWith("/artworks/42?enrich=1");
+    });
+  });
+
+  it("can still return to visit when configured", async () => {
+    postMock.mockResolvedValueOnce({ id: 42, title: null, captured_date_source: "none" });
+    uploadMock.mockResolvedValueOnce({
+      id: 42,
+      title: null,
+      captured_date_source: "none",
+    });
+
+    render(<ProgressiveArtworkForm visitId={1} returnToVisitAfterDraft />);
+
+    const file = new File(["pixels"], "photo.png", { type: "image/png" });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByTestId("save-draft"));
+
+    await waitFor(() => {
       expect(pushMock).toHaveBeenCalledWith("/visits/1");
     });
   });
@@ -83,7 +104,7 @@ describe("ProgressiveArtworkForm", () => {
     postMock.mockResolvedValueOnce({ id: 42, title: null, captured_date_source: "none" });
     uploadMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
 
-    render(<ProgressiveArtworkForm visitId={1} redirectOnSave={false} />);
+    render(<ProgressiveArtworkForm visitId={1} redirectOnSave={false} openEnrichmentAfterSave={false} />);
 
     const file = new File(["pixels"], "photo.png", { type: "image/png" });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;

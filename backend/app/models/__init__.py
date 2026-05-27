@@ -78,6 +78,12 @@ class Artwork(Base):
     catalog_accession_number: Mapped[str | None] = mapped_column(String(64))
     catalog_rights_label: Mapped[str | None] = mapped_column(String(255))
     personal_notes: Mapped[str | None] = mapped_column(Text)
+    enrichment_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="idle", server_default="idle"
+    )
+    enrichment_stage: Mapped[str | None] = mapped_column(String(64))
+    enrichment_error: Mapped[str | None] = mapped_column(Text)
+    enrichment_lookup: Mapped[dict | list | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

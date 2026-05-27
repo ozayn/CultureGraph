@@ -6,8 +6,10 @@ import type { Annotation, Artwork, CulturalEntity } from "@/lib/types";
 
 export default async function ArtworkDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ enrich?: string }>;
 }) {
   const { id } = await params;
   const artworkId = Number(id);
@@ -35,6 +37,7 @@ export default async function ArtworkDetailPage({
       artwork={artwork}
       annotations={annotations}
       culturalEntities={culturalEntities}
+      autoEnrich={(await searchParams).enrich === "1"}
     />
   );
 }

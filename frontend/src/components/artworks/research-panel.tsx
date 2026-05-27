@@ -23,6 +23,8 @@ interface ResearchPanelProps {
   onArtworkUpdated?: (artwork: Artwork) => void;
   onHintsChange?: (hints: ResearchMetadataHints | null) => void;
   onApplyReviewReady?: (openReview: () => void) => void;
+  /** Hide primary draft UI — used when ArtworkEnrichmentPanel owns the live results. */
+  historyOnly?: boolean;
 }
 
 function parseResearchNote(note: ResearchNote): ResearchDraft {
@@ -60,6 +62,7 @@ export function ResearchPanel({
   onArtworkUpdated,
   onHintsChange,
   onApplyReviewReady,
+  historyOnly = false,
 }: ResearchPanelProps) {
   const artworkId = artwork.id;
   const [notes, setNotes] = useState<ResearchNote[]>([]);
@@ -185,6 +188,59 @@ export function ResearchPanel({
     } finally {
       setDeleteLoading(false);
     }
+  }
+
+  if (historyOnly) {
+    return (
+      <section className="space-y-3 rounded-xl border border-border/70 bg-muted/10 p-4 sm:p-5">
+        <div>
+          <h3 className="font-heading text-base">Research history</h3>
+          <p className="text-sm text-muted-foreground">Earlier AI runs for this artwork.</p>
+        </div>
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {loadingNotes ? (
+          <p className="text-sm text-muted-foreground">Loading saved research…</p>
+        ) : notes.length > 0 ? (
+          <ul className="space-y-2">
+            {notes.map((note) => (
+              <li
+                key={note.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm"
+              >
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => loadDraft(parseResearchNote(note), note.id)}
+                >
+                  <span className="block truncate font-medium">{note.short_summary}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(note.created_at).toLocaleString()}
+                  </span>
+                </button>
+                {canEdit ? (
+                  <AdminActionsMenu
+                    label="Research note actions"
+                    onDelete={() => setDeletingNote(note)}
+                  />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">No saved research yet.</p>
+        )}
+        <ConfirmDeleteDialog
+          open={deletingNote !== null}
+          onOpenChange={(open) => {
+            if (!open) setDeletingNote(null);
+          }}
+          title="Delete research note?"
+          description="This removes the saved AI research draft for this artwork."
+          loading={deleteLoading}
+          onConfirm={deleteNote}
+        />
+      </section>
+    );
   }
 
   return (

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Camera, ImageIcon, MapPin, Pencil, Sparkles } from "lucide-react";
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState, useMemo, useEffect } from "react";
 
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
@@ -21,8 +21,9 @@ import { ArtworkRegionSheet } from "@/components/artworks/artwork-region-sheet";
 import { ArtworkImageDebug } from "@/components/artworks/artwork-image-debug";
 import { ArtworkImage, ArtworkImagePlaceholder } from "@/components/artworks/artwork-image";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
-import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
+import { ArtworkEnrichmentPanel } from "@/components/artworks/artwork-enrichment-panel";
 import { ResearchPanel } from "@/components/artworks/research-panel";
+import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
 import { Badge } from "@/components/ui/badge";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { ButtonLink } from "@/components/ui/button-link";
@@ -51,16 +52,19 @@ interface ArtworkDetailClientProps {
   artwork: Artwork;
   annotations: Annotation[];
   culturalEntities?: CulturalEntity[];
+  autoEnrich?: boolean;
 }
 
 export function ArtworkDetailClient({
   artwork: initialArtwork,
   annotations: initialAnnotations,
   culturalEntities = [],
+  autoEnrich = false,
 }: ArtworkDetailClientProps) {
   const router = useRouter();
   const { canEdit, loading: authLoading } = useAuth();
   const researchRef = useRef<HTMLDivElement>(null);
+  const enrichmentRef = useRef<HTMLDivElement>(null);
   const generateResearchRef = useRef<(() => Promise<void>) | null>(null);
   const [artwork, setArtwork] = useState(initialArtwork);
   const [annotations, setAnnotations] = useState(initialAnnotations);
@@ -100,6 +104,16 @@ export function ArtworkDetailClient({
 
   const openApplyReviewRef = useRef<(() => void) | null>(null);
   const [researchHints, setResearchHints] = useState<ResearchMetadataHints | null>(null);
+
+  function scrollToEnrichment() {
+    enrichmentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  useEffect(() => {
+    if (autoEnrich) {
+      scrollToEnrichment();
+    }
+  }, [autoEnrich]);
 
   function handleArtworkUpdated(updated: Artwork) {
     setArtwork(updated);
@@ -160,11 +174,6 @@ export function ArtworkDetailClient({
     } finally {
       setUploadingPhoto(false);
     }
-  }
-
-  function triggerResearch() {
-    void generateResearchRef.current?.();
-    researchRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function handleAnnotationAccepted(annotation: Annotation) {
@@ -397,11 +406,24 @@ export function ArtworkDetailClient({
             Add photo
           </Button>
           <ArtworkImageLookupAction variant={hasImage ? "replace" : "find"} />
-          <Button size="touch" variant="outline" onClick={triggerResearch}>
-            Research with AI
-          </Button>
         </div>
       ) : null}
+
+      <div ref={enrichmentRef} className="px-4 sm:px-0">
+        <ArtworkEnrichmentPanel
+          artwork={artwork}
+          canEdit={canEdit}
+          hasImage={hasImage}
+          autoFocus={autoEnrich}
+          culturalEntities={culturalEntities}
+          onArtworkUpdated={handleArtworkUpdated}
+          onAnnotationAccepted={handleAnnotationAccepted}
+          onHintsChange={setResearchHints}
+          onApplyReviewReady={(openReview) => {
+            openApplyReviewRef.current = openReview;
+          }}
+        />
+      </div>
 
       <section className="px-4 sm:px-0">
         {canEdit ? (
@@ -572,6 +594,7 @@ export function ArtworkDetailClient({
           canEdit={canEdit}
           hasImage={hasImage}
           culturalEntities={culturalEntities}
+          historyOnly
           onReady={(generate) => {
             generateResearchRef.current = generate;
           }}
@@ -599,7 +622,7 @@ export function ArtworkDetailClient({
           />
           <ActionButton icon={Camera} label="Photo" onClick={() => setPhotoOpen(true)} />
           <LookupActionButton hasImage={hasImage} label={hasImage ? "Replace" : "Find"} />
-          <ActionButton icon={Sparkles} label="AI" onClick={triggerResearch} />
+          <ActionButton icon={Sparkles} label="AI" onClick={scrollToEnrichment} />
         </div>
       </div>
     ) : null}

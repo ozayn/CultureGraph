@@ -71,6 +71,30 @@ export interface Artwork {
   catalog_rights_label: string | null;
   personal_notes: string | null;
   created_at: string;
+  enrichment_status?: ArtworkEnrichmentStatus;
+  enrichment_stage?: ArtworkEnrichmentStage | null;
+  enrichment_error?: string | null;
+}
+
+export type ArtworkEnrichmentStatus =
+  | "idle"
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed";
+
+export type ArtworkEnrichmentStage =
+  | "identifying"
+  | "searching_collections"
+  | "generating_annotations";
+
+export interface ArtworkEnrichmentState {
+  status: ArtworkEnrichmentStatus;
+  stage: ArtworkEnrichmentStage | null;
+  error: string | null;
+  research_note_id: number | null;
+  draft: ResearchDraft | null;
+  lookup: ArtworkLookupResponse | null;
 }
 
 export interface ArtworkLookupCandidate {

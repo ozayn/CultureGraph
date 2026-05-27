@@ -34,6 +34,8 @@ interface ProgressiveArtworkFormProps {
   redirectOnSave?: boolean;
   /** Mobile quick-add: return to visit after saving draft. */
   returnToVisitAfterDraft?: boolean;
+  /** After create, open artwork detail with AI enrichment. */
+  openEnrichmentAfterSave?: boolean;
 }
 
 export function ProgressiveArtworkForm({
@@ -42,7 +44,8 @@ export function ProgressiveArtworkForm({
   onComplete,
   compact,
   redirectOnSave = !artwork,
-  returnToVisitAfterDraft = Boolean(visitId && !artwork),
+  returnToVisitAfterDraft = false,
+  openEnrichmentAfterSave = Boolean(visitId && !artwork),
 }: ProgressiveArtworkFormProps) {
   const router = useRouter();
   const isQuickCapture = Boolean(visitId && !artwork);
@@ -109,6 +112,13 @@ export function ProgressiveArtworkForm({
     if (returnToVisitAfterDraft && visitId) {
       onComplete?.(saved);
       router.push(`/visits/${visitId}`);
+      router.refresh();
+      return;
+    }
+
+    if (!artwork && openEnrichmentAfterSave) {
+      onComplete?.(saved);
+      router.push(`/artworks/${saved.id}?enrich=1`);
       router.refresh();
       return;
     }
@@ -280,8 +290,8 @@ export function ProgressiveArtworkForm({
       ) : (
         <p className="text-sm text-muted-foreground">
           {step === 1
-            ? "Snap the work now — identify it later."
-            : "Optional details — crop & AI on the artwork page."}
+            ? "Snap the work now — AI helps identify it on the next screen."
+            : "Optional details — AI enrichment runs after you save."}
         </p>
       )}
 
@@ -326,7 +336,7 @@ export function ProgressiveArtworkForm({
       ) : (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            AI research and official image lookup are on the artwork page after you save.
+            AI identification and collection search start automatically after you save.
           </p>
           {photo && previewUrl ? (
             <Button

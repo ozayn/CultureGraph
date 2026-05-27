@@ -180,6 +180,9 @@ class ArtworkRead(ArtworkBase):
 
     id: int
     created_at: datetime
+    enrichment_status: str = "idle"
+    enrichment_stage: str | None = None
+    enrichment_error: str | None = None
 
     @model_validator(mode="wrap")
     @classmethod
@@ -189,6 +192,15 @@ class ArtworkRead(ArtworkBase):
         parsed = handler(value)
         normalized = normalize_artwork_image_fields(parsed.model_dump())
         return cls.model_construct(**normalized)
+
+
+class ArtworkEnrichmentRead(BaseModel):
+    status: Literal["idle", "pending", "running", "completed", "failed"]
+    stage: Literal["identifying", "searching_collections", "generating_annotations"] | None = None
+    error: str | None = None
+    research_note_id: int | None = None
+    draft: ResearchDraft | None = None
+    lookup: ArtworkLookupResponse | None = None
 
 
 class ArtworkImageRegionUpdate(BaseModel):
