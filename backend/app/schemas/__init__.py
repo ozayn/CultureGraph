@@ -490,10 +490,12 @@ class ArtworkLookupCandidateRead(BaseModel):
     medium_type: str | None = None
     medium_match: bool | None = None
     match_reasons: list[str] = Field(default_factory=list)
+    match_tier: Literal["high", "possible", "weak"] = "weak"
 
 
 class ArtworkLookupResponse(BaseModel):
     candidates: list[ArtworkLookupCandidateRead]
+    related_candidates: list[ArtworkLookupCandidateRead] = Field(default_factory=list)
     sources_searched: list[str]
     query_used: str = ""
     query_source: Literal[

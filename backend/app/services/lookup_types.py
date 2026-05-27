@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from app.sources.base import ArtworkLookupCandidate
@@ -22,3 +22,4 @@ class LookupResult:
     candidates: list[ArtworkLookupCandidate]
     query_strategy: LookupStrategy | None
     artist_fallback: bool = False
+    related_candidates: list[ArtworkLookupCandidate] = field(default_factory=list)

@@ -20,9 +20,9 @@ from app.services.artwork_image_region import ArtworkImageRegion, regenerate_art
 from app.services.artwork_images import normalize_artwork_image_update
 from app.services.artwork_lookup import lookup_artwork_candidates
 from app.services.lookup_query import build_artwork_lookup_query
+from app.services.lookup_response import lookup_response_from_result
 from app.sources.routing import (
     resolve_lookup_sources,
-    sources_searched_labels,
 )
 from app.services.image_upload import (
     process_and_store_artwork_image,
@@ -123,34 +123,15 @@ def lookup_artwork_image(
         query,
         force_broad=(search_mode or "").strip().lower() == "broad",
     )
-    candidates = lookup_result.candidates
-    sources_searched = sources_searched_labels(query)
 
-    notice: str | None = None
-    if lookup_result.artist_fallback and candidates:
-        artist_label = (query.artist or "").strip() or "this artist"
-        notice = f"No exact title match found. Showing related works by {artist_label}."
-    elif not candidates:
-        if not built.query_used.strip():
-            notice = "Add a title or artist to improve collection matching."
-        else:
-            searched = ", ".join(sources_searched) if sources_searched else "open collections"
-            notice = f"No close matches found in {searched}."
-
-    return ArtworkLookupResponse(
-        candidates=[
-            ArtworkLookupCandidateRead.model_validate(item, from_attributes=True)
-            for item in candidates
-        ],
-        sources_searched=sources_searched,
+    return lookup_response_from_result(
+        lookup_result,
+        query=query,
         query_used=built.query_used,
         query_source=built.query_source,
-        query_strategy=lookup_result.query_strategy,
-        artist_fallback=lookup_result.artist_fallback,
         alternate_title=built.alternate_title,
         expected_medium_type=built.expected_medium_type,
         medium_type_filter=built.medium_type_filter,
-        notice=notice,
     )
 
 

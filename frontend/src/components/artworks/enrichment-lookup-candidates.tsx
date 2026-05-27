@@ -6,7 +6,6 @@ import { useState } from "react";
 import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { HIGH_CONFIDENCE_THRESHOLD } from "@/lib/artwork-metadata";
 import type {
   Artwork,
   ArtworkIdentification,
@@ -27,11 +26,20 @@ interface LookupCandidateListProps {
   onApplied: (artwork: Artwork) => void;
 }
 
-function sectionHeading(identification?: ArtworkIdentification | null): string {
-  if (identification?.identification_mode === "style_subject") {
-    return "Related official records";
+function hasStrongMatches(lookup: ArtworkLookupResponse): boolean {
+  return lookup.candidates.some(
+    (candidate) =>
+      candidate.match_tier === "high" ||
+      candidate.match_tier === "possible" ||
+      (!candidate.match_tier && !candidate.low_confidence)
+  );
+}
+
+function sectionHeading(lookup: ArtworkLookupResponse): string {
+  if (hasStrongMatches(lookup)) {
+    return "Official collection matches";
   }
-  return "Possible official records";
+  return "Related results";
 }
 
 function sectionDescription(
@@ -39,18 +47,15 @@ function sectionDescription(
   identification?: ArtworkIdentification | null
 ): string | null {
   if (lookup.notice) return lookup.notice;
-  if (identification?.identification_mode === "catalog_match") {
+  if (hasStrongMatches(lookup)) {
     return "Review the source page and image before applying metadata.";
   }
-  if (identification?.identification_mode === "possible_match") {
-    return "These are related collection records — verify against your photo before applying.";
-  }
   if (identification?.identification_mode === "style_subject") {
-    return "No exact catalog match yet. Compare these related records with your photo.";
+    return "No close official match yet. Compare related records with your photo.";
   }
   return lookup.query_used
-    ? `Searched open collections for “${lookup.query_used}”.`
-    : null;
+    ? `No close official match for “${lookup.query_used}”.`
+    : "No close official match found.";
 }
 
 export function LookupCandidateList({
@@ -62,6 +67,7 @@ export function LookupCandidateList({
 }: LookupCandidateListProps) {
   const [applying, setApplying] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showWeak, setShowWeak] = useState(false);
 
   async function applyCandidate(
     candidate: ArtworkLookupCandidate,
@@ -98,24 +104,21 @@ export function LookupCandidateList({
     }
   }
 
-  if (!lookup.candidates.length) {
+  const primaryMatches = lookup.candidates;
+  const weakMatches = lookup.related_candidates ?? [];
+  const description = sectionDescription(lookup, identification);
+
+  if (!primaryMatches.length && !weakMatches.length) {
     return lookup.notice ? (
       <p className="text-sm text-muted-foreground">{lookup.notice}</p>
     ) : null;
   }
 
-  const description = sectionDescription(lookup, identification);
-  const likelyMatches = lookup.candidates.filter((candidate) => !candidate.low_confidence);
-  const relatedMatches = lookup.candidates.filter((candidate) => candidate.low_confidence);
-  const displayLikely = likelyMatches.length > 0 ? likelyMatches : lookup.candidates.slice(0, 3);
-  const displayRelated =
-    likelyMatches.length > 0 ? relatedMatches : lookup.candidates.slice(3, 6);
-
   return (
     <div className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-          {sectionHeading(identification)}
+          {sectionHeading(lookup)}
         </p>
         {description ? (
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
@@ -129,142 +132,166 @@ export function LookupCandidateList({
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      <CandidateGroup
-        title={displayRelated.length > 0 && displayLikely.length > 0 ? "Best matches" : undefined}
-        candidates={displayLikely.slice(0, 4)}
-        artwork={artwork}
-        canEdit={canEdit}
-        applying={applying}
-        onApply={applyCandidate}
-      />
-
-      {displayRelated.length > 0 ? (
+      {primaryMatches.length > 0 ? (
         <CandidateGroup
-          title="Related records"
-          candidates={displayRelated.slice(0, 3)}
-          artwork={artwork}
+          candidates={primaryMatches.slice(0, 4)}
           canEdit={canEdit}
           applying={applying}
           onApply={applyCandidate}
-          subdued
         />
+      ) : null}
+
+      {weakMatches.length > 0 ? (
+        <div className="space-y-2">
+          {!showWeak ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs text-muted-foreground"
+              onClick={() => setShowWeak(true)}
+            >
+              Show weak related results ({weakMatches.length})
+            </Button>
+          ) : (
+            <>
+              <p className="text-xs font-medium text-muted-foreground">Related results</p>
+              <CandidateGroup
+                candidates={weakMatches.slice(0, 4)}
+                canEdit={canEdit}
+                applying={applying}
+                onApply={applyCandidate}
+                weak
+              />
+            </>
+          )}
+        </div>
       ) : null}
     </div>
   );
 }
 
 function CandidateGroup({
-  title,
   candidates,
-  artwork,
   canEdit,
   applying,
   onApply,
-  subdued = false,
+  weak = false,
 }: {
-  title?: string;
   candidates: ArtworkLookupCandidate[];
-  artwork: Artwork;
   canEdit: boolean;
   applying: string | null;
   onApply: (candidate: ArtworkLookupCandidate, mode: "image" | "image_metadata") => void;
-  subdued?: boolean;
+  weak?: boolean;
 }) {
   if (!candidates.length) return null;
 
   return (
-    <div className="space-y-2">
-      {title ? <p className="text-xs font-medium text-muted-foreground">{title}</p> : null}
-      <ul className="space-y-3">
-        {candidates.map((candidate) => {
-          const key = candidateKey(candidate);
-          const busy = applying?.startsWith(key) ?? false;
-          const busyMode = applying?.split(":")[1];
-          const highConfidence =
-            !candidate.low_confidence &&
-            (candidate.confidence ?? 0) >= HIGH_CONFIDENCE_THRESHOLD;
+    <ul className="space-y-3">
+      {candidates.map((candidate) => {
+        const key = candidateKey(candidate);
+        const busy = applying?.startsWith(key) ?? false;
+        const busyMode = applying?.split(":")[1];
+        const tier = candidate.match_tier ?? (candidate.low_confidence ? "weak" : "possible");
+        const isWeak = weak || tier === "weak";
 
-          return (
-            <li
-              key={key}
-              className={cn(
-                "rounded-xl border border-border bg-card p-3",
-                (subdued || candidate.low_confidence) && "opacity-85"
-              )}
-            >
-              <div className="flex gap-3">
-                <EntryThumbnail
-                  imageUrl={candidate.image_thumbnail_url ?? candidate.image_url}
-                  alt={candidate.title}
-                  entityType="artwork"
-                  size="lg"
-                />
-                <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-sm font-medium leading-snug">{candidate.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {[candidate.artist, candidate.date, candidate.medium]
-                      .filter(Boolean)
-                      .join(" · ")}
+        return (
+          <li
+            key={key}
+            className={cn(
+              "rounded-xl border border-border bg-card p-3",
+              isWeak && "opacity-85"
+            )}
+          >
+            <div className="flex gap-3">
+              <EntryThumbnail
+                imageUrl={candidate.image_thumbnail_url ?? candidate.image_url}
+                alt={candidate.title}
+                entityType="artwork"
+                size="lg"
+              />
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="text-sm font-medium leading-snug">{candidate.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  {[candidate.artist, candidate.date, candidate.medium]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {candidate.source_name}
+                  {candidate.confidence != null
+                    ? ` · ${Math.round(candidate.confidence * 100)}% similarity`
+                    : null}
+                </p>
+                {candidate.match_reasons && candidate.match_reasons.length > 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    {candidate.match_reasons.slice(0, 3).join(" · ")}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    {candidate.source_name}
-                    {candidate.confidence != null
-                      ? ` · ${Math.round(candidate.confidence * 100)}% match`
-                      : null}
-                    {candidate.low_confidence ? " · verify carefully" : null}
-                  </p>
-                  {candidate.match_reasons && candidate.match_reasons.length > 0 ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      {candidate.match_reasons.slice(0, 2).join(" · ")}
-                    </p>
-                  ) : null}
-                  {highConfidence ? (
-                    <p className="text-[11px] font-medium text-primary">Strong catalog similarity</p>
-                  ) : null}
+                ) : null}
+                {tier === "high" ? (
+                  <p className="text-[11px] font-medium text-primary">High confidence match</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2">
+              {candidate.object_url ? (
+                <a
+                  href={candidate.object_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                >
+                  View source
+                  <ExternalLink className="size-3" aria-hidden />
+                </a>
+              ) : null}
+
+              {canEdit ? (
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  {isWeak ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!candidate.object_url && !candidate.image_url}
+                      onClick={() => {
+                        if (candidate.object_url) {
+                          window.open(candidate.object_url, "_blank", "noopener,noreferrer");
+                        }
+                      }}
+                    >
+                      Review related record
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!candidate.image_url || busy}
+                        onClick={() => void onApply(candidate, "image")}
+                      >
+                        {busy && busyMode === "image" ? "Applying…" : "Use image"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={!candidate.image_url || busy}
+                        onClick={() => void onApply(candidate, "image_metadata")}
+                      >
+                        {busy && busyMode === "image_metadata"
+                          ? "Applying…"
+                          : "Use image + metadata"}
+                      </Button>
+                    </>
+                  )}
                 </div>
-              </div>
-
-              <div className="mt-3 flex flex-col gap-2">
-                {candidate.object_url ? (
-                  <a
-                    href={candidate.object_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                  >
-                    View source
-                    <ExternalLink className="size-3" aria-hidden />
-                  </a>
-                ) : null}
-
-                {canEdit ? (
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={!candidate.image_url || busy}
-                      onClick={() => void onApply(candidate, "image")}
-                    >
-                      {busy && busyMode === "image" ? "Applying…" : "Use image"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      disabled={!candidate.image_url || busy}
-                      onClick={() => void onApply(candidate, "image_metadata")}
-                    >
-                      {busy && busyMode === "image_metadata"
-                        ? "Applying…"
-                        : "Use image + metadata"}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+              ) : null}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

@@ -31,8 +31,8 @@ from app.services.research import (
     serialize_research_draft,
 )
 from app.services.visual_analysis import VisualAnalysis
-from app.sources.routing import resolve_lookup_sources, sources_searched_labels
-from app.schemas import ArtworkLookupCandidateRead
+from app.services.lookup_response import lookup_response_from_result
+from app.sources.routing import resolve_lookup_sources
 
 logger = logging.getLogger(__name__)
 
@@ -75,36 +75,16 @@ def _build_lookup_response(db: Session, artwork: Artwork, draft: ResearchDraft) 
         )
 
     lookup_result = lookup_artwork_candidates(built.query)
-    candidates = lookup_result.candidates
-    sources_searched = sources_searched_labels(built.query)
 
-    notice: str | None = None
-    if built.query_source == "visual_keywords":
-        notice = "Searched museum collections using visual style and subject keywords."
-    elif lookup_result.artist_fallback and candidates:
-        artist_label = (built.query.artist or "").strip() or "this artist"
-        notice = f"No exact title match found. Showing related works by {artist_label}."
-    elif not candidates:
-        if not built.query_used.strip():
-            notice = "Add a title, label text, or clearer photo to improve collection matching."
-        else:
-            searched = ", ".join(sources_searched) if sources_searched else "open collections"
-            notice = f"No close matches found in {searched}."
-
-    return ArtworkLookupResponse(
-        candidates=[
-            ArtworkLookupCandidateRead.model_validate(item, from_attributes=True)
-            for item in candidates
-        ],
-        sources_searched=sources_searched,
+    return lookup_response_from_result(
+        lookup_result,
+        query=built.query,
         query_used=built.query_used,
         query_source=built.query_source,
-        query_strategy=lookup_result.query_strategy,
-        artist_fallback=lookup_result.artist_fallback,
         alternate_title=built.alternate_title,
         expected_medium_type=built.expected_medium_type,
         medium_type_filter=built.medium_type_filter,
-        notice=notice,
+        visual_keywords=built.query_source == "visual_keywords",
     )
 
 

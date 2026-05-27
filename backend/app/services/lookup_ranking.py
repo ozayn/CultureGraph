@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from app.services.lookup_medium import (
     build_match_reasons,
     classify_medium,
@@ -11,14 +13,50 @@ from app.services.lookup_medium import (
 )
 from app.services.lookup_types import LookupStrategy
 from app.sources.base import ArtworkLookupCandidate, ArtworkLookupQuery
-from app.sources.matching import score_artwork_entry_detailed
+from app.sources.matching import (
+    is_attribution_artist,
+    is_placeholder_artist,
+    passes_title_specific_gate,
+    score_artwork_entry_detailed,
+)
+
+MatchTier = Literal["high", "possible", "weak"]
+
+HIGH_CONFIDENCE_MIN = 0.85
+POSSIBLE_CONFIDENCE_MIN = 0.70
 
 STRATEGY_THRESHOLDS: dict[LookupStrategy, dict[str, float]] = {
-    "exact": {"low": 0.35, "high": 0.55, "min_title": 0.22, "min_artist": 0.35},
-    "fuzzy": {"low": 0.28, "high": 0.48, "min_title": 0.15, "min_artist": 0.35},
-    "artist_fallback": {"low": 0.24, "high": 0.42, "min_title": 0.0, "min_artist": 0.35},
-    "broad": {"low": 0.18, "high": 0.35, "min_title": 0.0, "min_artist": 0.28},
+    "exact": {"low": 0.48, "high": 0.70, "min_title": 0.32, "min_artist": 0.48},
+    "fuzzy": {"low": 0.42, "high": 0.65, "min_title": 0.24, "min_artist": 0.42},
+    "artist_fallback": {"low": 0.38, "high": 0.58, "min_title": 0.0, "min_artist": 0.48},
+    "broad": {"low": 0.35, "high": 0.55, "min_title": 0.0, "min_artist": 0.42},
 }
+
+
+def confidence_to_match_tier(
+    confidence: float,
+    *,
+    title_score: float,
+    artist_score: float,
+    attribution: bool,
+) -> MatchTier:
+    if confidence >= HIGH_CONFIDENCE_MIN and title_score >= 0.45:
+        return "high"
+    if confidence >= POSSIBLE_CONFIDENCE_MIN:
+        if attribution:
+            return "weak"
+        if title_score < 0.22 and artist_score < 0.65:
+            return "weak"
+        return "possible"
+    return "weak"
+
+
+def partition_lookup_candidates(
+    candidates: list[ArtworkLookupCandidate],
+) -> tuple[list[ArtworkLookupCandidate], list[ArtworkLookupCandidate]]:
+    primary = [candidate for candidate in candidates if candidate.match_tier in {"high", "possible"}]
+    related = [candidate for candidate in candidates if candidate.match_tier == "weak"]
+    return primary, related
 
 
 def rank_lookup_candidates(
@@ -45,7 +83,7 @@ def rank_lookup_candidates(
     expected_medium = query.expected_medium_type or "unknown"
     medium_filter = query.medium_type_filter or "any"
 
-    enriched: list[tuple[float, float, float, bool, bool, ArtworkLookupCandidate]] = []
+    enriched: list[tuple[float, float, float, bool, bool, MatchTier, ArtworkLookupCandidate]] = []
     for _combined, entry, candidate in raw:
         details = score_artwork_entry_detailed(
             entry,
@@ -77,20 +115,32 @@ def rank_lookup_candidates(
                 continue
             score = max(score, title_score * 0.5 + artist_score * 0.5)
 
+        if has_title_query and strategy in {"exact", "fuzzy"}:
+            if not passes_title_specific_gate(
+                search_text=search_text,
+                artist_text=artist_text,
+                entry=entry,
+                title_score=title_score,
+                artist_score=artist_score,
+            ):
+                continue
+
         if score < low_min:
             continue
         if title_score < min_title and artist_score < min_artist:
             continue
 
-        if has_title_query and strategy == "exact" and title_score < 0.22 and artist_score >= 0.4:
-            score *= 0.55
+        if has_title_query and strategy == "exact" and title_score < 0.28 and artist_score < 0.72:
+            continue
 
         if title_score >= 0.88:
             score = min(score + 0.12, 0.98)
         elif title_score >= 0.65:
             score = min(score + 0.06, 0.95)
-        if artist_score >= 0.75 and artist_text:
+        if artist_score >= 0.78 and artist_text and not is_attribution_artist(entry.get("artist") or ""):
             score = min(score + 0.05, 0.98)
+        elif is_attribution_artist(entry.get("artist") or ""):
+            score = min(score, 0.62)
 
         candidate_medium_type = classify_medium(candidate.medium)
         if medium_filter in {"2d", "3d"} and candidate_medium_type != medium_filter:
@@ -108,13 +158,16 @@ def rank_lookup_candidates(
             medium_match = None
             medium_mismatch = False
 
-        low_confidence = score < high_min or (
-            has_title_query and title_score < 0.32 and strategy in {"exact", "fuzzy"}
+        attribution = is_attribution_artist(entry.get("artist") or "")
+        match_tier = confidence_to_match_tier(
+            score,
+            title_score=title_score,
+            artist_score=artist_score,
+            attribution=attribution,
         )
-        if strategy in {"artist_fallback", "broad"} and artist_score >= 0.4:
-            low_confidence = score < high_min or (has_title_query and title_score < 0.2)
-        if medium_mismatch:
-            low_confidence = True
+        if strategy in {"artist_fallback", "broad"} and artist_score >= 0.78 and title_score < 0.35:
+            match_tier = "possible" if score >= POSSIBLE_CONFIDENCE_MIN else "weak"
+        low_confidence = match_tier == "weak" or medium_mismatch
 
         match_reasons = build_match_reasons(
             title_score=title_score,
@@ -136,6 +189,7 @@ def rank_lookup_candidates(
                 artist_score,
                 medium_mismatch,
                 low_confidence,
+                match_tier,
                 ArtworkLookupCandidate(
                     title=candidate.title,
                     artist=candidate.artist,
@@ -153,6 +207,7 @@ def rank_lookup_candidates(
                     medium_type=candidate_medium_type,
                     medium_match=medium_match,
                     match_reasons=tuple(match_reasons),
+                    match_tier=match_tier,
                 ),
             )
         )
@@ -163,17 +218,26 @@ def rank_lookup_candidates(
             enriched = [
                 item
                 for item in enriched
-                if item[1] >= 0.18 or (item[2] >= 0.42 and item[1] >= 0.1) or item[3]
+                if item[1] >= 0.22
+                or (item[2] >= 0.72 and item[1] >= 0.12)
+                or item[5] == "high"
             ]
 
-    enriched.sort(key=lambda item: (item[3], item[4], -item[0]))
+    enriched.sort(
+        key=lambda item: (
+            item[3],
+            item[5] == "weak",
+            item[5] == "possible",
+            -item[0],
+        )
+    )
     if medium_filter in {"2d", "3d"}:
-        return [item[5] for item in enriched[:limit]]
+        return [item[6] for item in enriched[:limit]]
 
     matched = [item for item in enriched if not item[3]]
     mismatched = [item for item in enriched if item[3]]
     selected = matched[:limit]
     if mismatched and expected_medium != "unknown":
-        reserve = min(3, max(1, limit // 4))
+        reserve = min(2, max(1, limit // 5))
         selected.extend(mismatched[:reserve])
-    return [item[5] for item in selected]
+    return [item[6] for item in selected]

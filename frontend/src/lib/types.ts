@@ -116,6 +116,7 @@ export interface ArtworkLookupCandidate {
   medium_type?: string | null;
   medium_match?: boolean | null;
   match_reasons?: string[];
+  match_tier?: "high" | "possible" | "weak";
 }
 
 export type ArtworkLookupQuerySource =
@@ -134,6 +135,7 @@ export type ArtworkLookupQueryStrategy =
 
 export interface ArtworkLookupResponse {
   candidates: ArtworkLookupCandidate[];
+  related_candidates?: ArtworkLookupCandidate[];
   sources_searched: string[];
   query_used: string;
   query_source: ArtworkLookupQuerySource;

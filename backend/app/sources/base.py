@@ -33,3 +33,4 @@ class ArtworkLookupCandidate:
     medium_type: str | None = None
     medium_match: bool | None = None
     match_reasons: tuple[str, ...] = ()
+    match_tier: str = "weak"

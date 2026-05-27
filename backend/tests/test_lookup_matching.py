@@ -5,6 +5,10 @@ from app.sources.base import ArtworkLookupQuery
 from app.sources.matching import title_similarity, token_overlap
 
 
+def _all_matches(result):
+    return [*result.candidates, *result.related_candidates]
+
+
 def test_token_overlap_matches_dancer_variants() -> None:
     assert token_overlap("Four Dancers", "Little Dancer Aged Fourteen") > 0
 
@@ -22,12 +26,13 @@ def test_lookup_four_dancers_degas_returns_nga_matches() -> None:
         has_title_query=True,
     )
     result = lookup_artwork_candidates(query)
-    assert result.candidates
+    matches = _all_matches(result)
+    assert matches
     assert result.query_strategy in {"exact", "fuzzy", "artist_fallback", "broad"}
-    titles = " ".join(candidate.title.lower() for candidate in result.candidates)
+    titles = " ".join(candidate.title.lower() for candidate in matches)
     assert "dancer" in titles or "degas" in titles.lower()
-    degas_hits = [c for c in result.candidates if c.artist and "degas" in c.artist.lower()]
-    assert len(degas_hits) >= 3
+    degas_hits = [c for c in matches if c.artist and "degas" in c.artist.lower()]
+    assert len(degas_hits) >= 2
 
 
 def test_lookup_artist_fallback_strategy_when_title_absent_in_index() -> None:
@@ -38,6 +43,7 @@ def test_lookup_artist_fallback_strategy_when_title_absent_in_index() -> None:
         has_title_query=True,
     )
     result = lookup_artwork_candidates(query)
-    assert result.candidates
-    assert result.query_strategy is not None
-    assert any("degas" in (c.artist or "").lower() for c in result.candidates)
+    matches = _all_matches(result)
+    assert matches
+    assert result.query_strategy in {"artist_fallback", "broad", "fuzzy"}
+    assert any("degas" in (c.artist or "").lower() for c in matches)

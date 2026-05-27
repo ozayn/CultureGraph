@@ -179,15 +179,13 @@ def build_match_reasons(
 ) -> list[str]:
     reasons: list[str] = []
     if has_title_query and title_score >= 0.65:
-        reasons.append("Strong title match")
-    elif has_title_query and title_score >= 0.3:
+        reasons.append("Title match")
+    elif has_title_query and title_score >= 0.35:
         reasons.append("Partial title match")
-    elif has_title_query:
-        reasons.append("Weak title match")
 
-    if artist_text and artist_score >= 0.65:
+    if artist_text and artist_score >= 0.72:
         reasons.append("Artist match")
-    elif artist_text and artist_score >= 0.35:
+    elif artist_text and artist_score >= 0.48:
         reasons.append("Related artist")
 
     if medium_match is True:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services.lookup_ranking import rank_lookup_candidates
+from app.services.lookup_ranking import partition_lookup_candidates, rank_lookup_candidates
 from app.services.lookup_types import STRATEGY_ORDER, LookupResult, LookupStrategy
 from app.sources.aic import collect_aic_scored_candidates
 from app.sources.base import ArtworkLookupQuery
@@ -29,7 +29,7 @@ def lookup_artwork_candidates_staged(
         raw.extend(collect_aic_scored_candidates(query))
 
     result = _rank_staged(raw, query, force_broad=force_broad)
-    if result.candidates:
+    if result.candidates or result.related_candidates:
         return result
 
     wiki_raw = collect_wikimedia_scored_candidates(_wikimedia_fallback_query(query))
@@ -51,15 +51,38 @@ def _rank_staged(
 
     strategies: tuple[LookupStrategy, ...] = ("broad",) if force_broad else STRATEGY_ORDER
 
+    fallback_related: list = []
+    fallback_strategy: LookupStrategy | None = None
+    fallback_artist = False
+
     for strategy in strategies:
-        candidates = rank_lookup_candidates(raw, query, strategy=strategy)
-        if candidates:
-            artist_fallback = strategy in {"artist_fallback", "broad"} or wikimedia_fallback
+        ranked = rank_lookup_candidates(raw, query, strategy=strategy)
+        if not ranked:
+            continue
+
+        primary, related = partition_lookup_candidates(ranked)
+        artist_fallback = strategy in {"artist_fallback", "broad"} or wikimedia_fallback
+
+        if primary:
             return LookupResult(
-                candidates=candidates,
+                candidates=primary,
+                related_candidates=related,
                 query_strategy=strategy,
                 artist_fallback=artist_fallback,
             )
+
+        if related and not fallback_related:
+            fallback_related = related
+            fallback_strategy = strategy
+            fallback_artist = artist_fallback
+
+    if fallback_related:
+        return LookupResult(
+            candidates=[],
+            related_candidates=fallback_related,
+            query_strategy=fallback_strategy,
+            artist_fallback=fallback_artist,
+        )
 
     return LookupResult(candidates=[], query_strategy=None)
 

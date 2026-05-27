@@ -9,6 +9,10 @@ from app.services.lookup_medium import (
 from app.sources.base import ArtworkLookupQuery
 
 
+def _all_matches(result):
+    return [*result.candidates, *result.related_candidates]
+
+
 def test_classify_medium_painting_is_2d() -> None:
     assert classify_medium("oil on canvas") == "2d"
     assert classify_medium("pastel on paper") == "2d"
@@ -56,10 +60,12 @@ def test_degas_pastel_query_ranks_2d_above_little_dancer_sculpture() -> None:
     assert result.candidates
 
     titles = [candidate.title for candidate in result.candidates]
-    assert "Little Dancer Aged Fourteen" in titles
+    matches = _all_matches(result)
+    match_titles = [candidate.title for candidate in matches]
+    assert "Little Dancer Aged Fourteen" in match_titles
     assert any("Girl in Red" == title or "Woman Ironing" == title for title in titles)
 
-    dancer_idx = titles.index("Little Dancer Aged Fourteen")
+    dancer_idx = match_titles.index("Little Dancer Aged Fourteen")
     two_d_indices = [
         titles.index(title)
         for title in titles
@@ -68,7 +74,7 @@ def test_degas_pastel_query_ranks_2d_above_little_dancer_sculpture() -> None:
     assert two_d_indices
     assert min(two_d_indices) < dancer_idx
 
-    dancer = next(c for c in result.candidates if c.title == "Little Dancer Aged Fourteen")
+    dancer = next(c for c in matches if c.title == "Little Dancer Aged Fourteen")
     assert dancer.medium_match is False
     assert dancer.medium_type == "3d"
     assert any("Medium mismatch" in reason for reason in dancer.match_reasons)
@@ -85,7 +91,7 @@ def test_medium_type_any_returns_sculptures_and_2d() -> None:
         source="nga",
     )
     result = lookup_artwork_candidates(query)
-    mediums = {candidate.medium_type for candidate in result.candidates}
+    mediums = {candidate.medium_type for candidate in _all_matches(result)}
     assert "2d" in mediums
     assert "3d" in mediums
 
@@ -101,6 +107,7 @@ def test_medium_type_3d_filter_returns_sculptures_only() -> None:
         source="nga",
     )
     result = lookup_artwork_candidates(query)
-    assert result.candidates
-    assert all(candidate.medium_type == "3d" for candidate in result.candidates)
-    assert any("Dancer" in candidate.title for candidate in result.candidates)
+    matches = _all_matches(result)
+    assert matches
+    assert all(candidate.medium_type == "3d" for candidate in matches)
+    assert any("Dancer" in candidate.title for candidate in matches)
