@@ -84,6 +84,14 @@ def lookup_artwork_image(
         default=None,
         description="Force broader matching, e.g. broad",
     ),
+    medium_type: str | None = Query(
+        default=None,
+        description="Filter by object type: 2d, 3d, or any",
+    ),
+    medium_override: str | None = Query(
+        default=None,
+        description="Override inferred artwork medium for ranking",
+    ),
 ) -> ArtworkLookupResponse:
     artwork = _get_artwork_or_404(db, artwork_id)
     museum_name = artwork.visit.museum_name if artwork.visit else None
@@ -95,6 +103,8 @@ def lookup_artwork_image(
         title_override=title_override,
         artist_override=artist_override,
         source=source,
+        medium_type=medium_type,
+        medium_override=medium_override,
     )
     query = built.query
 
@@ -105,6 +115,8 @@ def lookup_artwork_image(
             query_used=built.query_used,
             query_source=built.query_source,
             alternate_title=built.alternate_title,
+            expected_medium_type=built.expected_medium_type,
+            medium_type_filter=built.medium_type_filter,
         )
 
     lookup_result = lookup_artwork_candidates(
@@ -139,6 +151,8 @@ def lookup_artwork_image(
         query_strategy=lookup_result.query_strategy,
         artist_fallback=lookup_result.artist_fallback,
         alternate_title=built.alternate_title,
+        expected_medium_type=built.expected_medium_type,
+        medium_type_filter=built.medium_type_filter,
         notice=notice,
     )
 

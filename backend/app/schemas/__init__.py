@@ -400,6 +400,9 @@ class ArtworkLookupCandidateRead(BaseModel):
     rights_label: str | None = None
     external_id: str | None = None
     low_confidence: bool = False
+    medium_type: str | None = None
+    medium_match: bool | None = None
+    match_reasons: list[str] = Field(default_factory=list)
 
 
 class ArtworkLookupResponse(BaseModel):
@@ -410,6 +413,8 @@ class ArtworkLookupResponse(BaseModel):
     query_strategy: Literal["exact", "fuzzy", "artist_fallback", "broad"] | None = None
     artist_fallback: bool = False
     alternate_title: str | None = None
+    expected_medium_type: str | None = None
+    medium_type_filter: str = "any"
     disclaimer: str = (
         "Matches are suggestions from open museum collection data. "
         "Review title, artist, and image before applying."

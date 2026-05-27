@@ -15,10 +15,16 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
-import { isPlaceholderTitle } from "@/lib/artwork-metadata";
+import {
+  inferLookupMediumFilter,
+  isPlaceholderTitle,
+  lookupMediumFilterLabel,
+  type LookupMediumFilter,
+} from "@/lib/artwork-metadata";
 import type {
   Artwork,
   ArtworkLookupCandidate,
+  ArtworkLookupMediumFilter,
   ArtworkLookupQuerySource,
   ArtworkLookupQueryStrategy,
   ArtworkLookupResponse,
@@ -45,6 +51,7 @@ interface LookupSearchParams {
   title?: string;
   artist?: string;
   searchMode?: "broad";
+  mediumType?: ArtworkLookupMediumFilter;
 }
 
 interface ApplyFields {
@@ -75,6 +82,7 @@ export interface ArtworkImageLookupPanelProps {
   hasImage: boolean;
   aiTitleHint?: string | null;
   aiArtistHint?: string | null;
+  aiMediumHint?: string | null;
   onApplied: (artwork: Artwork) => void;
   children?: ReactNode;
 }
@@ -94,6 +102,9 @@ function lookupEndpoint(artworkId: number, params: LookupSearchParams = {}): str
   }
   if (params.searchMode === "broad") {
     query.set("search_mode", "broad");
+  }
+  if (params.mediumType && params.mediumType !== "any") {
+    query.set("medium_type", params.mediumType);
   }
   return `/api/artworks/${artworkId}/lookup-image?${query.toString()}`;
 }
@@ -233,7 +244,7 @@ function LookupCandidateCard({
     <li
       className={cn(
         "rounded-xl border border-border bg-card p-3",
-        candidate.low_confidence && "opacity-70"
+        (candidate.low_confidence || candidate.medium_match === false) && "opacity-70"
       )}
     >
       <div className="flex gap-3">
@@ -256,7 +267,28 @@ function LookupCandidateCard({
             {candidate.low_confidence ? " · low confidence" : null}
           </p>
           {candidate.medium ? (
-            <p className="text-[11px] text-muted-foreground">{candidate.medium}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {candidate.medium_type === "2d"
+                ? "2D · "
+                : candidate.medium_type === "3d"
+                  ? "3D · "
+                  : null}
+              {candidate.medium}
+            </p>
+          ) : candidate.medium_type && candidate.medium_type !== "unknown" ? (
+            <p className="text-[11px] text-muted-foreground">
+              {candidate.medium_type === "2d" ? "2D work" : "3D work"}
+            </p>
+          ) : null}
+          {candidate.match_reasons?.length ? (
+            <p className="text-[11px] text-muted-foreground">
+              {candidate.match_reasons.join(" · ")}
+            </p>
+          ) : null}
+          {candidate.medium_match === false ? (
+            <p className="text-[11px] font-medium text-amber-800 dark:text-amber-200">
+              Different object type than your artwork
+            </p>
           ) : null}
           {suggestTitle ? (
             <p className="text-[11px] font-medium text-primary">Use this title?</p>
@@ -316,6 +348,7 @@ export function ArtworkImageLookupPanel({
   hasImage,
   aiTitleHint,
   aiArtistHint,
+  aiMediumHint,
   onApplied,
   children,
 }: ArtworkImageLookupPanelProps) {
@@ -328,98 +361,105 @@ export function ArtworkImageLookupPanel({
   const [manualTitle, setManualTitle] = useState("");
   const [manualArtist, setManualArtist] = useState("");
   const [pendingApply, setPendingApply] = useState<PendingApply | null>(null);
+  const defaultMediumFilter = useMemo(
+    () => inferLookupMediumFilter(artwork.medium, aiMediumHint),
+    [aiMediumHint, artwork.medium]
+  );
+  const [mediumTypeFilter, setMediumTypeFilter] =
+    useState<LookupMediumFilter>(defaultMediumFilter);
 
-  const runAutoLookup = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setResponse(null);
-    setPendingApply(null);
-    try {
-      const result = await api.get<ArtworkLookupResponse>(lookupEndpoint(artwork.id));
-      setResponse(result);
-      if (!result.candidates.length && !result.query_used?.trim() && result.notice) {
-        setError(result.notice);
-      } else if (!result.candidates.length && !result.query_used?.trim()) {
-        setError(MISSING_METADATA_HINT);
-      } else if (!result.candidates.length && result.notice) {
-        setError(result.notice);
-      } else if (!result.candidates.length) {
-        setError("No close matches found in the open collection indexes.");
-      }
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Lookup failed. Check your connection and try again."
-      );
+  const fetchLookup = useCallback(
+    async (params: LookupSearchParams = {}) => {
+      setLoading(true);
+      setError(null);
       setResponse(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [artwork.id]);
-
-  const runManualLookup = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setResponse(null);
-    setPendingApply(null);
-    try {
-      const result = await api.get<ArtworkLookupResponse>(
-        lookupEndpoint(artwork.id, {
-          title: manualTitle || undefined,
-          artist: manualArtist || undefined,
-        })
-      );
-      setResponse(result);
-      if (!result.candidates.length && !result.query_used?.trim() && result.notice) {
-        setError(result.notice);
-      } else if (!result.candidates.length && !result.query_used?.trim()) {
-        setError(MISSING_METADATA_HINT);
-      } else if (!result.candidates.length && result.notice) {
-        setError(result.notice);
-      } else if (!result.candidates.length) {
-        setError("No close matches found in the open collection indexes.");
+      setPendingApply(null);
+      try {
+        const result = await api.get<ArtworkLookupResponse>(
+          lookupEndpoint(artwork.id, {
+            mediumType: params.mediumType ?? mediumTypeFilter,
+            title: params.title,
+            artist: params.artist,
+            searchMode: params.searchMode,
+          })
+        );
+        setResponse(result);
+        if (result.medium_type_filter) {
+          setMediumTypeFilter(result.medium_type_filter as LookupMediumFilter);
+        }
+        if (!result.candidates.length && !result.query_used?.trim() && result.notice) {
+          setError(result.notice);
+        } else if (!result.candidates.length && !result.query_used?.trim()) {
+          setError(MISSING_METADATA_HINT);
+        } else if (!result.candidates.length && result.notice) {
+          setError(result.notice);
+        } else if (!result.candidates.length) {
+          setError("No close matches found in the open collection indexes.");
+        }
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : "Lookup failed. Check your connection and try again."
+        );
+        setResponse(null);
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Lookup failed. Check your connection and try again."
-      );
-      setResponse(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [artwork.id, manualArtist, manualTitle]);
+    },
+    [artwork.id, mediumTypeFilter]
+  );
 
-  const runBroaderLookup = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setPendingApply(null);
-    try {
-      const result = await api.get<ArtworkLookupResponse>(
-        lookupEndpoint(artwork.id, {
-          title: manualTitle || undefined,
-          artist: manualArtist || undefined,
-          searchMode: "broad",
-        })
-      );
-      setResponse(result);
-      if (!result.candidates.length && result.notice) {
-        setError(result.notice);
-      } else if (!result.candidates.length) {
-        setError("No matches found even with a broader search.");
+  const runAutoLookup = useCallback(
+    (mediumType?: LookupMediumFilter) => fetchLookup({ mediumType }),
+    [fetchLookup]
+  );
+
+  const runManualLookup = useCallback(
+    () =>
+      fetchLookup({
+        title: manualTitle || undefined,
+        artist: manualArtist || undefined,
+      }),
+    [fetchLookup, manualArtist, manualTitle]
+  );
+
+  const runBroaderLookup = useCallback(
+    async () => {
+      setLoading(true);
+      setError(null);
+      setPendingApply(null);
+      try {
+        const result = await api.get<ArtworkLookupResponse>(
+          lookupEndpoint(artwork.id, {
+            mediumType: mediumTypeFilter,
+            title: manualTitle || undefined,
+            artist: manualArtist || undefined,
+            searchMode: "broad",
+          })
+        );
+        setResponse(result);
+        if (!result.candidates.length && result.notice) {
+          setError(result.notice);
+        } else if (!result.candidates.length) {
+          setError("No matches found even with a broader search.");
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Lookup failed.");
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Lookup failed.");
-    } finally {
-      setLoading(false);
-    }
-  }, [artwork.id, manualArtist, manualTitle]);
+    },
+    [artwork.id, manualArtist, manualTitle, mediumTypeFilter]
+  );
 
   const openLookup = useCallback(() => {
     if (!canEdit) return;
     setManualTitle(isPlaceholderTitle(artwork.title) ? "" : artwork.title ?? "");
     setManualArtist(artwork.artist ?? "");
+    const inferred = inferLookupMediumFilter(artwork.medium, aiMediumHint);
+    setMediumTypeFilter(inferred);
     setSheetOpen(true);
-    void runAutoLookup();
-  }, [artwork.artist, artwork.title, canEdit, runAutoLookup]);
+    void runAutoLookup(inferred);
+  }, [aiMediumHint, artwork.artist, artwork.medium, artwork.title, canEdit, runAutoLookup]);
 
   function startApply(candidate: ArtworkLookupCandidate, preset: "image" | "image_title" | "title") {
     setPendingApply({
@@ -479,8 +519,16 @@ export function ArtworkImageLookupPanel({
     [canEdit, hasImage, openLookup]
   );
 
-  const highConfidence = response?.candidates.filter((c) => !c.low_confidence) ?? [];
-  const lowConfidence = response?.candidates.filter((c) => c.low_confidence) ?? [];
+  const likelyMatches =
+    response?.candidates.filter(
+      (c) => !c.low_confidence && c.medium_match !== false
+    ) ?? [];
+  const lowConfidence =
+    response?.candidates.filter(
+      (c) => c.low_confidence && c.medium_match !== false
+    ) ?? [];
+  const mediumMismatches =
+    response?.candidates.filter((c) => c.medium_match === false) ?? [];
 
   return (
     <ArtworkImageLookupContext.Provider value={contextValue}>
@@ -535,24 +583,10 @@ export function ArtworkImageLookupPanel({
                   onClick={() => {
                     const title = response.alternate_title ?? "";
                     setManualTitle(title);
-                    void (async () => {
-                      setLoading(true);
-                      setError(null);
-                      setPendingApply(null);
-                      try {
-                        const result = await api.get<ArtworkLookupResponse>(
-                          lookupEndpoint(artwork.id, {
-                            title,
-                            artist: manualArtist || undefined,
-                          })
-                        );
-                        setResponse(result);
-                      } catch (e) {
-                        setError(e instanceof Error ? e.message : "Lookup failed.");
-                      } finally {
-                        setLoading(false);
-                      }
-                    })();
+                    void fetchLookup({
+                      title,
+                      artist: manualArtist || undefined,
+                    });
                   }}
                 >
                   Also try: {response.alternate_title}
@@ -560,6 +594,39 @@ export function ArtworkImageLookupPanel({
               ) : null}
             </div>
           ) : null}
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Type</p>
+            <div className="flex flex-wrap gap-2">
+              {(["2d", "3d", "any"] as const).map((value) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant={mediumTypeFilter === value ? "default" : "outline"}
+                  className="min-h-9"
+                  disabled={loading}
+                  onClick={() => {
+                    setMediumTypeFilter(value);
+                    void fetchLookup({
+                      mediumType: value,
+                      title: manualTitle || undefined,
+                      artist: manualArtist || undefined,
+                    });
+                  }}
+                >
+                  {lookupMediumFilterLabel(value)}
+                </Button>
+              ))}
+            </div>
+            {response?.expected_medium_type &&
+            response.expected_medium_type !== "unknown" ? (
+              <p className="text-[11px] text-muted-foreground">
+                Inferred from your artwork:{" "}
+                {response.expected_medium_type === "2d" ? "2D work" : "3D work"}
+              </p>
+            ) : null}
+          </div>
 
           <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
             <Input
@@ -596,26 +663,11 @@ export function ArtworkImageLookupPanel({
               onClick={() => {
                 setManualTitle(aiTitleHint);
                 if (aiArtistHint) setManualArtist(aiArtistHint);
-                void (async () => {
-                  setLoading(true);
-                  setError(null);
-                  setPendingApply(null);
-                  try {
-                    const result = await api.get<ArtworkLookupResponse>(
-                      lookupEndpoint(artwork.id, {
-                        title: aiTitleHint,
-                        artist:
-                          aiArtistHint ??
-                          (manualArtist || artwork.artist || undefined),
-                      })
-                    );
-                    setResponse(result);
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : "Lookup failed.");
-                  } finally {
-                    setLoading(false);
-                  }
-                })();
+                void fetchLookup({
+                  title: aiTitleHint,
+                  artist:
+                    aiArtistHint ?? (manualArtist || artwork.artist || undefined),
+                });
               }}
             >
               Search using AI title
@@ -661,9 +713,9 @@ export function ArtworkImageLookupPanel({
             <p className="text-xs leading-relaxed text-muted-foreground">{response.disclaimer}</p>
           ) : null}
 
-          {!loading && highConfidence.length ? (
+          {!loading && likelyMatches.length ? (
             <ul className="space-y-3">
-              {highConfidence.map((candidate) => (
+              {likelyMatches.map((candidate) => (
                 <LookupCandidateCard
                   key={candidateKey(candidate)}
                   candidate={candidate}
@@ -681,6 +733,27 @@ export function ArtworkImageLookupPanel({
               <p className="text-xs font-medium text-muted-foreground">Lower confidence matches</p>
               <ul className="space-y-3">
                 {lowConfidence.map((candidate) => (
+                  <LookupCandidateCard
+                    key={candidateKey(candidate)}
+                    candidate={candidate}
+                    artwork={artwork}
+                    applying={saving}
+                    pendingKey={pendingKey}
+                    onPreset={(preset) => startApply(candidate, preset)}
+                  />
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {!loading && mediumMismatches.length ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Less likely matches</p>
+              <p className="text-[11px] text-muted-foreground">
+                Different object type (e.g. sculpture vs painting) — shown for review.
+              </p>
+              <ul className="space-y-3">
+                {mediumMismatches.map((candidate) => (
                   <LookupCandidateCard
                     key={candidateKey(candidate)}
                     candidate={candidate}

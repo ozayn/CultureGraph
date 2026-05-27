@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from app.services.lookup_medium import (
+    build_match_reasons,
+    classify_medium,
+    medium_score_adjustment,
+    medium_type_label,
+    mediums_match,
+)
 from app.services.lookup_types import LookupStrategy
 from app.sources.base import ArtworkLookupCandidate, ArtworkLookupQuery
 from app.sources.matching import score_artwork_entry_detailed
@@ -35,8 +42,10 @@ def rank_lookup_candidates(
     search_text = (query.title or "").strip()
     artist_text = (query.artist or "").strip()
     notes_text = (query.notes or "").strip()
+    expected_medium = query.expected_medium_type or "unknown"
+    medium_filter = query.medium_type_filter or "any"
 
-    enriched: list[tuple[float, float, float, ArtworkLookupCandidate]] = []
+    enriched: list[tuple[float, float, float, bool, bool, ArtworkLookupCandidate]] = []
     for _combined, entry, candidate in raw:
         details = score_artwork_entry_detailed(
             entry,
@@ -83,17 +92,50 @@ def rank_lookup_candidates(
         if artist_score >= 0.75 and artist_text:
             score = min(score + 0.05, 0.98)
 
+        candidate_medium_type = classify_medium(candidate.medium)
+        if medium_filter in {"2d", "3d"} and candidate_medium_type != medium_filter:
+            continue
+
+        relevant_for_medium = artist_score >= 0.55
+        if relevant_for_medium and expected_medium != "unknown":
+            medium_match = mediums_match(expected_medium, candidate_medium_type)
+            score = min(
+                max(score + medium_score_adjustment(expected_medium, candidate_medium_type), 0.0),
+                0.98,
+            )
+            medium_mismatch = medium_match is False
+        else:
+            medium_match = None
+            medium_mismatch = False
+
         low_confidence = score < high_min or (
             has_title_query and title_score < 0.32 and strategy in {"exact", "fuzzy"}
         )
         if strategy in {"artist_fallback", "broad"} and artist_score >= 0.4:
             low_confidence = score < high_min or (has_title_query and title_score < 0.2)
+        if medium_mismatch:
+            low_confidence = True
+
+        match_reasons = build_match_reasons(
+            title_score=title_score,
+            artist_score=artist_score,
+            medium_match=medium_match,
+            has_title_query=has_title_query,
+            artist_text=artist_text,
+        )
+        if candidate_medium_type != "unknown":
+            match_reasons = [
+                *match_reasons,
+                medium_type_label(candidate_medium_type),
+            ][:5]
 
         enriched.append(
             (
                 score,
                 title_score,
                 artist_score,
+                medium_mismatch,
+                low_confidence,
                 ArtworkLookupCandidate(
                     title=candidate.title,
                     artist=candidate.artist,
@@ -108,6 +150,9 @@ def rank_lookup_candidates(
                     rights_label=candidate.rights_label,
                     external_id=candidate.external_id,
                     low_confidence=low_confidence,
+                    medium_type=candidate_medium_type,
+                    medium_match=medium_match,
+                    match_reasons=tuple(match_reasons),
                 ),
             )
         )
@@ -118,8 +163,17 @@ def rank_lookup_candidates(
             enriched = [
                 item
                 for item in enriched
-                if item[1] >= 0.18 or (item[2] >= 0.42 and item[1] >= 0.1)
+                if item[1] >= 0.18 or (item[2] >= 0.42 and item[1] >= 0.1) or item[3]
             ]
 
-    enriched.sort(key=lambda item: (item[3].low_confidence, -item[0]))
-    return [item[3] for item in enriched[:limit]]
+    enriched.sort(key=lambda item: (item[3], item[4], -item[0]))
+    if medium_filter in {"2d", "3d"}:
+        return [item[5] for item in enriched[:limit]]
+
+    matched = [item for item in enriched if not item[3]]
+    mismatched = [item for item in enriched if item[3]]
+    selected = matched[:limit]
+    if mismatched and expected_medium != "unknown":
+        reserve = min(3, max(1, limit // 4))
+        selected.extend(mismatched[:reserve])
+    return [item[5] for item in selected]

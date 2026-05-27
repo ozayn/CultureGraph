@@ -76,6 +76,9 @@ export interface ArtworkLookupCandidate {
   rights_label: string | null;
   external_id: string | null;
   low_confidence?: boolean;
+  medium_type?: string | null;
+  medium_match?: boolean | null;
+  match_reasons?: string[];
 }
 
 export type ArtworkLookupQuerySource =
@@ -98,9 +101,13 @@ export interface ArtworkLookupResponse {
   query_strategy?: ArtworkLookupQueryStrategy | null;
   artist_fallback?: boolean;
   alternate_title?: string | null;
+  expected_medium_type?: string | null;
+  medium_type_filter?: string;
   disclaimer: string;
   notice?: string | null;
 }
+
+export type ArtworkLookupMediumFilter = "2d" | "3d" | "any";
 
 export interface Annotation {
   id: number;

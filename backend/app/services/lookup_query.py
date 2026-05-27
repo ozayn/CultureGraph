@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Literal
 
 from sqlalchemy.orm import Session
 
 from app.models import Artwork, CulturalEntity, CulturalEntityType, ResearchNote
+from app.services.lookup_medium import infer_expected_medium_type, resolve_medium_type_filter
 from app.sources.base import ArtworkLookupQuery
 from app.sources.matching import is_placeholder_artist, is_placeholder_title, normalize
 
@@ -21,6 +23,8 @@ class BuiltLookupQuery:
     query_source: QuerySource
     artist_used: str | None
     alternate_title: str | None = None
+    expected_medium_type: str = "unknown"
+    medium_type_filter: str = "any"
 
 
 def build_artwork_lookup_query(
@@ -31,8 +35,23 @@ def build_artwork_lookup_query(
     title_override: str | None = None,
     artist_override: str | None = None,
     source: str | None = None,
+    medium_type: str | None = None,
+    medium_override: str | None = None,
 ) -> BuiltLookupQuery:
-    ai_title, ai_artist = _latest_research_hints(db, artwork.id)
+    ai_title, ai_artist, ai_medium = _latest_research_hints(db, artwork.id)
+    expected_medium = infer_expected_medium_type(
+        artwork_medium=artwork.medium,
+        ai_medium=ai_medium,
+        notes=artwork.personal_notes,
+        medium_override=medium_override,
+    )
+    medium_filter = resolve_medium_type_filter(expected_medium, medium_type)
+    medium_hint = (
+        (medium_override or "").strip()
+        or (artwork.medium or "").strip()
+        or (ai_medium or "").strip()
+        or None
+    )
     import_title = _import_entity_title(db, artwork)
 
     if (title_override and title_override.strip()) or (artist_override and artist_override.strip()):
@@ -55,6 +74,9 @@ def build_artwork_lookup_query(
             title,
             artist,
             query_source="manual",
+            expected_medium_type=expected_medium,
+            medium_type_filter=medium_filter,
+            medium_hint=medium_hint,
         )
 
     if ai_title and not is_placeholder_title(ai_title):
@@ -67,6 +89,9 @@ def build_artwork_lookup_query(
             artist,
             query_source="ai_title",
             alternate_title=_alternate_saved_title(artwork.title, ai_title, import_title),
+            expected_medium_type=expected_medium,
+            medium_type_filter=medium_filter,
+            medium_hint=medium_hint,
         )
 
     saved_title = (artwork.title or "").strip()
@@ -80,6 +105,9 @@ def build_artwork_lookup_query(
             artist,
             query_source="saved_title",
             alternate_title=import_title if import_title and import_title != saved_title else None,
+            expected_medium_type=expected_medium,
+            medium_type_filter=medium_filter,
+            medium_hint=medium_hint,
         )
 
     artist = _resolve_artist(artwork.artist, ai_artist, artist_override)
@@ -93,6 +121,9 @@ def build_artwork_lookup_query(
         artist,
         query_source="artist_notes",
         alternate_title=import_title if import_title and not is_placeholder_title(import_title) else None,
+        expected_medium_type=expected_medium,
+        medium_type_filter=medium_filter,
+        medium_hint=medium_hint,
     )
 
 
@@ -105,6 +136,9 @@ def _pack(
     *,
     query_source: QuerySource,
     alternate_title: str | None = None,
+    expected_medium_type: str = "unknown",
+    medium_type_filter: str = "any",
+    medium_hint: str | None = None,
 ) -> BuiltLookupQuery:
     clean_title = title.strip()
     clean_artist = artist.strip() if artist else None
@@ -126,11 +160,16 @@ def _pack(
             notes=artwork.personal_notes,
             source=source,
             has_title_query=bool(clean_title),
+            expected_medium_type=expected_medium_type,
+            medium_type_filter=medium_type_filter,
+            medium_hint=medium_hint,
         ),
         query_used=query_used or "",
         query_source=query_source,
         artist_used=clean_artist,
         alternate_title=alternate_title,
+        expected_medium_type=expected_medium_type,
+        medium_type_filter=medium_type_filter,
     )
 
 
@@ -161,7 +200,7 @@ def _alternate_saved_title(
     return None
 
 
-def _latest_research_hints(db: Session, artwork_id: int) -> tuple[str | None, str | None]:
+def _latest_research_hints(db: Session, artwork_id: int) -> tuple[str | None, str | None, str | None]:
     note = (
         db.query(ResearchNote)
         .filter(ResearchNote.artwork_id == artwork_id)
@@ -169,13 +208,32 @@ def _latest_research_hints(db: Session, artwork_id: int) -> tuple[str | None, st
         .first()
     )
     if not note:
-        return None, None
+        return None, None, None
     title = getattr(note, "possible_title", None)
     artist = getattr(note, "possible_artist", None)
     return (
         title.strip() if title and title.strip() else None,
         artist.strip() if artist and artist.strip() else None,
+        _medium_from_research_note(note),
     )
+
+
+def _medium_from_research_note(note: ResearchNote) -> str | None:
+    try:
+        annotations = json.loads(note.suggested_annotations or "[]")
+    except json.JSONDecodeError:
+        annotations = []
+    if not isinstance(annotations, list):
+        return None
+    for item in annotations:
+        if not isinstance(item, dict):
+            continue
+        if item.get("category") != "material":
+            continue
+        text = (item.get("note") or "").strip()
+        if text:
+            return text[:255]
+    return None
 
 
 def _import_entity_title(db: Session, artwork: Artwork) -> str | None:

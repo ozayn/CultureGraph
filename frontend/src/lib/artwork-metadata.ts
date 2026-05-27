@@ -100,6 +100,61 @@ export function extractMovementFromPeriod(raw: string | null | undefined): strin
   return withoutYear;
 }
 
+const LOOKUP_MEDIUM_2D = [
+  "painting",
+  "pastel",
+  "drawing",
+  "print",
+  "lithograph",
+  "etching",
+  "watercolor",
+  "oil",
+  "canvas",
+  "paper",
+  "charcoal",
+];
+
+const LOOKUP_MEDIUM_3D = [
+  "sculpture",
+  "statue",
+  "bronze",
+  "plaster",
+  "plastiline",
+  "armature",
+  "cast",
+  "marble",
+  "beeswax",
+  "figurine",
+];
+
+export type LookupMediumFilter = "2d" | "3d" | "any";
+
+export function inferLookupMediumFilter(
+  artworkMedium?: string | null,
+  aiMedium?: string | null
+): LookupMediumFilter {
+  const text = [artworkMedium, aiMedium].filter(Boolean).join(" ").toLowerCase();
+  if (!text.trim()) return "any";
+
+  let score2d = 0;
+  let score3d = 0;
+  for (const keyword of LOOKUP_MEDIUM_2D) {
+    if (text.includes(keyword)) score2d += 1;
+  }
+  for (const keyword of LOOKUP_MEDIUM_3D) {
+    if (text.includes(keyword)) score3d += 1;
+  }
+  if (score3d > score2d && score3d > 0) return "3d";
+  if (score2d > 0) return "2d";
+  return "any";
+}
+
+export function lookupMediumFilterLabel(filter: LookupMediumFilter): string {
+  if (filter === "2d") return "2D works";
+  if (filter === "3d") return "3D works";
+  return "Any type";
+}
+
 export function extractMediumFromDraft(draft: ResearchDraft): string | null {
   for (const item of draft.suggested_annotations ?? []) {
     if (item.category !== "material") continue;

@@ -239,6 +239,7 @@ export function ArtworkDetailClient({
     hasImage={hasImage}
     aiTitleHint={researchHints?.title}
     aiArtistHint={researchHints?.artist}
+    aiMediumHint={researchHints?.medium}
     onApplied={handleLookupApplied}
   >
   <>
