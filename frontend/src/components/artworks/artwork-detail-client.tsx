@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { CameraUpload } from "@/components/ui/camera-upload";
 import { Textarea } from "@/components/ui/textarea";
 import { api, mediaUrl } from "@/lib/api";
+import { artworkDisplayTitle } from "@/lib/artwork-metadata";
 import { useAuth } from "@/contexts/auth-context";
 import {
   annotationToFormValues,
@@ -258,7 +259,7 @@ export function ArtworkDetailClient({
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={imageSrc}
-                alt={artwork.title}
+                alt={artworkDisplayTitle(artwork.title)}
                 className="block w-full object-contain"
                 style={{ maxHeight: "min(70dvh, 640px)" }}
               />
@@ -302,7 +303,7 @@ export function ArtworkDetailClient({
               {[artwork.museum_gallery, artwork.medium].filter(Boolean).join(" · ")}
             </p>
             <h1 className="font-heading text-2xl font-normal leading-tight sm:text-3xl">
-              {artwork.title}
+              {artworkDisplayTitle(artwork.title)}
             </h1>
             <p className="text-base text-muted-foreground">
               {[artwork.artist, artwork.year_period].filter(Boolean).join(" · ")}

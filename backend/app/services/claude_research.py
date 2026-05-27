@@ -139,7 +139,7 @@ def _encode_image(image_path: Path) -> tuple[str, str]:
 def _build_metadata_prompt(artwork_context: dict) -> str:
     lines = [
         "Artwork metadata supplied by the visitor:",
-        f"- Title (user): {artwork_context.get('title') or 'unknown'}",
+        f"- Title (user): {artwork_context.get('title') or 'not provided'}",
         f"- Artist (user): {artwork_context.get('artist') or 'unknown'}",
         f"- Year/period (user): {artwork_context.get('year_period') or 'unknown'}",
         f"- Medium (user): {artwork_context.get('medium') or 'unknown'}",

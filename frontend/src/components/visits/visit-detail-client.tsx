@@ -22,6 +22,7 @@ import {
   ENTITY_TYPE_LABELS,
   groupVisitDetailEntities,
 } from "@/lib/entity-types";
+import { artworkDisplayTitle } from "@/lib/artwork-metadata";
 import { artworkThumbnailUrl, entityThumbnailUrl } from "@/lib/thumbnails";
 import type { Artwork, CulturalEntity, Visit } from "@/lib/types";
 
@@ -54,12 +55,12 @@ function ArtworkCard({ artwork, canEdit, onDelete }: ArtworkCardProps) {
         >
           <EntryThumbnail
             imageUrl={artworkThumbnailUrl(artwork)}
-            alt={artwork.title}
+            alt={artworkDisplayTitle(artwork.title)}
             entityType="artwork"
             size="md"
           />
           <div className="min-w-0 flex-1">
-            <p className="text-base font-medium">{artwork.title}</p>
+            <p className="text-base font-medium">{artworkDisplayTitle(artwork.title)}</p>
             <p className="mt-1 text-sm text-muted-foreground">
               {[artwork.artist, artwork.year_period].filter(Boolean).join(" · ")}
             </p>
@@ -67,7 +68,7 @@ function ArtworkCard({ artwork, canEdit, onDelete }: ArtworkCardProps) {
         </Link>
         {canEdit ? (
           <AdminActionsMenu
-            label={`Actions for ${artwork.title}`}
+            label={`Actions for ${artworkDisplayTitle(artwork.title)}`}
             onDelete={() => onDelete(artwork)}
           />
         ) : null}

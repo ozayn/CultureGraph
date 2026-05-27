@@ -2,7 +2,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class CulturalEntityType(str, Enum):
@@ -105,8 +105,15 @@ class MuseumRead(BaseModel):
     type: str | None = None
 
 
+def _normalize_artwork_title(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped if stripped else None
+
+
 class ArtworkBase(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
+    title: str | None = Field(default=None, max_length=255)
     artist: str | None = None
     year_period: str | None = None
     medium: str | None = None
@@ -126,13 +133,18 @@ class ArtworkBase(BaseModel):
     personal_notes: str | None = None
     visit_id: int | None = None
 
+    @field_validator("title", mode="before")
+    @classmethod
+    def normalize_title(cls, value: str | None) -> str | None:
+        return _normalize_artwork_title(value)
+
 
 class ArtworkCreate(ArtworkBase):
     pass
 
 
 class ArtworkUpdate(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=255)
+    title: str | None = Field(default=None, max_length=255)
     artist: str | None = None
     year_period: str | None = None
     medium: str | None = None
@@ -145,6 +157,11 @@ class ArtworkUpdate(BaseModel):
     catalog_rights_label: str | None = None
     personal_notes: str | None = None
     visit_id: int | None = None
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def normalize_title(cls, value: str | None) -> str | None:
+        return _normalize_artwork_title(value)
 
 
 class ArtworkRead(ArtworkBase):

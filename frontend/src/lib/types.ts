@@ -41,7 +41,7 @@ export interface Museum {
 export interface Artwork {
   id: number;
   visit_id: number | null;
-  title: string;
+  title: string | null;
   artist: string | null;
   year_period: string | null;
   medium: string | null;

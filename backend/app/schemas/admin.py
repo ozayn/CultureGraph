@@ -36,7 +36,7 @@ class AdminArtworkRecord(BaseModel):
 
     id: int
     visit_id: int | None
-    title: str
+    title: str | None
     artist: str | None
     year_period: str | None
     image_url: str | None

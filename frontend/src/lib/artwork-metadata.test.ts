@@ -8,6 +8,7 @@ import {
   extractMovementFromPeriod,
   extractResearchMetadataHints,
   extractYearFromPeriod,
+  artworkDisplayTitle,
   isPlaceholderTitle,
 } from "@/lib/artwork-metadata";
 
@@ -15,6 +16,12 @@ describe("artwork-metadata", () => {
   it("treats Unknown as a placeholder title", () => {
     expect(isPlaceholderTitle("Unknown")).toBe(true);
     expect(isPlaceholderTitle("Four Dancers")).toBe(false);
+    expect(isPlaceholderTitle(null)).toBe(true);
+  });
+
+  it("uses display label for missing titles without storing placeholders", () => {
+    expect(artworkDisplayTitle(null)).toBe("Unknown artwork");
+    expect(artworkDisplayTitle("Four Dancers")).toBe("Four Dancers");
   });
 
   it("cleans uncertain wording from AI titles", () => {

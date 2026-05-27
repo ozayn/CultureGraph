@@ -24,10 +24,22 @@ const PLACEHOLDER_ARTISTS = new Set([
 export const HIGH_CONFIDENCE_THRESHOLD = 0.72;
 export const LOW_CONFIDENCE_THRESHOLD = 0.55;
 
+export const UNKNOWN_ARTWORK_LABEL = "Unknown artwork";
+
 export function isPlaceholderTitle(title: string | null | undefined): boolean {
   const normalized = (title ?? "").trim().toLowerCase();
   if (!normalized) return true;
   return PLACEHOLDER_TITLES.has(normalized);
+}
+
+/** Display label for artworks without a saved title (never stored in the DB). */
+export function artworkDisplayTitle(title: string | null | undefined): string {
+  if (isPlaceholderTitle(title)) return UNKNOWN_ARTWORK_LABEL;
+  return title!.trim();
+}
+
+export function hasArtworkTitle(title: string | null | undefined): boolean {
+  return !isPlaceholderTitle(title);
 }
 
 export function isPlaceholderArtist(artist: string | null | undefined): boolean {

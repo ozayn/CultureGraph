@@ -53,7 +53,7 @@ class Artwork(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     visit_id: Mapped[int | None] = mapped_column(ForeignKey("visits.id"), nullable=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     artist: Mapped[str | None] = mapped_column(String(255))
     year_period: Mapped[str | None] = mapped_column(String(100))
     medium: Mapped[str | None] = mapped_column(String(255))

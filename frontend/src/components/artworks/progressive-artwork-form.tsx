@@ -43,6 +43,8 @@ export function ProgressiveArtworkForm({
     [photo]
   );
 
+  const canSaveStepOne = Boolean(photo || title.trim() || artwork);
+
   useEffect(() => {
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -50,8 +52,8 @@ export function ProgressiveArtworkForm({
   }, [previewUrl]);
 
   async function saveArtwork(includeDetails: boolean) {
-    if (!title.trim()) {
-      setError("Title is required.");
+    if (!canSaveStepOne) {
+      setError("Add a photo to capture this work, or enter a title.");
       return;
     }
 
@@ -59,7 +61,7 @@ export function ProgressiveArtworkForm({
     setError(null);
 
     const payload = {
-      title: title.trim(),
+      title: title.trim() || null,
       artist: includeDetails && artist.trim() ? artist.trim() : null,
       year_period: includeDetails && yearPeriod.trim() ? yearPeriod.trim() : null,
       medium: artwork?.medium ?? null,
@@ -107,22 +109,11 @@ export function ProgressiveArtworkForm({
   return (
     <div className={compact ? "space-y-4" : "space-y-5"}>
       <p className="text-sm text-muted-foreground">
-        Step {step} of 2 · {step === 1 ? "Essentials" : "Optional details"}
+        Step {step} of 2 · {step === 1 ? "Photo & quick note" : "Optional details"}
       </p>
 
       {step === 1 ? (
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="artwork-title">Title</Label>
-            <Input
-              id="artwork-title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="What are you looking at?"
-              autoFocus
-            />
-          </div>
-
           <CameraUpload
             previewUrl={previewUrl}
             selectedFile={photo}
@@ -139,6 +130,19 @@ export function ProgressiveArtworkForm({
               setPhoto(file);
             }}
           />
+
+          <div className="space-y-2">
+            <Label htmlFor="artwork-title">Title or quick note</Label>
+            <p className="text-xs text-muted-foreground">
+              Optional — you can identify it later.
+            </p>
+            <Input
+              id="artwork-title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="e.g. dancer studies, north gallery"
+            />
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
@@ -200,7 +204,7 @@ export function ProgressiveArtworkForm({
               type="button"
               size="touch"
               className="sm:flex-1"
-              disabled={loading || !title.trim()}
+              disabled={loading || !canSaveStepOne}
               onClick={() => setStep(2)}
             >
               Add details
@@ -210,7 +214,7 @@ export function ProgressiveArtworkForm({
               variant="outline"
               size="touch"
               className="sm:flex-1"
-              disabled={loading || !title.trim()}
+              disabled={loading || !canSaveStepOne}
               onClick={() => saveArtwork(false)}
             >
               {loading ? "Saving…" : "Save now"}

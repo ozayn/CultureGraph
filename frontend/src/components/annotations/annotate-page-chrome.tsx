@@ -1,6 +1,7 @@
 "use client";
 
 import { ButtonLink } from "@/components/ui/button-link";
+import { artworkDisplayTitle } from "@/lib/artwork-metadata";
 import type { Artwork } from "@/lib/types";
 
 interface AnnotatePageChromeProps {
@@ -14,7 +15,7 @@ export function AnnotatePageChrome({ artwork, children }: AnnotatePageChromeProp
       <section className="space-y-1">
         <p className="text-sm text-muted-foreground">Annotate</p>
         <h1 className="font-heading text-2xl font-normal leading-tight sm:text-3xl">
-          {artwork.title}
+          {artworkDisplayTitle(artwork.title)}
         </h1>
         {artwork.artist ? (
           <p className="text-base text-muted-foreground">{artwork.artist}</p>

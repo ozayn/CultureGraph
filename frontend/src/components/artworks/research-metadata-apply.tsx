@@ -12,6 +12,7 @@ import {
   formatMetadataCurrent,
   isPlaceholderArtist,
   isPlaceholderNotes,
+  artworkDisplayTitle,
   isPlaceholderTitle,
   type ResearchMetadataHints,
 } from "@/lib/artwork-metadata";
@@ -105,7 +106,7 @@ function buildMetadataRows(artwork: Artwork, hints: ResearchMetadataHints): Meta
     rows.push({
       key: "title",
       label: "Title",
-      current: formatMetadataCurrent(artwork.title, "Unknown"),
+      current: artworkDisplayTitle(artwork.title),
       suggested: hints.title,
     });
   }
