@@ -1,9 +1,17 @@
+import { thumbnailDisplayUrl } from "@/lib/media-url";
 import type { Artwork, CulturalEntity, CulturalEntityType } from "@/lib/types";
 
 export function artworkThumbnailUrl(
   artwork: Pick<Artwork, "image_thumbnail_url" | "image_url">
 ): string | null {
-  return artwork.image_thumbnail_url ?? artwork.image_url;
+  return artwork.image_thumbnail_url ?? artwork.image_url ?? null;
+}
+
+/** Resolved src for cards/lists (API base + optional museum proxy). */
+export function artworkThumbnailSrc(
+  artwork: Pick<Artwork, "image_thumbnail_url" | "image_url">
+): string | null {
+  return thumbnailDisplayUrl(artworkThumbnailUrl(artwork));
 }
 
 export function entityThumbnailUrl(

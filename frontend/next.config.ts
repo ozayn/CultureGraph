@@ -32,7 +32,17 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
+        hostname: "www.nga.gov",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
         hostname: "ids.si.edu",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**.si.edu",
         pathname: "/**",
       },
     ],

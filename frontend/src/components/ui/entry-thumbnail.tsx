@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { ENTITY_TYPE_ICONS, ENTITY_TYPE_LABELS } from "@/lib/entity-types";
-import { mediaUrl } from "@/lib/api";
+import { thumbnailDisplayUrl } from "@/lib/media-url";
 import type { ThumbnailEntityType } from "@/lib/thumbnails";
 import { cn } from "@/lib/utils";
 
@@ -34,21 +36,31 @@ export function EntryThumbnail({
   size = "md",
   className,
 }: EntryThumbnailProps) {
-  const resolvedUrl = mediaUrl(imageUrl);
+  const [broken, setBroken] = useState(false);
+  const src = thumbnailDisplayUrl(imageUrl);
   const Icon = ENTITY_TYPE_ICONS[entityType];
   const typeLabel = ENTITY_TYPE_LABELS[entityType];
   const sizeClass = SIZE_CLASSES[size];
   const iconClass = ICON_CLASSES[size];
+  const label = alt?.trim() || typeLabel;
 
-  if (resolvedUrl) {
+  useEffect(() => {
+    setBroken(false);
+  }, [imageUrl]);
+
+  if (src && !broken) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={resolvedUrl}
-        alt={alt?.trim() || typeLabel}
+        src={src}
+        alt=""
+        aria-hidden
+        decoding="async"
+        loading="lazy"
+        onError={() => setBroken(true)}
         className={cn(
           sizeClass,
-          "aspect-square shrink-0 rounded-md object-cover ring-1 ring-border",
+          "aspect-square shrink-0 overflow-hidden rounded-md object-cover ring-1 ring-border",
           className
         )}
       />
@@ -57,15 +69,15 @@ export function EntryThumbnail({
 
   return (
     <div
-      aria-hidden={alt ? undefined : true}
+      role="img"
+      aria-label={label}
       className={cn(
         sizeClass,
-        "flex aspect-square shrink-0 items-center justify-center rounded-md bg-muted ring-1 ring-border",
+        "flex aspect-square shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted ring-1 ring-border",
         className
       )}
     >
       <Icon className={cn(iconClass, "text-muted-foreground")} strokeWidth={1.75} />
-      <span className="sr-only">{typeLabel}</span>
     </div>
   );
 }

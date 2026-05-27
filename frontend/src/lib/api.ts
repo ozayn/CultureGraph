@@ -1,48 +1,23 @@
 import { getAuthToken } from "@/lib/auth-storage";
 import { mapGoogleSignInError, parseApiErrorDetail } from "@/lib/auth-errors";
+import { apiUrl, getApiBase } from "@/lib/api-config";
+import { resolveMediaUrl } from "@/lib/media-url";
 
-const DEFAULT_API_BASE = "http://localhost:8000";
+export { apiUrl, getApiBase } from "@/lib/api-config";
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
 /** Museum-note import can call Claude and needs a longer client timeout than CRUD. */
 export const IMPORT_REQUEST_TIMEOUT_MS = 120_000;
 /** Photo uploads on mobile need more time after client-side normalization. */
 export const UPLOAD_REQUEST_TIMEOUT_MS = 120_000;
 
-function normalizeApiBase(raw: string | undefined): string {
-  const value = raw?.trim();
-  if (!value) return DEFAULT_API_BASE;
-
-  if (!/^https?:\/\//i.test(value)) {
-    throw new Error(
-      "NEXT_PUBLIC_API_URL must include http:// or https:// (e.g. https://your-api.up.railway.app)."
-    );
-  }
-
-  return value.replace(/\/+$/, "");
-}
-
-const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
-
-export function getApiBase(): string {
-  return API_BASE;
-}
-
-export function apiUrl(path: string): string {
-  return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
 export function mediaUrl(path: string | null | undefined): string | null {
-  if (!path) return null;
-  if (path.startsWith("http")) return path;
-  return apiUrl(path);
+  return resolveMediaUrl(path);
 }
 
 /** Local blob/data URLs and remote paths suitable for `<img src>`. */
 export function resolveArtworkImageSrc(url: string): string {
-  if (url.startsWith("blob:") || url.startsWith("data:") || url.startsWith("http")) {
-    return url;
-  }
-  return mediaUrl(url) ?? url;
+  return resolveMediaUrl(url) ?? url;
 }
 
 type ApiRequestOptions = Omit<RequestInit, "signal"> & {
