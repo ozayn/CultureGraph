@@ -6,7 +6,7 @@ import { AiSuggestedAnnotations } from "@/components/artworks/ai-suggested-annot
 import { ResearchMetadataApply, extractDraftMetadataHints } from "@/components/artworks/research-metadata-apply";
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
-import { SignInPrompt } from "@/components/auth/sign-in-prompt";
+import { SignInInlineHint } from "@/components/auth/sign-in-inline-hint";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { parseSuggestedAnnotations } from "@/lib/research-suggestions";
@@ -162,18 +162,19 @@ export function ResearchPanel({
             AI-assisted context and reviewable annotation suggestions.
           </p>
         </div>
-        <Button
-          onClick={() => void generateDraft()}
-          disabled={loading || !canEdit}
-          variant="outline"
-          size="touch"
-          className="w-full sm:w-auto"
-        >
-          {loading ? "Generating…" : "Research with AI"}
-        </Button>
+        <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:items-end">
+          <Button
+            onClick={() => void generateDraft()}
+            disabled={loading || !canEdit}
+            variant="outline"
+            size="touch"
+            className="w-full sm:w-auto"
+          >
+            {loading ? "Generating…" : "Research with AI"}
+          </Button>
+          {!canEdit ? <SignInInlineHint hint="research" className="sm:text-right" /> : null}
+        </div>
       </div>
-
-      {!canEdit ? <SignInPrompt compact className="mt-2" /> : null}
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 

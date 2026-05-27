@@ -10,7 +10,7 @@ import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
 import { CulturalEntityForm } from "@/components/cultural-entities/cultural-entity-form";
-import { SignInPrompt } from "@/components/auth/sign-in-prompt";
+import { AuthGate } from "@/components/auth/auth-gate";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { ButtonLink } from "@/components/ui/button-link";
 import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
@@ -290,7 +290,7 @@ export function VisitDetailClient({
           {canEdit ? (
             <ProgressiveArtworkForm visitId={visit.id} compact />
           ) : (
-            <SignInPrompt compact />
+            <AuthGate />
           )}
         </section>
       </div>

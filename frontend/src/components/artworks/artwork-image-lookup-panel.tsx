@@ -10,6 +10,7 @@ import {
 } from "react";
 import { ImageIcon, Loader2 } from "lucide-react";
 
+import { SignInInlineHint } from "@/components/auth/sign-in-inline-hint";
 import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -850,12 +851,9 @@ export function ArtworkImageLookupAction({
   );
 }
 
+/** @deprecated Use SignInInlineHint with hint="officialImage". */
 export function ArtworkImageLookupSignInHint({ className }: { className?: string }) {
-  return (
-    <p className={cn("text-xs text-muted-foreground", className)}>
-      Sign in to find or replace official museum images.
-    </p>
-  );
+  return <SignInInlineHint hint="officialImage" className={className} />;
 }
 
 export function ArtworkImageLookupDebug({

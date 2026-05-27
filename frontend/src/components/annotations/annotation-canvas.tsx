@@ -8,7 +8,7 @@ import { AnnotationPinMeta } from "@/components/annotations/annotation-pin-meta"
 import { CATEGORY_COLORS } from "@/components/annotations/konva-canvas-stage";
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
-import { SignInPrompt } from "@/components/auth/sign-in-prompt";
+import { AuthGate } from "@/components/auth/auth-gate";
 import { Badge } from "@/components/ui/badge";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -362,7 +362,7 @@ export function AnnotationCanvas({
 
   return (
     <div className="space-y-5">
-      {!canEdit && !authLoading ? <SignInPrompt compact /> : null}
+      {!canEdit && !authLoading ? <AuthGate /> : null}
 
       {placingAnnotation ? (
         <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">

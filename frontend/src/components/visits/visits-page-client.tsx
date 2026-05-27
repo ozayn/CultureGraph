@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { formatCalendarDate } from "@/lib/calendar-date";
 
-import { SignInPrompt } from "@/components/auth/sign-in-prompt";
+import { AuthGate } from "@/components/auth/auth-gate";
 import { VisitForm } from "@/components/visits/visit-form";
 import { useAuth } from "@/contexts/auth-context";
 import type { Visit } from "@/lib/types";
@@ -29,7 +29,7 @@ export function VisitsPageClient({ visits, showForm, error }: VisitsPageClientPr
       {showForm !== false ? (
         <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
           <h3 className="mb-4 font-heading text-xl">Log a visit</h3>
-          {canEdit ? <VisitForm compact /> : <SignInPrompt compact />}
+          {canEdit ? <VisitForm compact /> : <AuthGate />}
         </section>
       ) : null}
 

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { MuseumAutocomplete } from "@/components/museums/museum-autocomplete";
-import { SignInPrompt } from "@/components/auth/sign-in-prompt";
+import { AuthGate } from "@/components/auth/auth-gate";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
@@ -279,7 +279,7 @@ export function ImportPageClient() {
         </p>
       </section>
 
-      {!canEdit ? <SignInPrompt /> : null}
+      {!canEdit ? <AuthGate /> : null}
 
       {step === "paste" ? (
         <section className="space-y-5 rounded-xl border border-border bg-card p-4 sm:p-5">

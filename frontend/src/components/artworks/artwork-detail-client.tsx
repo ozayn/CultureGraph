@@ -13,14 +13,14 @@ import {
   ArtworkImageLookupAction,
   ArtworkImageLookupDebug,
   ArtworkImageLookupPanel,
-  ArtworkImageLookupSignInHint,
   useArtworkImageLookup,
 } from "@/components/artworks/artwork-image-lookup-panel";
+import { AuthGate } from "@/components/auth/auth-gate";
+import { SignInInlineHint } from "@/components/auth/sign-in-inline-hint";
 import { ArtworkRegionSheet } from "@/components/artworks/artwork-region-sheet";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
 import { ResearchPanel } from "@/components/artworks/research-panel";
-import { SignInPrompt } from "@/components/auth/sign-in-prompt";
 import { Badge } from "@/components/ui/badge";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { ButtonLink } from "@/components/ui/button-link";
@@ -305,11 +305,17 @@ export function ArtworkDetailClient({
             {!authLoading && canEdit ? (
               <ArtworkImageLookupAction fullWidth primary className="max-w-sm" />
             ) : !authLoading ? (
-              <ArtworkImageLookupSignInHint />
+              <SignInInlineHint hint="officialImage" />
             ) : null}
           </div>
         )}
       </section>
+
+      {!canEdit && !authLoading ? (
+        <div className="px-4 sm:px-0">
+          <AuthGate />
+        </div>
+      ) : null}
 
       {canEdit ? (
         <div className="px-4 sm:px-0">
@@ -436,7 +442,16 @@ export function ArtworkDetailClient({
 
         {annotations.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-            Tap Annotate below to mark details on the image.
+            {canEdit ? (
+              "Tap Annotate below to mark details on the image."
+            ) : (
+              <>
+                <p>No annotations yet.</p>
+                {!authLoading ? (
+                  <SignInInlineHint hint="annotate" className="mt-2" />
+                ) : null}
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -521,12 +536,6 @@ export function ArtworkDetailClient({
           </div>
         )}
       </section>
-
-      {!canEdit && !authLoading ? (
-        <div className="px-4 sm:px-0">
-          <SignInPrompt compact />
-        </div>
-      ) : null}
 
       <div ref={researchRef} className="px-4 sm:px-0">
         <ResearchPanel
