@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import require_admin_user
@@ -179,6 +179,7 @@ async def upload_artwork_image(
     artwork_id: int,
     user: Annotated[dict[str, str], Depends(require_admin_user)],
     file: UploadFile = File(...),
+    captured_at: Annotated[str | None, Form()] = None,
     db: Session = Depends(get_db),
 ) -> Artwork:
     artwork = _get_artwork_or_404(db, artwork_id)
@@ -200,6 +201,7 @@ async def upload_artwork_image(
         data=data,
         filename=file.filename,
         content_type=file.content_type,
+        client_captured_at=captured_at,
     )
 
     artwork.image_url = saved.image_url

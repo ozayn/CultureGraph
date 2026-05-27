@@ -1,4 +1,5 @@
 import { ARTWORK_UPLOAD_MAX_BYTES, validateArtworkUploadFile } from "@/lib/upload-validation";
+import { extractPhotoCaptureDate } from "@/lib/extract-photo-capture-date";
 
 /** Long edge for client-side normalization before upload. */
 export const UPLOAD_PREPARE_MAX_EDGE = 2000;
@@ -11,6 +12,7 @@ export interface PrepareUploadResult {
   wasNormalized: boolean;
   originalSize: number;
   outputSize: number;
+  capturedAt: string | null;
 }
 
 function loadImageElement(file: File): Promise<HTMLImageElement> {
@@ -90,6 +92,7 @@ export async function prepareArtworkUploadFile(file: File): Promise<PrepareUploa
     throw new Error(validationError);
   }
 
+  const capturedAt = await extractPhotoCaptureDate(file);
   const image = await loadImageElement(file);
   const { width, height } = scaledDimensions(
     image.naturalWidth,
@@ -112,6 +115,7 @@ export async function prepareArtworkUploadFile(file: File): Promise<PrepareUploa
       wasNormalized: false,
       originalSize: file.size,
       outputSize: file.size,
+      capturedAt,
     };
   }
 
@@ -164,5 +168,6 @@ export async function prepareArtworkUploadFile(file: File): Promise<PrepareUploa
     wasNormalized: true,
     originalSize: file.size,
     outputSize: prepared.size,
+    capturedAt,
   };
 }

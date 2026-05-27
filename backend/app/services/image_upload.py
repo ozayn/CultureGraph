@@ -126,6 +126,39 @@ def extract_capture_datetime(data: bytes) -> tuple[datetime | None, str]:
     return None, "none"
 
 
+def parse_client_captured_at(value: str) -> datetime | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+
+    try:
+        normalized = cleaned.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def resolve_capture_datetime(
+    data: bytes,
+    *,
+    client_captured_at: str | None = None,
+) -> tuple[datetime | None, str]:
+    captured_at, source = extract_capture_datetime(data)
+    if captured_at is not None:
+        return captured_at, source
+
+    if client_captured_at:
+        parsed = parse_client_captured_at(client_captured_at)
+        if parsed is not None:
+            return parsed, "exif"
+
+    return None, "none"
+
+
 def _prepare_image(data: bytes) -> Image.Image:
     try:
         image = Image.open(io.BytesIO(data))
@@ -187,9 +220,13 @@ def process_and_store_artwork_image(
     data: bytes,
     filename: str | None,
     content_type: str | None,
+    client_captured_at: str | None = None,
 ) -> SavedArtworkImages:
     _validate_upload_metadata(filename, content_type)
-    captured_at, captured_date_source = extract_capture_datetime(data)
+    captured_at, captured_date_source = resolve_capture_datetime(
+        data,
+        client_captured_at=client_captured_at,
+    )
     source = _prepare_image(data)
 
     master = _resize_max_edge(source, MASTER_MAX_EDGE)

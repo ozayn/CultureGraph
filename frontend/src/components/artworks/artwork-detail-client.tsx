@@ -40,6 +40,7 @@ import type { ResearchMetadataHints } from "@/lib/artwork-metadata";
 import { splitAnnotationsByPlacement } from "@/lib/annotation-placement";
 import { setPendingAnnotationPlacement } from "@/lib/pending-annotation-placement";
 import { validateArtworkUploadFile } from "@/lib/upload-validation";
+import { prepareArtworkUploadFile } from "@/lib/prepare-artwork-upload";
 import {
   type Annotation,
   type Artwork,
@@ -157,9 +158,13 @@ export function ArtworkDetailClient({
     setUploadingPhoto(true);
     setError(null);
     try {
+      const prepared = await prepareArtworkUploadFile(photo);
       const updated = await api.upload<Artwork>(
         `/api/artworks/${artwork.id}/image`,
-        photo
+        prepared.file,
+        {
+          captured_at: prepared.capturedAt ?? undefined,
+        }
       );
       setArtwork(updated);
       setPhotoOpen(false);

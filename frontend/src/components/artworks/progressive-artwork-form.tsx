@@ -96,11 +96,10 @@ export function ProgressiveArtworkForm({
     });
   }
 
-  async function preparePhotoForUpload(file: File): Promise<File> {
+  async function preparePhotoForUpload(file: File) {
     setPreparing(true);
     try {
-      const prepared = await prepareArtworkUploadFile(file);
-      return prepared.file;
+      return await prepareArtworkUploadFile(file);
     } finally {
       setPreparing(false);
     }
@@ -177,9 +176,11 @@ export function ProgressiveArtworkForm({
           setError(mapValidationUploadError(validationMessage));
           return;
         }
-        const uploadFile = await preparePhotoForUpload(photo);
+        const prepared = await preparePhotoForUpload(photo);
         try {
-          saved = await api.upload<Artwork>(`/api/artworks/${saved.id}/image`, uploadFile);
+          saved = await api.upload<Artwork>(`/api/artworks/${saved.id}/image`, prepared.file, {
+            captured_at: prepared.capturedAt ?? undefined,
+          });
           if (pendingRegion) {
             saved = await applyPendingRegion(saved.id);
           }

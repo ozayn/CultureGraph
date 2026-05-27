@@ -44,6 +44,7 @@ describe("ProgressiveArtworkForm", () => {
       wasNormalized: false,
       originalSize: file.size,
       outputSize: file.size,
+      capturedAt: "2026-05-23T14:30:00Z",
     }));
   });
 

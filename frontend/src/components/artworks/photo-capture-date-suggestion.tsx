@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -9,6 +9,7 @@ import type { Artwork, Visit } from "@/lib/types";
 
 interface PhotoCaptureDateSuggestionProps {
   artwork: Artwork;
+  visitDate?: string | null;
   onDismiss?: () => void;
   onVisitUpdated?: (visit: Visit) => void;
   className?: string;
@@ -26,6 +27,7 @@ function captureDateOnly(iso: string): string {
 
 export function PhotoCaptureDateSuggestion({
   artwork,
+  visitDate,
   onDismiss,
   onVisitUpdated,
   className,
@@ -34,12 +36,46 @@ export function PhotoCaptureDateSuggestion({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [applied, setApplied] = useState(false);
+  const [resolvedVisitDate, setResolvedVisitDate] = useState<string | null>(visitDate ?? null);
+
+  useEffect(() => {
+    setResolvedVisitDate(visitDate ?? null);
+  }, [visitDate]);
+
+  useEffect(() => {
+    if (visitDate != null || !artwork.visit_id) return;
+
+    let cancelled = false;
+    void api
+      .get<Visit>(`/api/visits/${artwork.visit_id}`)
+      .then((visit) => {
+        if (!cancelled) {
+          setResolvedVisitDate(visit.visit_date);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResolvedVisitDate(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [artwork.visit_id, visitDate]);
+
+  const photoDate = artwork.captured_at ? captureDateOnly(artwork.captured_at) : null;
+  const visitMatchesPhotoDate =
+    photoDate != null &&
+    resolvedVisitDate != null &&
+    photoDate === resolvedVisitDate;
 
   if (
     !visible ||
     applied ||
     artwork.captured_date_source !== "exif" ||
-    !artwork.captured_at
+    !artwork.captured_at ||
+    visitMatchesPhotoDate
   ) {
     return null;
   }

@@ -38,5 +38,6 @@ describe("prepareArtworkUploadFile", () => {
     expect(result.wasNormalized).toBe(false);
     expect(result.file).toBe(file);
     expect(result.outputSize).toBe(file.size);
+    expect(result.capturedAt).toBeNull();
   });
 });
