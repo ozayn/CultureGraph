@@ -302,6 +302,33 @@ export function extractResearchMetadataHints(
   };
 }
 
+export function synthesizeIdentificationFromDraft(
+  draft: ResearchDraft | null | undefined
+): ArtworkIdentification | null {
+  if (!draft) return null;
+
+  const title = cleanAiTitle(draft.visual_hypothesis_title ?? draft.possible_title);
+  const artist = cleanAiArtist(draft.visual_hypothesis_artist ?? draft.possible_artist);
+  if (!title && !artist) return null;
+
+  const titleBit = title ?? "Unknown title";
+  const artistSuffix = artist ? ` by ${artist}` : "";
+  const confidence = draft.visual_hypothesis_confidence ?? draft.confidence ?? null;
+  const confidence_level = confidence != null && confidence >= LOW_CONFIDENCE_THRESHOLD ? "medium" : "low";
+
+  return {
+    identification_mode: "style_subject",
+    confidence_level,
+    display_summary: `AI visual hypothesis: ${titleBit}${artistSuffix}. Not verified against collection records.`,
+    visual_hypothesis_title: title,
+    visual_hypothesis_artist: artist,
+    visual_hypothesis_confidence: confidence,
+    visual_hypothesis_reason: draft.visual_hypothesis_reason ?? null,
+    hypothesis_source: draft.hypothesis_source ?? (draft.possible_title ? "legacy" : "vision"),
+    uncertainty_notes: ["Visual hypothesis only — confirm against a museum catalog record."],
+  };
+}
+
 export function defaultMetadataFieldChecked(
   current: string | null | undefined,
   suggested: string | null,

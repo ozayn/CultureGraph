@@ -188,8 +188,18 @@ export function ResearchMetadataApply({
     notes: false,
   });
   const [saving, setSaving] = useState(false);
+  const [savingWorkingTitle, setSavingWorkingTitle] = useState(false);
+  const [savingWorkingArtist, setSavingWorkingArtist] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const catalogMatch =
+    identification?.identification_mode === "catalog_match" &&
+    identification?.confidence_level === "high";
+  const workingTitle = hints?.lookupTitle ?? null;
+  const workingArtist = hints?.lookupArtist ?? null;
+  const showWorkingActions =
+    !catalogMatch && Boolean(workingTitle?.trim() || workingArtist?.trim());
 
   function openReview() {
     if (!hints) return;
@@ -204,9 +214,7 @@ export function ResearchMetadataApply({
     onReviewControlReady(openReview);
   }, [onReviewControlReady, hints, artwork]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!canEdit || !hints || rows.length === 0) return null;
-
-  const showTitleHint = Boolean(hints.title) && isPlaceholderTitle(artwork.title);
+  const showTitleHint = Boolean(hints?.title) && isPlaceholderTitle(artwork.title);
   const lookupLabel = hasImage ? "Search museum collections" : "Find official image";
 
   function cancelReview() {
@@ -251,7 +259,41 @@ export function ResearchMetadataApply({
     }
   }
 
+  async function applyWorkingTitle() {
+    if (!workingTitle?.trim()) return;
+    setSavingWorkingTitle(true);
+    setError(null);
+    try {
+      const updated = await api.put<Artwork>(`/api/artworks/${artwork.id}`, {
+        title: workingTitle.trim(),
+      });
+      onApplied(updated);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save working title.");
+    } finally {
+      setSavingWorkingTitle(false);
+    }
+  }
+
+  async function applyWorkingArtist() {
+    if (!workingArtist?.trim()) return;
+    setSavingWorkingArtist(true);
+    setError(null);
+    try {
+      const updated = await api.put<Artwork>(`/api/artworks/${artwork.id}`, {
+        artist: workingArtist.trim(),
+      });
+      onApplied(updated);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save working artist.");
+    } finally {
+      setSavingWorkingArtist(false);
+    }
+  }
+
   const hasSelection = Object.values(fields).some(Boolean);
+
+  if (!canEdit || !hints || (rows.length === 0 && !showWorkingActions)) return null;
 
   return (
     <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3">
@@ -278,7 +320,56 @@ export function ResearchMetadataApply({
         ) : null}
       </div>
 
-      {!reviewing && !success ? (
+      {showWorkingActions ? (
+        <div className="space-y-2 rounded-lg border border-sky-500/30 bg-sky-500/5 px-3 py-3">
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-sky-800 dark:text-sky-200">
+            AI visual hypothesis
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Working metadata only — not verified against collection records.
+          </p>
+          {workingTitle ? (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Title: </span>
+              <span className="font-medium">{workingTitle}</span>
+            </p>
+          ) : null}
+          {workingArtist ? (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Artist: </span>
+              <span className="font-medium">{workingArtist}</span>
+            </p>
+          ) : null}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {workingTitle && isPlaceholderTitle(artwork.title) ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="min-h-9"
+                disabled={savingWorkingTitle}
+                onClick={() => void applyWorkingTitle()}
+              >
+                {savingWorkingTitle ? "Saving…" : "Use as working title"}
+              </Button>
+            ) : null}
+            {workingArtist && isPlaceholderArtist(artwork.artist) ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="min-h-9"
+                disabled={savingWorkingArtist}
+                onClick={() => void applyWorkingArtist()}
+              >
+                {savingWorkingArtist ? "Saving…" : "Use as working artist"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {rows.length > 0 && !reviewing && !success ? (
         <Button
           type="button"
           size="sm"

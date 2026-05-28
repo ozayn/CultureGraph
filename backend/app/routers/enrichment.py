@@ -11,6 +11,7 @@ from app.services.artwork_enrichment import (
     latest_research_draft,
     parse_enrichment_payload,
     request_artwork_enrichment,
+    resolve_enrichment_identification,
 )
 
 router = APIRouter(prefix="/artworks", tags=["enrichment"])
@@ -26,6 +27,7 @@ def _get_artwork_or_404(db: Session, artwork_id: int) -> Artwork:
 def _enrichment_read(artwork: Artwork, db: Session) -> ArtworkEnrichmentRead:
     draft, note_id = latest_research_draft(db, artwork.id)
     lookup, identification, visual_analysis = parse_enrichment_payload(artwork.enrichment_lookup)
+    identification = resolve_enrichment_identification(artwork, draft, identification)
     if visual_analysis is None and draft and draft.visual_analysis:
         visual_analysis = draft.visual_analysis
 

@@ -15,7 +15,10 @@ import {
 } from "@/components/artworks/research-metadata-apply";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import type { ResearchMetadataHints } from "@/lib/artwork-metadata";
+import {
+  synthesizeIdentificationFromDraft,
+  type ResearchMetadataHints,
+} from "@/lib/artwork-metadata";
 import { parseSuggestedAnnotations } from "@/lib/research-suggestions";
 import { useArtworkEnrichment } from "@/lib/use-artwork-enrichment";
 import type {
@@ -81,9 +84,13 @@ export function ArtworkEnrichmentPanel({
   });
 
   const draft = state?.draft ?? null;
+  const effectiveIdentification = useMemo(
+    () => state?.identification ?? synthesizeIdentificationFromDraft(draft),
+    [state?.identification, draft]
+  );
   const metadataHints = useMemo(
-    () => (draft ? extractDraftMetadataHints(draft, state?.identification ?? null) : null),
-    [draft, state?.identification]
+    () => (draft ? extractDraftMetadataHints(draft, effectiveIdentification) : null),
+    [draft, effectiveIdentification]
   );
 
   const stageLabel = useMemo(() => {
@@ -209,7 +216,7 @@ export function ArtworkEnrichmentPanel({
         <p className="text-sm text-muted-foreground">Loading AI results…</p>
       ) : null}
 
-      {state?.identification && revealed.identification ? (
+      {effectiveIdentification && revealed.identification ? (
         <div
           className={cn(
             "space-y-3 rounded-lg border border-border/80 bg-muted/20 p-4 transition-all duration-500",
@@ -217,7 +224,7 @@ export function ArtworkEnrichmentPanel({
           )}
         >
           <ArtworkIdentificationPanel
-            identification={state.identification}
+            identification={effectiveIdentification}
             artwork={artwork}
             canEdit={canEdit}
             onArtworkUpdated={onArtworkUpdated}
@@ -242,7 +249,7 @@ export function ArtworkEnrichmentPanel({
           <ResearchMetadataApply
             artwork={artwork}
             draft={draft}
-            identification={state?.identification ?? null}
+            identification={effectiveIdentification}
             canEdit={canEdit}
             onApplied={(updated) => onArtworkUpdated?.(updated)}
             onReviewControlReady={onApplyReviewReady}

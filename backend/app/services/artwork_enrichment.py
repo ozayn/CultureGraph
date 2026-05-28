@@ -309,6 +309,74 @@ def parse_enrichment_lookup(raw: dict | list | None) -> ArtworkLookupResponse | 
     return lookup
 
 
+def enrichment_has_identification_block(raw: dict | list | None) -> bool:
+    return isinstance(raw, dict) and "identification" in raw
+
+
+def synthesize_legacy_identification(
+    draft: ResearchDraft | None,
+    *,
+    existing: ArtworkIdentificationRead | None = None,
+) -> ArtworkIdentificationRead | None:
+    """Build an unverified visual-hypothesis identification from legacy draft fields."""
+    if existing is not None:
+        return existing
+    if draft is None:
+        return None
+
+    from app.sources.matching import is_placeholder_artist, is_placeholder_title
+
+    title = (draft.visual_hypothesis_title or draft.possible_title or "").strip() or None
+    artist = (draft.visual_hypothesis_artist or draft.possible_artist or "").strip() or None
+
+    if title and is_placeholder_title(title):
+        title = None
+    if artist and is_placeholder_artist(artist):
+        artist = None
+    if not title and not artist:
+        return None
+
+    title_bit = title or "Unknown title"
+    artist_suffix = f" by {artist}" if artist else ""
+    display = (
+        f"AI visual hypothesis: {title_bit}{artist_suffix}. "
+        "Not verified against collection records."
+    )
+
+    confidence = draft.visual_hypothesis_confidence or draft.confidence
+    confidence_level = "medium" if confidence is not None and confidence >= 0.55 else "low"
+
+    hypothesis_source = draft.hypothesis_source
+    if not hypothesis_source:
+        hypothesis_source = (
+            "legacy" if draft.possible_title and not draft.visual_hypothesis_title else "vision"
+        )
+
+    return ArtworkIdentificationRead(
+        identification_mode="style_subject",
+        confidence_level=confidence_level,  # type: ignore[arg-type]
+        display_summary=display,
+        visual_hypothesis_title=title,
+        visual_hypothesis_artist=artist,
+        visual_hypothesis_confidence=confidence,
+        visual_hypothesis_reason=draft.visual_hypothesis_reason,
+        hypothesis_source=hypothesis_source,
+        uncertainty_notes=[
+            "Visual hypothesis only — confirm against a museum catalog record.",
+        ],
+    )
+
+
+def resolve_enrichment_identification(
+    artwork: Artwork,
+    draft: ResearchDraft | None,
+    identification: ArtworkIdentificationRead | None,
+) -> ArtworkIdentificationRead | None:
+    if enrichment_has_identification_block(artwork.enrichment_lookup):
+        return identification
+    return synthesize_legacy_identification(draft, existing=identification)
+
+
 def latest_research_draft(db: Session, artwork_id: int) -> tuple[ResearchDraft | None, int | None]:
     note = (
         db.query(ResearchNote)
