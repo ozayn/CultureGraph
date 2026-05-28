@@ -28,7 +28,11 @@ from app.services.research import (
     ResearchConfigurationError,
     ResearchProviderError,
     get_research_provider,
+    load_identification_meta,
+    optional_meta_float,
+    optional_meta_str,
     serialize_research_draft,
+    strip_identification_meta,
 )
 from app.services.visual_analysis import VisualAnalysis
 from app.services.lookup_response import lookup_response_from_result
@@ -304,11 +308,14 @@ def latest_research_draft(db: Session, artwork_id: int) -> tuple[ResearchDraft |
     from app.services.suggested_annotations import load_note_suggestions
 
     visual_analysis: VisualAnalysisRead | None = None
+    identification_meta: dict[str, str | float] = {}
     if getattr(note, "visual_analysis", None):
         try:
             parsed_visual = json.loads(note.visual_analysis)
             if isinstance(parsed_visual, dict):
-                visual_analysis = VisualAnalysisRead.model_validate(parsed_visual)
+                identification_meta = load_identification_meta(parsed_visual)
+                visual_payload = strip_identification_meta(parsed_visual)
+                visual_analysis = VisualAnalysisRead.model_validate(visual_payload)
         except (json.JSONDecodeError, ValueError):
             visual_analysis = None
 
@@ -320,6 +327,15 @@ def latest_research_draft(db: Session, artwork_id: int) -> tuple[ResearchDraft |
         suggested_annotations=load_note_suggestions(note),
         possible_title=note.possible_title,
         possible_artist=note.possible_artist,
+        visual_hypothesis_title=optional_meta_str(identification_meta.get("visual_hypothesis_title")),
+        visual_hypothesis_artist=optional_meta_str(identification_meta.get("visual_hypothesis_artist")),
+        visual_hypothesis_confidence=optional_meta_float(
+            identification_meta.get("visual_hypothesis_confidence")
+        ),
+        hypothesis_source=optional_meta_str(identification_meta.get("hypothesis_source")),
+        catalog_title=optional_meta_str(identification_meta.get("catalog_title")),
+        catalog_artist=optional_meta_str(identification_meta.get("catalog_artist")),
+        catalog_confidence=optional_meta_float(identification_meta.get("catalog_confidence")),
         period_or_movement=getattr(note, "period_or_movement", None),
         ocr_label_text=getattr(note, "ocr_label_text", None),
         confidence=getattr(note, "confidence", None),

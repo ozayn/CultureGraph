@@ -24,6 +24,26 @@ from app.sources.matching import normalize, score_artwork_entry_detailed
 def _token_set(text: str) -> set[str]:
     return {token for token in normalize(text).split() if len(token) > 2}
 
+
+def _draft_search_title(draft: ResearchDraft, lookup: ArtworkLookupResponse | None = None) -> str:
+    if draft.possible_title:
+        return draft.possible_title
+    if draft.visual_hypothesis_title:
+        return draft.visual_hypothesis_title
+    if lookup and lookup.query_used:
+        return lookup.query_used
+    return ""
+
+
+def _draft_search_artist(draft: ResearchDraft) -> str:
+    return draft.possible_artist or draft.visual_hypothesis_artist or ""
+
+
+def _has_plausible_hypothesis(draft: ResearchDraft) -> bool:
+    title = (draft.visual_hypothesis_title or "").strip()
+    artist = (draft.visual_hypothesis_artist or "").strip()
+    return bool(title or artist)
+
 IdentificationMode = Literal["catalog_match", "possible_match", "style_subject"]
 ConfidenceLevel = Literal["high", "medium", "low"]
 
@@ -43,6 +63,12 @@ class ArtworkIdentification(BaseModel):
     match_reasons: list[str] = Field(default_factory=list)
     suggested_title: str | None = None
     suggested_artist: str | None = None
+    visual_hypothesis_title: str | None = None
+    visual_hypothesis_artist: str | None = None
+    visual_hypothesis_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    hypothesis_source: str | None = None
+    catalog_title: str | None = None
+    catalog_artist: str | None = None
     visual_keywords: list[str] = Field(default_factory=list)
     catalog_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     identity_certainty: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -90,8 +116,8 @@ def _candidate_text_scores(
     lookup: ArtworkLookupResponse,
 ) -> tuple[float, float, float]:
     entry = {"title": candidate.title, "artist": candidate.artist}
-    search_title = draft.possible_title or lookup.query_used or ""
-    search_artist = draft.possible_artist or ""
+    search_title = _draft_search_title(draft, lookup)
+    search_artist = _draft_search_artist(draft)
     details = score_artwork_entry_detailed(
         entry,
         search_title,
@@ -144,9 +170,9 @@ def rerank_candidates_with_visual(
             text_score=text_score,
             candidate_title=candidate.title,
             candidate_artist=candidate.artist,
-            search_title=draft.possible_title or lookup.query_used or "",
-            search_artist=draft.possible_artist or "",
-            has_title_query=bool((draft.possible_title or lookup.query_used or "").strip()),
+            search_title=_draft_search_title(draft, lookup),
+            search_artist=_draft_search_artist(draft),
+            has_title_query=bool(_draft_search_title(draft, lookup).strip()),
             match_reasons=match_reasons,
             ocr_label_text=draft.ocr_label_text,
             visual_subject=visual.subject if visual else None,
@@ -278,11 +304,12 @@ def build_identification(
     low_flag = bool(top and top.low_confidence)
     verified = bool(
         top
+        and (top.identity_certainty or 0) >= HIGH_IDENTITY
         and (
-            (top.identity_certainty or 0) >= HIGH_IDENTITY
-            and (
+            bool(draft.ocr_label_text)
+            or (
                 (top.match_tier == "high")
-                or bool(draft.ocr_label_text)
+                and not _has_plausible_hypothesis(draft)
             )
         )
     )
@@ -291,16 +318,24 @@ def build_identification(
     match_reasons: list[str] = list(top.match_reasons) if top else []
     uncertainty_notes: list[str] = []
     match_explanation = top.match_explanation if top else None
+    suggested_title: str | None = None
+    suggested_artist: str | None = None
+    catalog_title: str | None = None
+    catalog_artist: str | None = None
+    mode: IdentificationMode = "style_subject"
+    display = ""
 
     if lookup.query_used:
         match_reasons.append(f"Searched collections for: {lookup.query_used}")
 
     if top and identity_score is not None and identity_score >= MEDIUM_IDENTITY and verified:
-        mode: IdentificationMode = "catalog_match"
+        mode = "catalog_match"
         artist_suffix = f" by {top.artist}" if top.artist else ""
-        display = f"Verified collection match: {top.title}{artist_suffix} ({top.source_name})."
+        display = f"Collection match: {top.title}{artist_suffix} ({top.source_name})."
         suggested_title = top.title
         suggested_artist = top.artist
+        catalog_title = top.title
+        catalog_artist = top.artist
     elif top and identity_score is not None and identity_score >= MEDIUM_IDENTITY:
         mode = "possible_match"
         artist_suffix = f" by {top.artist}" if top.artist else ""
@@ -341,15 +376,28 @@ def build_identification(
         mode = "style_subject"
         style_bit = style or "an unidentified work in this style"
         subject_bit = subject or "an unidentified subject"
-        display = (
-            f"Possibly {style_bit}. Subject: {subject_bit.rstrip('.')}. "
-            "No strong catalog match — style and iconography notes below."
-        )
+        hyp_title = draft.visual_hypothesis_title
+        hyp_artist = draft.visual_hypothesis_artist
+        if _has_plausible_hypothesis(draft):
+            artist_suffix = f" by {hyp_artist}" if hyp_artist else ""
+            title_bit = hyp_title or "Unknown title"
+            display = (
+                f"AI visual hypothesis: {title_bit}{artist_suffix}. "
+                "Not verified against a collection record."
+            )
+            style_bit = style or "this period/style"
+            display += f" Style: {style_bit}. Subject: {subject_bit.rstrip('.')}."
+            uncertainty_notes.append("Visual hypothesis only — confirm against a museum catalog record.")
+        else:
+            display = (
+                f"Possibly {style_bit}. Subject: {subject_bit.rstrip('.')}. "
+                "No strong catalog match — style and iconography notes below."
+            )
         suggested_title = None
         suggested_artist = None
         level = "low"
 
-    if mode == "style_subject" and visual and visual.style_signals:
+    if mode == "style_subject" and not _has_plausible_hypothesis(draft) and visual and visual.style_signals:
         display += f" Style resembles {', '.join(visual.style_signals[:2])}."
 
     evidence = None
@@ -361,9 +409,9 @@ def build_identification(
             text_score=top.confidence,
             candidate_title=top.title,
             candidate_artist=top.artist,
-            search_title=draft.possible_title or lookup.query_used or "",
-            search_artist=draft.possible_artist or "",
-            has_title_query=bool((draft.possible_title or lookup.query_used or "").strip()),
+            search_title=_draft_search_title(draft, lookup),
+            search_artist=_draft_search_artist(draft),
+            has_title_query=bool(_draft_search_title(draft, lookup).strip()),
             match_reasons=list(top.match_reasons or []),
             ocr_label_text=draft.ocr_label_text,
             visual_subject=visual.subject if visual else None,
@@ -381,6 +429,13 @@ def build_identification(
             subject_overlap=calibrated.evidence.subject_overlap,
         )
 
+    visual_hypothesis_title = None if mode == "catalog_match" else draft.visual_hypothesis_title
+    visual_hypothesis_artist = None if mode == "catalog_match" else draft.visual_hypothesis_artist
+    visual_hypothesis_confidence = (
+        None if mode == "catalog_match" else draft.visual_hypothesis_confidence
+    )
+    hypothesis_source = None if mode == "catalog_match" else draft.hypothesis_source
+
     return ArtworkIdentification(
         identification_mode=mode,
         confidence_level=level,
@@ -393,8 +448,14 @@ def build_identification(
         match_reasons=match_reasons[:6],
         suggested_title=suggested_title,
         suggested_artist=suggested_artist,
+        visual_hypothesis_title=visual_hypothesis_title,
+        visual_hypothesis_artist=visual_hypothesis_artist,
+        visual_hypothesis_confidence=visual_hypothesis_confidence,
+        hypothesis_source=hypothesis_source,
+        catalog_title=catalog_title,
+        catalog_artist=catalog_artist,
         visual_keywords=keywords[:12],
-        catalog_confidence=identity_score,
+        catalog_confidence=identity_score if mode == "catalog_match" else None,
         identity_certainty=identity_score,
         visual_similarity=visual_score,
         match_explanation=match_explanation,
@@ -408,18 +469,29 @@ def calibrate_research_draft(
     identification: ArtworkIdentification,
     visual: VisualAnalysis | None = None,
 ) -> ResearchDraft:
-    """Apply retrieval-assisted calibration — avoid hallucinated exact titles."""
+    """Apply retrieval-assisted calibration — preserve unverified visual hypotheses."""
     visual = visual or draft.visual_analysis
     updated = draft.model_copy(deep=True)
     updated.short_summary = identification.display_summary
 
+    updated.visual_hypothesis_title = draft.visual_hypothesis_title
+    updated.visual_hypothesis_artist = draft.visual_hypothesis_artist
+    updated.visual_hypothesis_confidence = draft.visual_hypothesis_confidence
+    updated.hypothesis_source = draft.hypothesis_source
+
     if identification.identification_mode == "catalog_match":
+        updated.catalog_title = identification.catalog_title or identification.suggested_title
+        updated.catalog_artist = identification.catalog_artist or identification.suggested_artist
+        updated.catalog_confidence = identification.identity_certainty
         if identification.suggested_title:
             updated.possible_title = identification.suggested_title
         if identification.suggested_artist:
             updated.possible_artist = identification.suggested_artist
         updated.confidence = identification.identity_certainty or updated.confidence
     else:
+        updated.catalog_title = None
+        updated.catalog_artist = None
+        updated.catalog_confidence = None
         if draft.ocr_label_text:
             updated.possible_title = draft.possible_title
             updated.possible_artist = draft.possible_artist

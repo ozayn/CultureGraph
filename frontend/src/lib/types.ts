@@ -174,6 +174,13 @@ export interface ResearchDraft {
   suggested_annotations: AiSuggestedAnnotation[];
   possible_title?: string | null;
   possible_artist?: string | null;
+  visual_hypothesis_title?: string | null;
+  visual_hypothesis_artist?: string | null;
+  visual_hypothesis_confidence?: number | null;
+  hypothesis_source?: string | null;
+  catalog_title?: string | null;
+  catalog_artist?: string | null;
+  catalog_confidence?: number | null;
   period_or_movement?: string | null;
   ocr_label_text?: string | null;
   confidence?: number | null;
@@ -219,6 +226,12 @@ export interface ArtworkIdentification {
   match_reasons?: string[];
   suggested_title?: string | null;
   suggested_artist?: string | null;
+  visual_hypothesis_title?: string | null;
+  visual_hypothesis_artist?: string | null;
+  visual_hypothesis_confidence?: number | null;
+  hypothesis_source?: string | null;
+  catalog_title?: string | null;
+  catalog_artist?: string | null;
   visual_keywords?: string[];
   catalog_confidence?: number | null;
   identity_certainty?: number | null;

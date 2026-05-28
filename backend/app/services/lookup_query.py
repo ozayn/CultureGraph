@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models import Artwork, CulturalEntity, CulturalEntityType, ResearchNote
 from app.schemas import ResearchDraft
 from app.services.lookup_medium import infer_expected_medium_type, resolve_medium_type_filter
+from app.services.research import load_identification_meta
 from app.services.visual_analysis import collect_visual_keywords, extract_title_from_ocr, visual_keywords_query
 from app.sources.base import ArtworkLookupQuery
 from app.sources.matching import is_placeholder_artist, is_placeholder_title, normalize
@@ -218,11 +219,21 @@ def _latest_research_hints(db: Session, artwork_id: int) -> tuple[str | None, st
     )
     if not note:
         return None, None, None
-    title = getattr(note, "possible_title", None)
-    artist = getattr(note, "possible_artist", None)
+
+    meta: dict[str, str | float] = {}
+    if getattr(note, "visual_analysis", None):
+        try:
+            parsed_visual = json.loads(note.visual_analysis)
+            if isinstance(parsed_visual, dict):
+                meta = load_identification_meta(parsed_visual)
+        except json.JSONDecodeError:
+            meta = {}
+
+    title = note.possible_title or meta.get("visual_hypothesis_title")
+    artist = note.possible_artist or meta.get("visual_hypothesis_artist")
     return (
-        title.strip() if title and title.strip() else None,
-        artist.strip() if artist and artist.strip() else None,
+        title.strip() if isinstance(title, str) and title.strip() else None,
+        artist.strip() if isinstance(artist, str) and artist.strip() else None,
         _medium_from_research_note(note),
     )
 
@@ -277,7 +288,7 @@ def build_retrieval_lookup_query(
     medium_type: str | None = None,
     medium_override: str | None = None,
 ) -> BuiltLookupQuery:
-    """Build collection search from OCR, saved metadata, and visual keywords — not vision guesses."""
+    """Build collection search from OCR, saved metadata, visual hypotheses, and keywords."""
     from app.services.visual_analysis import VisualAnalysis
 
     visual = None
@@ -338,6 +349,25 @@ def build_retrieval_lookup_query(
             draft.possible_title,
             artist,
             query_source="ocr_label" if draft.ocr_label_text else "ai_title",
+            expected_medium_type=expected_medium,
+            medium_type_filter=medium_filter,
+            medium_hint=medium_hint,
+        )
+
+    hypothesis_title = (draft.visual_hypothesis_title or "").strip()
+    if hypothesis_title and not is_placeholder_title(hypothesis_title):
+        artist = _resolve_artist(
+            artwork.artist,
+            draft.visual_hypothesis_artist or draft.possible_artist,
+            None,
+        )
+        return _pack(
+            artwork,
+            museum_name,
+            None,
+            hypothesis_title,
+            artist,
+            query_source="ai_title",
             expected_medium_type=expected_medium,
             medium_type_filter=medium_filter,
             medium_hint=medium_hint,

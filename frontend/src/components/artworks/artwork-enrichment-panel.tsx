@@ -216,7 +216,12 @@ export function ArtworkEnrichmentPanel({
             showAmbientHeader ? "animate-in fade-in slide-in-from-bottom-2" : ""
           )}
         >
-          <ArtworkIdentificationPanel identification={state.identification} />
+          <ArtworkIdentificationPanel
+            identification={state.identification}
+            artwork={artwork}
+            canEdit={canEdit}
+            onArtworkUpdated={onArtworkUpdated}
+          />
         </div>
       ) : draft && revealed.identification ? (
         <div

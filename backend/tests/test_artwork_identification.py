@@ -96,7 +96,7 @@ def test_build_identification_catalog_match_when_verified() -> None:
     assert identification.confidence_level in {"high", "medium"}
     assert identification.suggested_title == "Portrait of a Cardinal"
     assert identification.suggested_artist == "Sebastiano del Piombo"
-    assert "Verified collection match" in identification.display_summary or "Strong probable match" in identification.display_summary
+    assert "Collection match" in identification.display_summary or "Strong probable match" in identification.display_summary
 
 
 def test_build_identification_style_subject_without_candidates() -> None:
@@ -144,8 +144,10 @@ def test_build_identification_possible_match_not_authoritative() -> None:
 
 def test_calibrate_research_draft_avoids_hallucinated_title() -> None:
     draft = _draft_with_visual(
-        possible_title="Portrait of Cardinal Alessandro Farnese",
-        possible_artist="Sebastiano del Piombo",
+        visual_hypothesis_title="Portrait of Cardinal Alessandro Farnese",
+        visual_hypothesis_artist="Sebastiano del Piombo",
+        hypothesis_source="vision",
+        visual_hypothesis_confidence=0.52,
     )
     lookup = ArtworkLookupResponse(
         candidates=[
@@ -164,6 +166,8 @@ def test_calibrate_research_draft_avoids_hallucinated_title() -> None:
     calibrated = calibrate_research_draft(draft, identification)
 
     assert calibrated.possible_title != "Portrait of Cardinal Alessandro Farnese"
+    assert calibrated.visual_hypothesis_title == "Portrait of Cardinal Alessandro Farnese"
+    assert calibrated.possible_title is None
     assert calibrated.short_summary == identification.display_summary
 
 

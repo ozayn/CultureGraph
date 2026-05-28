@@ -35,8 +35,8 @@ Return ONLY a single JSON object (no markdown fences, no commentary) with this e
     "style_signals": [string, ...],
     "movement_style": string or null
   },
-  "possible_title": null,
-  "possible_artist": null,
+  "possible_title": string or null,
+  "possible_artist": string or null,
   "period_or_movement": string or null,
   "visible_elements": [string, ...],
   "ocr_label_text": string or null,
@@ -59,8 +59,13 @@ Return ONLY a single JSON object (no markdown fences, no commentary) with this e
 }
 
 Rules:
-- Stage 1 is visual extraction ONLY. Do NOT invent exact catalog titles or artist attributions from the image alone.
-- ALWAYS leave possible_title and possible_artist null unless ocr_label_text explicitly names them on a legible wall label.
+- Stage 1 is visual extraction. Do NOT treat possible_title or possible_artist as verified catalog facts.
+- Set possible_title and possible_artist ONLY when:
+  (a) ocr_label_text explicitly names them on a legible wall label, OR
+  (b) the image strongly suggests a well-known, visually distinctive work (e.g. a famous ballet scene, iconic composition).
+- For (b), use widely recognized titles/artists only when the visual evidence is strong — never for generic portraits or vague scenes.
+- Unverified visual hypotheses must keep confidence below 0.55.
+- When only style/subject is clear (no plausible famous-work hypothesis), leave possible_title and possible_artist null.
 - visual_analysis: describe subject, composition, medium clues, period/style signals, clothing, palette, and notable objects.
 - movement_style: broad style label (e.g. "Northern Renaissance ecclesiastical portrait"), not a specific catalog title.
 - Base visual analysis on the image when provided; use user metadata as hints, not confirmed facts.
@@ -91,6 +96,21 @@ def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
     title_from_ocr = extract_title_from_ocr(claude.ocr_label_text)
     artist_from_ocr = extract_artist_from_ocr(claude.ocr_label_text)
 
+    hypothesis_title: str | None = None
+    hypothesis_artist: str | None = None
+    if claude.possible_title and not title_from_ocr:
+        cleaned = claude.possible_title.strip()
+        hypothesis_title = cleaned or None
+    if claude.possible_artist and not artist_from_ocr:
+        cleaned = claude.possible_artist.strip()
+        hypothesis_artist = cleaned or None
+
+    hypothesis_confidence = None
+    hypothesis_source = None
+    if hypothesis_title or hypothesis_artist:
+        hypothesis_confidence = min(claude.confidence, 0.55)
+        hypothesis_source = "vision"
+
     short_summary = build_visual_summary(
         _to_visual_analysis(visual),
         period_or_movement=claude.period_or_movement,
@@ -101,6 +121,11 @@ def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
     if claude.ocr_label_text:
         related_questions.append(
             f"What does the visible label text tell us? \"{claude.ocr_label_text}\""
+        )
+    if hypothesis_title or hypothesis_artist:
+        artist_bit = f" by {hypothesis_artist}" if hypothesis_artist else ""
+        related_questions.append(
+            f"Can we verify the visual hypothesis \"{hypothesis_title or 'Unknown title'}{artist_bit}\" against museum catalogs?"
         )
     if visual and visual.movement_style:
         related_questions.append(
@@ -122,9 +147,17 @@ def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
         suggested_annotations=list(claude.suggested_annotations),
         possible_title=title_from_ocr,
         possible_artist=artist_from_ocr,
+        visual_hypothesis_title=hypothesis_title,
+        visual_hypothesis_artist=hypothesis_artist,
+        visual_hypothesis_confidence=hypothesis_confidence,
+        hypothesis_source=hypothesis_source,
         period_or_movement=claude.period_or_movement or (visual.movement_style if visual else None),
         ocr_label_text=claude.ocr_label_text,
-        confidence=min(claude.confidence, 0.55) if not title_from_ocr else claude.confidence,
+        confidence=(
+            claude.confidence
+            if title_from_ocr
+            else min(claude.confidence, hypothesis_confidence or 0.55)
+        ),
         visual_analysis=visual,
         source="claude",
     )

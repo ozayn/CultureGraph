@@ -72,7 +72,7 @@ interface PendingApply {
 }
 
 interface ArtworkImageLookupContextValue {
-  openLookup: () => void;
+  openLookup: (params?: LookupSearchParams) => void;
   canEdit: boolean;
   hasImage: boolean;
 }
@@ -454,15 +454,36 @@ export function ArtworkImageLookupPanel({
     [artwork.id, manualArtist, manualTitle, mediumTypeFilter]
   );
 
-  const openLookup = useCallback(() => {
-    if (!canEdit) return;
-    setManualTitle(isPlaceholderTitle(artwork.title) ? "" : artwork.title ?? "");
-    setManualArtist(artwork.artist ?? "");
-    const inferred = inferLookupMediumFilter(artwork.medium, aiMediumHint);
-    setMediumTypeFilter(inferred);
-    setSheetOpen(true);
-    void runAutoLookup(inferred);
-  }, [aiMediumHint, artwork.artist, artwork.medium, artwork.title, canEdit, runAutoLookup]);
+  const openLookup = useCallback(
+    (params?: LookupSearchParams) => {
+      if (!canEdit) return;
+      const titleHint = params?.title?.trim() || (isPlaceholderTitle(artwork.title) ? "" : artwork.title ?? "");
+      const artistHint = params?.artist?.trim() || artwork.artist || "";
+      setManualTitle(titleHint);
+      setManualArtist(artistHint);
+      const inferred = inferLookupMediumFilter(artwork.medium, aiMediumHint);
+      setMediumTypeFilter(inferred);
+      setSheetOpen(true);
+      if (params?.title || params?.artist) {
+        void fetchLookup({
+          title: params.title,
+          artist: params.artist,
+          mediumType: inferred,
+        });
+      } else {
+        void runAutoLookup(inferred);
+      }
+    },
+    [
+      aiMediumHint,
+      artwork.artist,
+      artwork.medium,
+      artwork.title,
+      canEdit,
+      fetchLookup,
+      runAutoLookup,
+    ]
+  );
 
   function startApply(candidate: ArtworkLookupCandidate, preset: "image" | "image_title" | "title") {
     setPendingApply({
@@ -677,7 +698,7 @@ export function ArtworkImageLookupPanel({
                 });
               }}
             >
-              Search using AI title
+              Search using AI visual hypothesis
             </Button>
           ) : null}
 
@@ -849,7 +870,7 @@ export function ArtworkImageLookupAction({
       size="touch"
       data-testid={primary ? "artwork-official-image-lookup-primary" : undefined}
       className={cn("gap-2", fullWidth && "w-full", className)}
-      onClick={openLookup}
+      onClick={() => openLookup()}
     >
       {!isReplace ? <ImageIcon className="size-4" strokeWidth={1.75} /> : null}
       {label}

@@ -263,8 +263,8 @@ export function ArtworkDetailClient({
     artwork={artwork}
     canEdit={canEdit}
     hasImage={hasImage}
-    aiTitleHint={researchHints?.title}
-    aiArtistHint={researchHints?.artist}
+    aiTitleHint={researchHints?.lookupTitle ?? researchHints?.title}
+    aiArtistHint={researchHints?.lookupArtist ?? researchHints?.artist}
     aiMediumHint={researchHints?.medium}
     onApplied={handleLookupApplied}
   >
@@ -359,7 +359,7 @@ export function ArtworkDetailClient({
               onEdit={() => setEditOpen(true)}
               onDelete={() => setDeleteOpen(true)}
               extraActions={
-                researchHints
+                researchHints?.title || researchHints?.artist
                   ? [
                       {
                         label: "Apply suggested metadata",
@@ -697,7 +697,7 @@ function LookupActionButton({ hasImage, label }: { hasImage: boolean; label: str
   return (
     <button
       type="button"
-      onClick={openLookup}
+      onClick={() => openLookup()}
       data-testid="artwork-official-image-lookup-mobile"
       className="flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] text-foreground transition-colors active:bg-muted"
       aria-label={hasImage ? "Replace official image" : "Find official image"}

@@ -96,6 +96,8 @@ export function extractDraftMetadataHints(
     {
       possible_title: draft.possible_title,
       possible_artist: draft.possible_artist,
+      visual_hypothesis_title: draft.visual_hypothesis_title,
+      visual_hypothesis_artist: draft.visual_hypothesis_artist,
       period_or_movement: draft.period_or_movement,
       confidence: draft.confidence,
       short_summary: draft.short_summary,
@@ -358,7 +360,7 @@ export function ResearchMetadataApply({
             size="sm"
             variant="secondary"
             className="min-h-9 w-full sm:w-auto"
-            onClick={openLookup}
+            onClick={() => openLookup()}
           >
             {lookupLabel}
           </Button>

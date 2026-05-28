@@ -186,6 +186,8 @@ export function extractNotesFromDraft(draft: ResearchDraft): string | null {
 export interface ResearchMetadataHints {
   title: string | null;
   artist: string | null;
+  lookupTitle?: string | null;
+  lookupArtist?: string | null;
   year: string | null;
   period: string | null;
   medium: string | null;
@@ -193,10 +195,40 @@ export interface ResearchMetadataHints {
   confidence: number | null;
 }
 
+function hypothesisLookupTitle(
+  draft: {
+    visual_hypothesis_title?: string | null;
+  },
+  identification?: ArtworkIdentification | null
+): string | null {
+  if (identification?.identification_mode === "catalog_match") {
+    return cleanAiTitle(identification.suggested_title ?? identification.catalog_title);
+  }
+  return cleanAiTitle(
+    identification?.visual_hypothesis_title ?? draft.visual_hypothesis_title
+  );
+}
+
+function hypothesisLookupArtist(
+  draft: {
+    visual_hypothesis_artist?: string | null;
+  },
+  identification?: ArtworkIdentification | null
+): string | null {
+  if (identification?.identification_mode === "catalog_match") {
+    return cleanAiArtist(identification.suggested_artist ?? identification.catalog_artist);
+  }
+  return cleanAiArtist(
+    identification?.visual_hypothesis_artist ?? draft.visual_hypothesis_artist
+  );
+}
+
 export function extractResearchMetadataHints(
   draft: {
     possible_title?: string | null;
     possible_artist?: string | null;
+    visual_hypothesis_title?: string | null;
+    visual_hypothesis_artist?: string | null;
     period_or_movement?: string | null;
     confidence?: number | null;
     short_summary?: string | null;
@@ -216,13 +248,12 @@ export function extractResearchMetadataHints(
     ? cleanAiArtist(identification?.suggested_artist ?? draft.possible_artist)
     : null;
 
+  const lookupTitle = hypothesisLookupTitle(draft, identification);
+  const lookupArtist = hypothesisLookupArtist(draft, identification);
+
   if (!catalogMatch) {
-    title = cleanAiTitle(draft.possible_title);
-    artist = cleanAiArtist(draft.possible_artist);
-    if (identification && identification.identification_mode !== "catalog_match") {
-      title = null;
-      artist = null;
-    }
+    title = null;
+    artist = null;
   }
 
   const year = extractYearFromPeriod(draft.period_or_movement);
@@ -238,7 +269,9 @@ export function extractResearchMetadataHints(
     title = cleanAiTitle(draft.short_summary.split(/\s*[—–-]\s*/)[0]);
   }
 
-  if (!title && !artist && !year && !period && !medium && !notes) return null;
+  if (!title && !artist && !lookupTitle && !lookupArtist && !year && !period && !medium && !notes) {
+    return null;
+  }
 
   const confidence =
     identification?.identity_certainty ??
@@ -253,6 +286,8 @@ export function extractResearchMetadataHints(
   return {
     title,
     artist,
+    lookupTitle,
+    lookupArtist,
     year,
     period,
     medium,

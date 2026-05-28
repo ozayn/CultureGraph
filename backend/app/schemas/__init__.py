@@ -334,6 +334,13 @@ class ResearchDraft(BaseModel):
     suggested_annotations: list[AiSuggestedAnnotation] = Field(default_factory=list)
     possible_title: str | None = None
     possible_artist: str | None = None
+    visual_hypothesis_title: str | None = None
+    visual_hypothesis_artist: str | None = None
+    visual_hypothesis_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    hypothesis_source: str | None = None
+    catalog_title: str | None = None
+    catalog_artist: str | None = None
+    catalog_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     period_or_movement: str | None = None
     ocr_label_text: str | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -544,6 +551,12 @@ class ArtworkIdentificationRead(BaseModel):
     match_reasons: list[str] = Field(default_factory=list)
     suggested_title: str | None = None
     suggested_artist: str | None = None
+    visual_hypothesis_title: str | None = None
+    visual_hypothesis_artist: str | None = None
+    visual_hypothesis_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    hypothesis_source: str | None = None
+    catalog_title: str | None = None
+    catalog_artist: str | None = None
     visual_keywords: list[str] = Field(default_factory=list)
     catalog_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     identity_certainty: float | None = Field(default=None, ge=0.0, le=1.0)

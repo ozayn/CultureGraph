@@ -6,6 +6,59 @@ from app.schemas import AiSuggestedAnnotation, ResearchDraft, SuggestedAnnotatio
 from app.services.suggested_annotations import ensure_pending_defaults
 from app.services.visual_analysis import VisualAnalysis, build_visual_summary
 
+IDENTIFICATION_META_KEY = "_identification_meta"
+
+HYPOTHESIS_DRAFT_FIELDS = (
+    "visual_hypothesis_title",
+    "visual_hypothesis_artist",
+    "visual_hypothesis_confidence",
+    "hypothesis_source",
+    "catalog_title",
+    "catalog_artist",
+    "catalog_confidence",
+)
+
+
+def pack_identification_meta(draft: ResearchDraft) -> dict[str, str | float]:
+    meta: dict[str, str | float] = {}
+    for field in HYPOTHESIS_DRAFT_FIELDS:
+        value = getattr(draft, field, None)
+        if value is not None:
+            meta[field] = value
+    return meta
+
+
+def load_identification_meta(raw_visual: dict | None) -> dict[str, str | float]:
+    if not raw_visual:
+        return {}
+    meta = raw_visual.get(IDENTIFICATION_META_KEY)
+    if not isinstance(meta, dict):
+        return {}
+    loaded: dict[str, str | float] = {}
+    for field in HYPOTHESIS_DRAFT_FIELDS:
+        if field in meta and meta[field] is not None:
+            loaded[field] = meta[field]
+    return loaded
+
+
+def strip_identification_meta(raw_visual: dict) -> dict:
+    cleaned = dict(raw_visual)
+    cleaned.pop(IDENTIFICATION_META_KEY, None)
+    return cleaned
+
+
+def optional_meta_str(value: str | float | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def optional_meta_float(value: str | float | None) -> float | None:
+    if value is None:
+        return None
+    return float(value)
+
 
 class ResearchConfigurationError(Exception):
     """Raised when Anthropic is misconfigured (invalid or empty API key)."""
@@ -46,6 +99,28 @@ class MockLLMProvider:
             vision_confidence=0.42,
         )
 
+        ballet_like = not has_user_title and any(
+            token in (artwork_context.get("personal_notes") or "").lower()
+            for token in ("degas", "ballet", "dancers")
+        )
+        if ballet_like:
+            visual = VisualAnalysis(
+                subject="four ballet dancers in rehearsal",
+                composition=["figures grouped across the foreground", "rehearsal room setting"],
+                medium_clues=["pastel on paper"],
+                period_clues=["late 19th century"],
+                clothing=["tutus", "rehearsal attire"],
+                color_palette=["peach", "green", "soft blue"],
+                notable_objects=["barre", "dance floor"],
+                style_signals=["Impressionist ballet scene", "Degas-like pastels"],
+                movement_style="19th-century Impressionist ballet scene",
+            )
+            short_summary = build_visual_summary(
+                visual,
+                period_or_movement="Impressionism, c. 1890",
+                vision_confidence=0.52,
+            )
+
         return ResearchDraft(
             short_summary=short_summary,
             historical_context=(
@@ -66,8 +141,12 @@ class MockLLMProvider:
             ],
             possible_title=title if has_user_title else None,
             possible_artist=artist if artist and artist != "an unknown artist" else None,
+            visual_hypothesis_title=None if has_user_title else ("Four Dancers" if ballet_like else None),
+            visual_hypothesis_artist=None if has_user_title else ("Edgar Degas" if ballet_like else None),
+            visual_hypothesis_confidence=0.52 if ballet_like else None,
+            hypothesis_source="vision" if ballet_like else None,
             period_or_movement=year if year != "an unspecified period" else visual.movement_style,
-            confidence=0.42,
+            confidence=0.52 if ballet_like else 0.42,
             visual_analysis=VisualAnalysisRead.model_validate(visual.model_dump()),
             suggested_annotations=[
                 AiSuggestedAnnotation(
@@ -113,8 +192,14 @@ class MockLLMProvider:
 
 def serialize_research_draft(draft: ResearchDraft) -> dict[str, str | None | float]:
     visual_payload: str | None = None
+    payload: dict = {}
     if draft.visual_analysis:
-        visual_payload = json.dumps(draft.visual_analysis.model_dump(mode="json"))
+        payload = draft.visual_analysis.model_dump(mode="json")
+    meta = pack_identification_meta(draft)
+    if meta:
+        payload[IDENTIFICATION_META_KEY] = meta
+    if payload:
+        visual_payload = json.dumps(payload)
 
     return {
         "short_summary": draft.short_summary,
