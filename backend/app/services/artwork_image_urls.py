@@ -61,7 +61,7 @@ def strip_missing_upload_files(
     """Drop upload paths whose files are absent (e.g. ephemeral deploy disk)."""
     root = upload_dir or Path(settings.upload_dir)
     result = dict(data)
-    for key in ("image_url", "image_thumbnail_url", "image_master_url"):
+    for key in ("image_url", "image_thumbnail_url", "image_master_url", "label_image_url", "label_image_thumbnail_url"):
         value = result.get(key)
         if is_upload_path(value) and not upload_file_exists(value, root):
             result[key] = None

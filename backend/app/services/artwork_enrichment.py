@@ -60,7 +60,27 @@ def _artwork_research_context(artwork: Artwork) -> dict[str, Any]:
         "museum_gallery": artwork.museum_gallery,
         "personal_notes": artwork.personal_notes,
         "image_url": artwork.image_url,
+        "label_image_url": artwork.label_image_url,
+        "label_ocr_text": artwork.label_ocr_text,
     }
+
+
+def _apply_artwork_label_ocr(draft: ResearchDraft, artwork: Artwork) -> ResearchDraft:
+    from app.services.visual_analysis import extract_artist_from_ocr, extract_title_from_ocr
+
+    label_text = (artwork.label_ocr_text or "").strip()
+    if not label_text:
+        return draft
+
+    updated = draft.model_copy(deep=True)
+    updated.ocr_label_text = label_text
+    title = extract_title_from_ocr(label_text)
+    artist = extract_artist_from_ocr(label_text)
+    if title:
+        updated.possible_title = title
+    if artist:
+        updated.possible_artist = artist
+    return updated
 
 
 def _build_lookup_response(db: Session, artwork: Artwork, draft: ResearchDraft) -> ArtworkLookupResponse:
@@ -177,6 +197,7 @@ async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
     try:
         provider = get_research_provider()
         draft = await provider.generate_research(_artwork_research_context(artwork))
+        draft = _apply_artwork_label_ocr(draft, artwork)
 
         _set_enrichment_state(
             artwork,

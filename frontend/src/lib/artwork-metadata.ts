@@ -329,3 +329,33 @@ export function formatMetadataCurrent(value: string | null | undefined, fallback
   const trimmed = (value ?? "").trim();
   return trimmed || fallback;
 }
+
+function parseTitleFromOcr(ocrText: string): string | null {
+  const titleMatch = ocrText.match(/^(?:title|work)\s*:\s*(.+)$/im);
+  if (titleMatch?.[1]) return cleanAiTitle(titleMatch[1]);
+  const lines = ocrText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 1 && lines[0].length >= 8) return cleanAiTitle(lines[0]);
+  return null;
+}
+
+function parseArtistFromOcr(ocrText: string): string | null {
+  const artistMatch = ocrText.match(/(?:artist|attributed to|by)\s*:\s*(.+)$/im);
+  if (artistMatch?.[1]) return cleanAiArtist(artistMatch[1]);
+  return null;
+}
+
+export function extractLabelMetadataHints(
+  ocrText: string | null | undefined
+): Pick<ResearchMetadataHints, "title" | "artist"> | null {
+  const text = (ocrText ?? "").trim();
+  if (!text) return null;
+
+  const title = parseTitleFromOcr(text);
+  const artist = parseArtistFromOcr(text);
+  if (!title && !artist) return null;
+
+  return { title, artist };
+}

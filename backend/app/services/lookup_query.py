@@ -12,7 +12,7 @@ from app.models import Artwork, CulturalEntity, CulturalEntityType, ResearchNote
 from app.schemas import ResearchDraft
 from app.services.lookup_medium import infer_expected_medium_type, resolve_medium_type_filter
 from app.services.research import load_identification_meta
-from app.services.visual_analysis import collect_visual_keywords, extract_title_from_ocr, visual_keywords_query
+from app.services.visual_analysis import collect_visual_keywords, extract_artist_from_ocr, extract_title_from_ocr, visual_keywords_query
 from app.sources.base import ArtworkLookupQuery
 from app.sources.matching import is_placeholder_artist, is_placeholder_title, normalize
 
@@ -35,6 +35,47 @@ class BuiltLookupQuery:
     alternate_title: str | None = None
     expected_medium_type: str = "unknown"
     medium_type_filter: str = "any"
+
+
+def _effective_label_ocr(artwork: Artwork, draft: ResearchDraft | None = None) -> str | None:
+    stored = (getattr(artwork, "label_ocr_text", None) or "").strip()
+    if stored:
+        return stored
+    if draft and draft.ocr_label_text and draft.ocr_label_text.strip():
+        return draft.ocr_label_text.strip()
+    return None
+
+
+def _lookup_from_label_ocr(
+    artwork: Artwork,
+    *,
+    museum_name: str | None,
+    source: str | None,
+    expected_medium: str,
+    medium_filter: str,
+    medium_hint: str | None,
+    label_text: str,
+    artist_override: str | None = None,
+) -> BuiltLookupQuery | None:
+    ocr_title = extract_title_from_ocr(label_text)
+    if not ocr_title or is_placeholder_title(ocr_title):
+        return None
+    artist = _resolve_artist(
+        artwork.artist,
+        extract_artist_from_ocr(label_text),
+        artist_override,
+    )
+    return _pack(
+        artwork,
+        museum_name,
+        source,
+        ocr_title,
+        artist,
+        query_source="ocr_label",
+        expected_medium_type=expected_medium,
+        medium_type_filter=medium_filter,
+        medium_hint=medium_hint,
+    )
 
 
 def build_artwork_lookup_query(
@@ -63,6 +104,18 @@ def build_artwork_lookup_query(
         or None
     )
     import_title = _import_entity_title(db, artwork)
+
+    label_lookup = _lookup_from_label_ocr(
+        artwork,
+        museum_name=museum_name,
+        source=source,
+        expected_medium=expected_medium,
+        medium_filter=medium_filter,
+        medium_hint=medium_hint,
+        label_text=_effective_label_ocr(artwork) or "",
+    )
+    if label_lookup:
+        return label_lookup
 
     if (title_override and title_override.strip()) or (artist_override and artist_override.strip()):
         title = (title_override or "").strip()
@@ -310,9 +363,14 @@ def build_retrieval_lookup_query(
         or None
     )
 
-    ocr_title = extract_title_from_ocr(draft.ocr_label_text)
+    ocr_text = _effective_label_ocr(artwork, draft)
+    ocr_title = extract_title_from_ocr(ocr_text)
     if ocr_title and not is_placeholder_title(ocr_title):
-        artist = _resolve_artist(artwork.artist, draft.possible_artist, None)
+        artist = _resolve_artist(
+            artwork.artist,
+            extract_artist_from_ocr(ocr_text) or draft.possible_artist,
+            None,
+        )
         return _pack(
             artwork,
             museum_name,

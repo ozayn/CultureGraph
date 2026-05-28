@@ -211,9 +211,16 @@ def _build_metadata_prompt(artwork_context: dict) -> str:
         f"- Medium (user): {artwork_context.get('medium') or 'unknown'}",
         f"- Museum/gallery (user): {artwork_context.get('museum_gallery') or 'unknown'}",
         f"- Personal notes: {artwork_context.get('personal_notes') or 'none'}",
-        "",
-        JSON_SCHEMA_PROMPT,
     ]
+    if artwork_context.get("label_ocr_text"):
+        lines.append(
+            f"- Wall label OCR (high-trust): {artwork_context['label_ocr_text']}"
+        )
+    if artwork_context.get("label_image_url"):
+        lines.append(
+            "- A second image shows the museum wall label. Prefer that label image for ocr_label_text."
+        )
+    lines.extend(["", JSON_SCHEMA_PROMPT])
     return "\n".join(lines)
 
 
@@ -240,6 +247,8 @@ class ClaudeResearchProvider:
     async def generate_research(self, artwork_context: dict) -> ResearchDraft:
         image_url = artwork_context.get("image_url")
         image_path = _resolve_image_path(image_url)
+        label_image_url = artwork_context.get("label_image_url")
+        label_image_path = _resolve_image_path(label_image_url)
 
         content: list[dict] = []
         if image_path is not None:
@@ -251,6 +260,26 @@ class ClaudeResearchProvider:
                         "type": "base64",
                         "media_type": media_type,
                         "data": data,
+                    },
+                }
+            )
+            if label_image_path is not None:
+                content.append(
+                    {
+                        "type": "text",
+                        "text": "Image 1 above: the artwork. The next image is the museum wall label.",
+                    }
+                )
+
+        if label_image_path is not None:
+            label_media_type, label_data = _encode_image(label_image_path)
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": label_media_type,
+                        "data": label_data,
                     },
                 }
             )

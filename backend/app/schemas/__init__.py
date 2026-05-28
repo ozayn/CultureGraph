@@ -138,6 +138,10 @@ class ArtworkBase(BaseModel):
     catalog_accession_number: str | None = None
     catalog_rights_label: str | None = None
     personal_notes: str | None = None
+    label_image_url: str | None = None
+    label_image_thumbnail_url: str | None = None
+    label_ocr_text: str | None = None
+    label_uploaded_at: datetime | None = None
     visit_id: int | None = None
 
     @field_validator("title", mode="before")

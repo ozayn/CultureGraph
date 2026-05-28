@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
@@ -26,10 +27,13 @@ from app.sources.routing import (
 )
 from app.services.image_upload import (
     process_and_store_artwork_image,
+    process_and_store_label_image,
     read_upload_with_limit,
     remove_artwork_image_files,
+    remove_label_image_files,
 )
 from app.services.record_cleanup import delete_artwork as delete_artwork_record
+from app.services.label_ocr import extract_label_ocr_text
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +234,80 @@ async def upload_artwork_image(
         saved.image_url,
         saved.image_file_size,
     )
+    return artwork
+
+
+@router.post("/{artwork_id}/label-image", response_model=ArtworkRead)
+async def upload_artwork_label_image(
+    artwork_id: int,
+    user: Annotated[dict[str, str], Depends(require_admin_user)],
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> Artwork:
+    artwork = _get_artwork_or_404(db, artwork_id)
+    logger.info(
+        "artwork label image upload requested artwork_id=%s user=%s content_type=%s",
+        artwork_id,
+        user.get("email"),
+        file.content_type,
+    )
+
+    remove_label_image_files(
+        label_image_url=artwork.label_image_url,
+        label_image_thumbnail_url=artwork.label_image_thumbnail_url,
+    )
+
+    data = await read_upload_with_limit(file)
+    saved = process_and_store_label_image(
+        artwork_id=artwork_id,
+        data=data,
+        filename=file.filename,
+        content_type=file.content_type,
+    )
+    ocr_text = await extract_label_ocr_text(
+        data,
+        filename=file.filename,
+        content_type=file.content_type,
+    )
+
+    artwork.label_image_url = saved.label_image_url
+    artwork.label_image_thumbnail_url = saved.label_image_thumbnail_url
+    artwork.label_ocr_text = ocr_text
+    artwork.label_uploaded_at = datetime.now(tz=UTC)
+    db.commit()
+    db.refresh(artwork)
+
+    from app.services.artwork_enrichment import request_artwork_enrichment
+
+    if artwork.image_url:
+        request_artwork_enrichment(db, artwork)
+
+    logger.info(
+        "artwork label image stored artwork_id=%s url=%s ocr_chars=%s",
+        artwork_id,
+        saved.label_image_url,
+        len(ocr_text or ""),
+    )
+    return artwork
+
+
+@router.delete("/{artwork_id}/label-image", response_model=ArtworkRead)
+def delete_artwork_label_image(
+    artwork_id: int,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
+) -> Artwork:
+    artwork = _get_artwork_or_404(db, artwork_id)
+    remove_label_image_files(
+        label_image_url=artwork.label_image_url,
+        label_image_thumbnail_url=artwork.label_image_thumbnail_url,
+    )
+    artwork.label_image_url = None
+    artwork.label_image_thumbnail_url = None
+    artwork.label_ocr_text = None
+    artwork.label_uploaded_at = None
+    db.commit()
+    db.refresh(artwork)
     return artwork
 
 

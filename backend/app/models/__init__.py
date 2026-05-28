@@ -84,6 +84,10 @@ class Artwork(Base):
     enrichment_stage: Mapped[str | None] = mapped_column(String(64))
     enrichment_error: Mapped[str | None] = mapped_column(Text)
     enrichment_lookup: Mapped[dict | list | None] = mapped_column(JSON)
+    label_image_url: Mapped[str | None] = mapped_column(String(512))
+    label_image_thumbnail_url: Mapped[str | None] = mapped_column(String(512))
+    label_ocr_text: Mapped[str | None] = mapped_column(Text)
+    label_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

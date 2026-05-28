@@ -22,6 +22,7 @@ import { ArtworkImageDebug } from "@/components/artworks/artwork-image-debug";
 import { ArtworkImage, ArtworkImagePlaceholder } from "@/components/artworks/artwork-image";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
 import { ArtworkEnrichmentPanel } from "@/components/artworks/artwork-enrichment-panel";
+import { ArtworkLabelSection } from "@/components/artworks/artwork-label-section";
 import { ResearchPanel } from "@/components/artworks/research-panel";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
@@ -31,7 +32,7 @@ import { CameraUpload } from "@/components/ui/camera-upload";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { resolveArtworkImageRaw, resolveArtworkImageUrl } from "@/lib/thumbnails";
-import { artworkDisplayTitle } from "@/lib/artwork-metadata";
+import { artworkDisplayTitle, extractLabelMetadataHints } from "@/lib/artwork-metadata";
 import { artworkHasImageRegion } from "@/lib/artwork-region";
 import { useAuth } from "@/contexts/auth-context";
 import { formValuesToAnnotationPayload, type AnnotationPinFormValues } from "@/lib/annotation-form";
@@ -89,7 +90,9 @@ export function ArtworkDetailClient({
   );
   const [note, setNote] = useState(artwork.personal_notes ?? "");
   const [savingNote, setSavingNote] = useState(false);
+  const [photoMode, setPhotoMode] = useState<"artwork" | "label">("artwork");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingLabel, setUploadingLabel] = useState(false);
   const [photo, setPhoto] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +103,10 @@ export function ArtworkDetailClient({
     [artwork]
   );
   const hasImage = Boolean(displayRaw);
+  const labelLookupHints = useMemo(
+    () => extractLabelMetadataHints(artwork.label_ocr_text),
+    [artwork.label_ocr_text]
+  );
 
   const openApplyReviewRef = useRef<(() => void) | null>(null);
   const [researchHints, setResearchHints] = useState<ResearchMetadataHints | null>(null);
@@ -176,6 +183,36 @@ export function ArtworkDetailClient({
       setError(e instanceof Error ? e.message : "Could not upload photo.");
     } finally {
       setUploadingPhoto(false);
+    }
+  }
+
+  async function uploadLabelPhoto() {
+    if (!photo) return;
+
+    const uploadError = validateArtworkUploadFile(photo);
+    if (uploadError) {
+      setError(uploadError);
+      return;
+    }
+
+    setUploadingLabel(true);
+    setError(null);
+    try {
+      const prepared = await prepareArtworkUploadFile(photo);
+      const updated = await api.upload<Artwork>(
+        `/api/artworks/${artwork.id}/label-image`,
+        prepared.file
+      );
+      setArtwork(updated);
+      setPhotoOpen(false);
+      setPhoto(null);
+      setPreviewUrl(null);
+      setPhotoMode("artwork");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not upload label photo.");
+    } finally {
+      setUploadingLabel(false);
     }
   }
 
@@ -263,8 +300,8 @@ export function ArtworkDetailClient({
     artwork={artwork}
     canEdit={canEdit}
     hasImage={hasImage}
-    aiTitleHint={researchHints?.lookupTitle ?? researchHints?.title}
-    aiArtistHint={researchHints?.lookupArtist ?? researchHints?.artist}
+    aiTitleHint={labelLookupHints?.title ?? researchHints?.lookupTitle ?? researchHints?.title}
+    aiArtistHint={labelLookupHints?.artist ?? researchHints?.lookupArtist ?? researchHints?.artist}
     aiMediumHint={researchHints?.medium}
     onApplied={handleLookupApplied}
   >
@@ -412,7 +449,12 @@ export function ArtworkDetailClient({
         </div>
       ) : null}
 
-      <div ref={enrichmentRef} className="px-4 sm:px-0">
+      <div ref={enrichmentRef} className="space-y-5 px-4 sm:px-0">
+        <ArtworkLabelSection
+          artwork={artwork}
+          canEdit={canEdit}
+          onArtworkUpdated={handleArtworkUpdated}
+        />
         <ArtworkEnrichmentPanel
           artwork={artwork}
           canEdit={canEdit}
@@ -557,15 +599,43 @@ export function ArtworkDetailClient({
 
     <BottomSheet
       open={photoOpen}
-      onOpenChange={setPhotoOpen}
+      onOpenChange={(open) => {
+        setPhotoOpen(open);
+        if (!open) {
+          setPhotoMode("artwork");
+          setPhoto(null);
+          setPreviewUrl(null);
+          setError(null);
+        }
+      }}
       title="Add photo"
-      description="Capture the artwork or wall label with your camera."
+      description="Capture the artwork or the museum wall label."
     >
       <div className="space-y-4 pb-2">
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            variant={photoMode === "artwork" ? "default" : "outline"}
+            size="sm"
+            className="min-h-10"
+            onClick={() => setPhotoMode("artwork")}
+          >
+            Artwork photo
+          </Button>
+          <Button
+            type="button"
+            variant={photoMode === "label" ? "default" : "outline"}
+            size="sm"
+            className="min-h-10"
+            onClick={() => setPhotoMode("label")}
+          >
+            Label photo
+          </Button>
+        </div>
         <CameraUpload
-          previewUrl={previewUrl ?? resolvedDisplayUrl}
+          previewUrl={photoMode === "artwork" ? previewUrl ?? resolvedDisplayUrl : previewUrl}
           selectedFile={photo}
-          disabled={uploadingPhoto}
+          disabled={uploadingPhoto || uploadingLabel}
           error={error}
           onSelect={(file) => {
             const validationError = validateArtworkUploadFile(file);
@@ -584,10 +654,14 @@ export function ArtworkDetailClient({
         <Button
           size="touch"
           className="w-full"
-          disabled={uploadingPhoto || !photo}
-          onClick={uploadPhoto}
+          disabled={(uploadingPhoto || uploadingLabel || !photo)}
+          onClick={() => void (photoMode === "label" ? uploadLabelPhoto() : uploadPhoto())}
         >
-          {uploadingPhoto ? "Uploading…" : "Upload photo"}
+          {uploadingPhoto || uploadingLabel
+            ? "Uploading…"
+            : photoMode === "label"
+              ? "Upload label photo"
+              : "Upload artwork photo"}
         </Button>
       </div>
     </BottomSheet>

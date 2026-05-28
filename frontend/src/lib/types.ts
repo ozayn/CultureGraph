@@ -70,6 +70,10 @@ export interface Artwork {
   catalog_accession_number: string | null;
   catalog_rights_label: string | null;
   personal_notes: string | null;
+  label_image_url: string | null;
+  label_image_thumbnail_url: string | null;
+  label_ocr_text: string | null;
+  label_uploaded_at: string | null;
   created_at: string;
   enrichment_status?: ArtworkEnrichmentStatus;
   enrichment_stage?: ArtworkEnrichmentStage | null;

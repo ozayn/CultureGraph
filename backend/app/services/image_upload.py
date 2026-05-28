@@ -31,6 +31,12 @@ EXIF_DATE_TAGS = (EXIF_DATETIME_ORIGINAL, EXIF_DATETIME_DIGITIZED, EXIF_DATETIME
 
 
 @dataclass(frozen=True)
+class SavedLabelImages:
+    label_image_url: str
+    label_image_thumbnail_url: str
+
+
+@dataclass(frozen=True)
 class SavedArtworkImages:
     image_url: str
     image_master_url: str
@@ -257,6 +263,61 @@ def process_and_store_artwork_image(
         captured_at=captured_at,
         captured_date_source=captured_date_source,
     )
+
+
+def process_and_store_label_image(
+    *,
+    artwork_id: int,
+    data: bytes,
+    filename: str | None,
+    content_type: str | None,
+) -> SavedLabelImages:
+    _validate_upload_metadata(filename, content_type)
+    source = _prepare_image(data)
+
+    display = _resize_max_edge(source, DISPLAY_MAX_EDGE)
+    thumbnail = _resize_max_edge(display, THUMBNAIL_MAX_EDGE)
+
+    token = uuid.uuid4().hex
+    upload_root = Path(settings.upload_dir)
+    label_dir = upload_root / "artworks" / str(artwork_id) / "labels"
+    display_path = label_dir / f"{token}_display.webp"
+    thumb_path = label_dir / f"{token}_thumb.webp"
+
+    _save_webp(display, display_path, quality=WEBP_QUALITY)
+    _save_webp(thumbnail, thumb_path, quality=THUMB_WEBP_QUALITY)
+
+    base = f"/uploads/artworks/{artwork_id}/labels"
+    return SavedLabelImages(
+        label_image_url=f"{base}/{display_path.name}",
+        label_image_thumbnail_url=f"{base}/{thumb_path.name}",
+    )
+
+
+def remove_label_image_files(
+    *,
+    label_image_url: str | None,
+    label_image_thumbnail_url: str | None,
+) -> None:
+    upload_root = Path(settings.upload_dir).resolve()
+    seen_tokens: set[str] = set()
+
+    for url in (label_image_url, label_image_thumbnail_url):
+        if not url:
+            continue
+        relative = url.removeprefix("/uploads/").lstrip("/")
+        if not relative or relative == url:
+            continue
+        path = (upload_root / relative).resolve()
+        if upload_root not in path.parents and path != upload_root:
+            continue
+        token = path.name.split("_", 1)[0]
+        if not token or token in seen_tokens:
+            continue
+        seen_tokens.add(token)
+        for sibling in path.parent.glob(f"{token}_*"):
+            if sibling.is_file():
+                sibling.unlink(missing_ok=True)
 
 
 def remove_artwork_image_files(
