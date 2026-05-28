@@ -265,7 +265,10 @@ async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
 def _draft_visual_analysis(draft: ResearchDraft) -> VisualAnalysis | None:
     if not draft.visual_analysis:
         return None
-    return VisualAnalysis.model_validate(draft.visual_analysis.model_dump())
+    from app.services.visual_analysis import enrich_visual_analysis_fields
+
+    visual = VisualAnalysis.model_validate(draft.visual_analysis.model_dump())
+    return enrich_visual_analysis_fields(visual)
 
 
 def parse_enrichment_payload(

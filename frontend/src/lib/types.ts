@@ -217,6 +217,15 @@ export interface VisualAnalysis {
   notable_objects?: string[];
   style_signals?: string[];
   movement_style?: string | null;
+  performance_indicators?: string[];
+  costume_clues?: string[];
+  posture_gesture?: string[];
+  brushwork_technique?: string[];
+  framing_cropping?: string[];
+  movement_depiction?: string[];
+  theatrical_indicators?: string[];
+  thematic_cues?: string[];
+  visual_tags?: string[];
 }
 
 export interface ArtworkIdentification {
@@ -239,6 +248,7 @@ export interface ArtworkIdentification {
   catalog_title?: string | null;
   catalog_artist?: string | null;
   visual_keywords?: string[];
+  visual_tags?: string[];
   catalog_confidence?: number | null;
   identity_certainty?: number | null;
   visual_similarity?: number | null;

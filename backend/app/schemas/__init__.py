@@ -363,6 +363,15 @@ class VisualAnalysisRead(BaseModel):
     notable_objects: list[str] = Field(default_factory=list)
     style_signals: list[str] = Field(default_factory=list)
     movement_style: str | None = None
+    performance_indicators: list[str] = Field(default_factory=list)
+    costume_clues: list[str] = Field(default_factory=list)
+    posture_gesture: list[str] = Field(default_factory=list)
+    brushwork_technique: list[str] = Field(default_factory=list)
+    framing_cropping: list[str] = Field(default_factory=list)
+    movement_depiction: list[str] = Field(default_factory=list)
+    theatrical_indicators: list[str] = Field(default_factory=list)
+    thematic_cues: list[str] = Field(default_factory=list)
+    visual_tags: list[str] = Field(default_factory=list)
 
 
 class ClaudeSuggestedAnnotation(AiSuggestedAnnotation):
@@ -565,6 +574,7 @@ class ArtworkIdentificationRead(BaseModel):
     catalog_title: str | None = None
     catalog_artist: str | None = None
     visual_keywords: list[str] = Field(default_factory=list)
+    visual_tags: list[str] = Field(default_factory=list)
     catalog_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     identity_certainty: float | None = Field(default=None, ge=0.0, le=1.0)
     visual_similarity: float | None = Field(default=None, ge=0.0, le=1.0)

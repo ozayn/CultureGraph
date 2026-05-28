@@ -107,7 +107,7 @@ class MockLLMProvider:
         if ballet_like:
             visual = VisualAnalysis(
                 subject="four ballet dancers in rehearsal",
-                composition=["figures grouped across the foreground", "rehearsal room setting"],
+                composition=["figures grouped across the foreground", "cropped dancer framing"],
                 medium_clues=["pastel on paper"],
                 period_clues=["late 19th century"],
                 clothing=["tutus", "rehearsal attire"],
@@ -115,6 +115,21 @@ class MockLLMProvider:
                 notable_objects=["barre", "dance floor"],
                 style_signals=["Impressionist ballet scene", "Degas-like pastels"],
                 movement_style="19th-century Impressionist ballet scene",
+                performance_indicators=["ballet rehearsal", "dance performance"],
+                costume_clues=["tutus", "ballet costume"],
+                posture_gesture=["theatrical gesture", "dance pose"],
+                brushwork_technique=["pastel strokes", "soft layered pastel"],
+                framing_cropping=["cropped figures", "off-center composition"],
+                movement_depiction=["mid-motion dancers"],
+                theatrical_indicators=["stage rehearsal room"],
+                visual_tags=[
+                    "ballet",
+                    "dancers",
+                    "Degas-like",
+                    "pastel",
+                    "cropped figures",
+                    "Impressionist dance scene",
+                ],
             )
             short_summary = build_visual_summary(
                 visual,

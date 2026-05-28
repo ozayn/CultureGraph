@@ -64,6 +64,7 @@ export function ArtworkIdentificationPanel({
     uncertainty_notes = [],
     identity_certainty,
     visual_similarity,
+    visual_tags = [],
     suggested_title,
     suggested_artist,
     visual_hypothesis_title,
@@ -260,6 +261,25 @@ export function ArtworkIdentificationPanel({
             <li key={note}>{note}</li>
           ))}
         </ul>
+      ) : null}
+
+      {visual_tags.length > 0 ? (
+        <div>
+          <p className="mb-1 text-xs font-medium text-muted-foreground">Visual tags</p>
+          <ul className="flex flex-wrap gap-1.5">
+            {visual_tags.map((tag) => (
+              <li
+                key={tag}
+                className="rounded-md border border-sky-500/30 bg-sky-500/5 px-2 py-0.5 text-xs text-foreground"
+              >
+                {tag}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-muted-foreground">
+            These distinctive cues informed collection search and match ranking.
+          </p>
+        </div>
       ) : null}
 
       {match_reasons.length > 0 ? (

@@ -16,7 +16,9 @@ from app.schemas import ClaudeResearchResponse, ResearchDraft, VisualAnalysisRea
 from app.services.claude_json import JsonExtractionError, extract_json_object
 from app.services.research import ResearchConfigurationError, ResearchProviderError
 from app.services.visual_analysis import (
+    VisualAnalysis,
     build_visual_summary,
+    enrich_visual_analysis_fields,
     extract_artist_from_ocr,
     extract_title_from_ocr,
 )
@@ -33,7 +35,16 @@ Return ONLY a single JSON object (no markdown fences, no commentary) with this e
     "color_palette": [string, ...],
     "notable_objects": [string, ...],
     "style_signals": [string, ...],
-    "movement_style": string or null
+    "movement_style": string or null,
+    "performance_indicators": [string, ...],
+    "costume_clues": [string, ...],
+    "posture_gesture": [string, ...],
+    "brushwork_technique": [string, ...],
+    "framing_cropping": [string, ...],
+    "movement_depiction": [string, ...],
+    "theatrical_indicators": [string, ...],
+    "thematic_cues": [string, ...],
+    "visual_tags": [string, ...]
   },
   "possible_title": string or null,
   "possible_artist": string or null,
@@ -70,8 +81,16 @@ Rules:
   (e.g. generic portrait, unknown sitter, or vague interior with no distinctive iconography).
 - When (b) applies, set visual_hypothesis_reason to one short sentence citing the visible evidence.
 - Unverified visual hypotheses must keep confidence below 0.55 — they are hypotheses, not catalog matches.
-- visual_analysis: describe subject, composition, medium clues, period/style signals, clothing, palette, and notable objects.
-- movement_style: broad style label (e.g. "Northern Renaissance ecclesiastical portrait"), not a specific catalog title.
+- visual_analysis: extract distinctive, specific cues — not generic summaries.
+- Populate performance_indicators (dance, ballet, stage, rehearsal), costume_clues (tutu, uniform, dress),
+  posture_gesture (gesture vocabulary, body language), brushwork_technique (pastel vs oil, stroke handling),
+  framing_cropping (cropped figures, off-center cuts), movement_depiction, theatrical_indicators,
+  and thematic_cues (social scene, classical, mythological — keep these separate).
+- visual_tags: 4–10 short high-signal tags (e.g. ballet, dancers, Degas-like, pastel, cropped figures,
+  Impressionist dance scene, theatrical pose, rehearsal). Prefer distinctive cues over broad ones like
+  "multiple female figures outdoors".
+- Do NOT let generic outdoor figure groups replace specific performance, costume, or technique tags.
+- movement_style: broad style label (e.g. "Impressionist dance scene"), not a catalog title.
 - Base visual analysis on the image when provided; use user metadata as hints, not confirmed facts.
 - Read any visible wall labels, captions, or placards into ocr_label_text when legible.
 - confidence reflects certainty of visual description only (0=very uncertain, 1=very clear visual read).
@@ -96,7 +115,16 @@ SUPPORTED_IMAGE_SUFFIXES = {
 
 
 def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
-    visual = claude.visual_analysis
+    raw_visual = claude.visual_analysis
+    visual_read: VisualAnalysisRead | None = raw_visual
+    visual_model: VisualAnalysis | None = None
+    if raw_visual:
+        visual_model = enrich_visual_analysis_fields(
+            VisualAnalysis.model_validate(raw_visual.model_dump())
+        )
+        if visual_model:
+            visual_read = VisualAnalysisRead.model_validate(visual_model.model_dump())
+
     title_from_ocr = extract_title_from_ocr(claude.ocr_label_text)
     artist_from_ocr = extract_artist_from_ocr(claude.ocr_label_text)
 
@@ -116,11 +144,11 @@ def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
         hypothesis_confidence = min(claude.confidence, 0.55)
         hypothesis_source = "vision"
         hypothesis_reason = (claude.visual_hypothesis_reason or "").strip() or None
-        if not hypothesis_reason and visual and visual.subject:
-            hypothesis_reason = f"Subject and style resemble {visual.subject.strip()}."
+        if not hypothesis_reason and visual_read and visual_read.subject:
+            hypothesis_reason = f"Subject and style resemble {visual_read.subject.strip()}."
 
     short_summary = build_visual_summary(
-        _to_visual_analysis(visual),
+        visual_model,
         period_or_movement=claude.period_or_movement,
         vision_confidence=claude.confidence,
     )
@@ -135,9 +163,9 @@ def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
         related_questions.append(
             f"Can we verify the visual hypothesis \"{hypothesis_title or 'Unknown title'}{artist_bit}\" against museum catalogs?"
         )
-    if visual and visual.movement_style:
+    if visual_read and visual_read.movement_style:
         related_questions.append(
-            f"Which museum collections hold similar {visual.movement_style} works?"
+            f"Which museum collections hold similar {visual_read.movement_style} works?"
         )
     related_questions.extend(
         [
@@ -160,24 +188,16 @@ def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
         visual_hypothesis_confidence=hypothesis_confidence,
         visual_hypothesis_reason=hypothesis_reason,
         hypothesis_source=hypothesis_source,
-        period_or_movement=claude.period_or_movement or (visual.movement_style if visual else None),
+        period_or_movement=claude.period_or_movement or (visual_read.movement_style if visual_read else None),
         ocr_label_text=claude.ocr_label_text,
         confidence=(
             claude.confidence
             if title_from_ocr
             else min(claude.confidence, hypothesis_confidence or 0.55)
         ),
-        visual_analysis=visual,
+        visual_analysis=visual_read,
         source="claude",
     )
-
-
-def _to_visual_analysis(visual: VisualAnalysisRead | None):
-    from app.services.visual_analysis import VisualAnalysis
-
-    if not visual:
-        return None
-    return VisualAnalysis.model_validate(visual.model_dump())
 
 
 def _resolve_image_path(image_url: str | None) -> Path | None:

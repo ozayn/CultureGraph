@@ -17,6 +17,8 @@ from app.services.visual_analysis import (
     VisualAnalysis,
     build_visual_summary,
     collect_visual_keywords,
+    collect_weighted_visual_tags,
+    visual_tag_ranking_adjustment,
 )
 from app.sources.matching import normalize, score_artwork_entry_detailed
 
@@ -71,6 +73,7 @@ class ArtworkIdentification(BaseModel):
     catalog_title: str | None = None
     catalog_artist: str | None = None
     visual_keywords: list[str] = Field(default_factory=list)
+    visual_tags: list[str] = Field(default_factory=list)
     catalog_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     identity_certainty: float | None = Field(default=None, ge=0.0, le=1.0)
     visual_similarity: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -147,6 +150,9 @@ def rerank_candidates_with_visual(
         related_questions=[],
     )
     lookup = lookup or ArtworkLookupResponse(candidates=candidates, sources_searched=[])
+    if visual and not isinstance(visual, VisualAnalysis):
+        visual = VisualAnalysis.model_validate(visual.model_dump())
+    visual_tags = collect_weighted_visual_tags(visual)
 
     reranked: list[tuple[float, float, ArtworkLookupCandidateRead]] = []
     for candidate in candidates:
@@ -164,6 +170,15 @@ def rerank_candidates_with_visual(
             match_reasons.append("Subject description overlap")
         if composition_overlap >= 0.2:
             match_reasons.append("Composition overlap")
+
+        candidate_text = " ".join(
+            filter(None, [candidate.title, candidate.artist, candidate.medium])
+        )
+        tag_adjustment = visual_tag_ranking_adjustment(candidate_text, visual_tags, visual)
+        if tag_adjustment >= 0.08:
+            match_reasons.append("Distinctive visual tag overlap")
+        elif tag_adjustment <= -0.08:
+            match_reasons.append("Visual tag mismatch")
 
         calibrated = calibrate_candidate_confidence(
             title_score=title_score,
@@ -205,7 +220,7 @@ def rerank_candidates_with_visual(
         reranked.append(
             (
                 calibrated.identity_certainty,
-                updated.visual_similarity or 0.0,
+                (updated.visual_similarity or 0.0) + tag_adjustment,
                 updated,
             )
         )
@@ -278,11 +293,14 @@ def build_identification(
     visual: VisualAnalysis | None = None,
 ) -> ArtworkIdentification:
     visual = visual or draft.visual_analysis
+    if visual and not isinstance(visual, VisualAnalysis):
+        visual = VisualAnalysis.model_validate(visual.model_dump())
     keywords = collect_visual_keywords(
         visual,
         period_or_movement=draft.period_or_movement,
         ocr_label_text=draft.ocr_label_text,
     )
+    visual_tags = collect_weighted_visual_tags(visual)
 
     reranked = rerank_candidates_with_visual(
         lookup.candidates,
@@ -458,6 +476,7 @@ def build_identification(
         catalog_title=catalog_title,
         catalog_artist=catalog_artist,
         visual_keywords=keywords[:12],
+        visual_tags=visual_tags[:16],
         catalog_confidence=identity_score if mode == "catalog_match" else None,
         identity_certainty=identity_score,
         visual_similarity=visual_score,
