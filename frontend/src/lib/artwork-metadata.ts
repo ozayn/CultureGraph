@@ -1,4 +1,4 @@
-import type { ResearchDraft } from "@/lib/types";
+import type { ArtworkIdentification, ResearchDraft } from "@/lib/types";
 
 const PLACEHOLDER_TITLES = new Set([
   "unknown",
@@ -203,13 +203,7 @@ export function extractResearchMetadataHints(
     historical_context?: string | null;
     suggested_annotations?: ResearchDraft["suggested_annotations"];
   },
-  identification?: {
-    identification_mode?: "catalog_match" | "possible_match" | "style_subject";
-    confidence_level?: "high" | "medium" | "low";
-    suggested_title?: string | null;
-    suggested_artist?: string | null;
-    catalog_confidence?: number | null;
-  } | null
+  identification?: ArtworkIdentification | null
 ): ResearchMetadataHints | null {
   const catalogMatch =
     identification?.identification_mode === "catalog_match" &&
