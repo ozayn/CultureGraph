@@ -66,6 +66,7 @@ class ArtworkIdentification(BaseModel):
     visual_hypothesis_title: str | None = None
     visual_hypothesis_artist: str | None = None
     visual_hypothesis_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    visual_hypothesis_reason: str | None = None
     hypothesis_source: str | None = None
     catalog_title: str | None = None
     catalog_artist: str | None = None
@@ -383,7 +384,7 @@ def build_identification(
             title_bit = hyp_title or "Unknown title"
             display = (
                 f"AI visual hypothesis: {title_bit}{artist_suffix}. "
-                "Not verified against a collection record."
+                "Not verified against collection records."
             )
             style_bit = style or "this period/style"
             display += f" Style: {style_bit}. Subject: {subject_bit.rstrip('.')}."
@@ -434,6 +435,7 @@ def build_identification(
     visual_hypothesis_confidence = (
         None if mode == "catalog_match" else draft.visual_hypothesis_confidence
     )
+    visual_hypothesis_reason = None if mode == "catalog_match" else draft.visual_hypothesis_reason
     hypothesis_source = None if mode == "catalog_match" else draft.hypothesis_source
 
     return ArtworkIdentification(
@@ -451,6 +453,7 @@ def build_identification(
         visual_hypothesis_title=visual_hypothesis_title,
         visual_hypothesis_artist=visual_hypothesis_artist,
         visual_hypothesis_confidence=visual_hypothesis_confidence,
+        visual_hypothesis_reason=visual_hypothesis_reason,
         hypothesis_source=hypothesis_source,
         catalog_title=catalog_title,
         catalog_artist=catalog_artist,
@@ -477,6 +480,7 @@ def calibrate_research_draft(
     updated.visual_hypothesis_title = draft.visual_hypothesis_title
     updated.visual_hypothesis_artist = draft.visual_hypothesis_artist
     updated.visual_hypothesis_confidence = draft.visual_hypothesis_confidence
+    updated.visual_hypothesis_reason = draft.visual_hypothesis_reason
     updated.hypothesis_source = draft.hypothesis_source
 
     if identification.identification_mode == "catalog_match":

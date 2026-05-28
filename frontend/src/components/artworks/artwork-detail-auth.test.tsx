@@ -27,6 +27,11 @@ vi.mock("@/contexts/auth-context", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => "/artworks/1",
+}));
+
+vi.mock("@/components/artworks/artwork-enrichment-panel", () => ({
+  ArtworkEnrichmentPanel: () => null,
 }));
 
 vi.mock("@/components/artworks/research-panel", () => ({

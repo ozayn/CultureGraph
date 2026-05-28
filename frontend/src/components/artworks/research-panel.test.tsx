@@ -117,8 +117,6 @@ describe("ResearchPanel metadata apply", () => {
     getMock.mockResolvedValueOnce([researchNote]);
     putMock.mockResolvedValueOnce({
       ...artwork,
-      title: "Four Dancers",
-      artist: "Edgar Degas",
       year_period: "c. 1890 · Impressionism",
       medium: "Pastel on paper",
     });
@@ -137,18 +135,22 @@ describe("ResearchPanel metadata apply", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review suggested metadata" }));
     expect(screen.getByText(/Review before saving/)).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("checkbox", { name: /Year \/ date/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Period \/ movement/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Medium/i }));
+
     fireEvent.click(screen.getByRole("button", { name: "Apply selected" }));
 
     await waitFor(() => {
       expect(putMock).toHaveBeenCalledWith(
         "/api/artworks/1",
         expect.objectContaining({
-          title: "Four Dancers",
-          artist: "Edgar Degas",
           year_period: "c. 1890 · Impressionism",
           medium: "Pastel on paper",
         })
       );
+      expect(putMock.mock.calls[0]?.[1]).not.toHaveProperty("title");
+      expect(putMock.mock.calls[0]?.[1]).not.toHaveProperty("artist");
       expect(onArtworkUpdated).toHaveBeenCalled();
     });
 

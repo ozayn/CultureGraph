@@ -353,6 +353,7 @@ def latest_research_draft(db: Session, artwork_id: int) -> tuple[ResearchDraft |
         visual_hypothesis_confidence=optional_meta_float(
             identification_meta.get("visual_hypothesis_confidence")
         ),
+        visual_hypothesis_reason=optional_meta_str(identification_meta.get("visual_hypothesis_reason")),
         hypothesis_source=optional_meta_str(identification_meta.get("hypothesis_source")),
         catalog_title=optional_meta_str(identification_meta.get("catalog_title")),
         catalog_artist=optional_meta_str(identification_meta.get("catalog_artist")),

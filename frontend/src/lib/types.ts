@@ -181,6 +181,7 @@ export interface ResearchDraft {
   visual_hypothesis_title?: string | null;
   visual_hypothesis_artist?: string | null;
   visual_hypothesis_confidence?: number | null;
+  visual_hypothesis_reason?: string | null;
   hypothesis_source?: string | null;
   catalog_title?: string | null;
   catalog_artist?: string | null;
@@ -233,6 +234,7 @@ export interface ArtworkIdentification {
   visual_hypothesis_title?: string | null;
   visual_hypothesis_artist?: string | null;
   visual_hypothesis_confidence?: number | null;
+  visual_hypothesis_reason?: string | null;
   hypothesis_source?: string | null;
   catalog_title?: string | null;
   catalog_artist?: string | null;

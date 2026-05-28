@@ -52,6 +52,7 @@ interface ArtworkDetailClientProps {
   artwork: Artwork;
   annotations: Annotation[];
   culturalEntities?: CulturalEntity[];
+  visitDate?: string | null;
   autoEnrich?: boolean;
 }
 
@@ -59,6 +60,7 @@ export function ArtworkDetailClient({
   artwork: initialArtwork,
   annotations: initialAnnotations,
   culturalEntities = [],
+  visitDate = null,
   autoEnrich = false,
 }: ArtworkDetailClientProps) {
   const router = useRouter();
@@ -114,6 +116,10 @@ export function ArtworkDetailClient({
   function scrollToEnrichment() {
     enrichmentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+
+  useEffect(() => {
+    setArtwork(initialArtwork);
+  }, [initialArtwork]);
 
   useEffect(() => {
     if (autoEnrich) {
@@ -372,6 +378,7 @@ export function ArtworkDetailClient({
         <div className="px-4 sm:px-0">
           <PhotoCaptureDateSuggestion
             artwork={artwork}
+            visitDate={visitDate}
             onVisitUpdated={() => router.refresh()}
           />
         </div>

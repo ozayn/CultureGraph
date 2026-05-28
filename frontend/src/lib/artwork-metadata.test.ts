@@ -46,8 +46,10 @@ describe("artwork-metadata", () => {
     const hints = extractResearchMetadataHints({
       possible_title: "Four Dancers — possibly by Edgar Degas",
       possible_artist: "Edgar Degas",
+      visual_hypothesis_title: "Four Dancers",
+      visual_hypothesis_artist: "Edgar Degas",
       period_or_movement: "Impressionism, c. 1890",
-      confidence: 0.82,
+      confidence: 0.52,
       historical_context: "A rehearsal scene from Degas's ballet series.",
       suggested_annotations: [
         {
@@ -61,8 +63,10 @@ describe("artwork-metadata", () => {
       ],
     });
 
-    expect(hints?.title).toBe("Four Dancers");
-    expect(hints?.artist).toBe("Edgar Degas");
+    expect(hints?.title).toBeNull();
+    expect(hints?.artist).toBeNull();
+    expect(hints?.lookupTitle).toBe("Four Dancers");
+    expect(hints?.lookupArtist).toBe("Edgar Degas");
     expect(hints?.year).toBe("c. 1890");
     expect(hints?.period).toBe("Impressionism");
     expect(hints?.medium).toBe("Pastel on paper");

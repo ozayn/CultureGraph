@@ -37,6 +37,7 @@ Return ONLY a single JSON object (no markdown fences, no commentary) with this e
   },
   "possible_title": string or null,
   "possible_artist": string or null,
+  "visual_hypothesis_reason": string or null,
   "period_or_movement": string or null,
   "visible_elements": [string, ...],
   "ocr_label_text": string or null,
@@ -64,6 +65,7 @@ Rules:
   (a) ocr_label_text explicitly names them on a legible wall label, OR
   (b) the image strongly suggests a well-known, visually distinctive work (e.g. a famous ballet scene, iconic composition).
 - For (b), use widely recognized titles/artists only when the visual evidence is strong — never for generic portraits or vague scenes.
+- When (b) applies, also set visual_hypothesis_reason to one short sentence explaining the visible evidence (subject, composition, or iconography).
 - Unverified visual hypotheses must keep confidence below 0.55.
 - When only style/subject is clear (no plausible famous-work hypothesis), leave possible_title and possible_artist null.
 - visual_analysis: describe subject, composition, medium clues, period/style signals, clothing, palette, and notable objects.
@@ -107,9 +109,13 @@ def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
 
     hypothesis_confidence = None
     hypothesis_source = None
+    hypothesis_reason: str | None = None
     if hypothesis_title or hypothesis_artist:
         hypothesis_confidence = min(claude.confidence, 0.55)
         hypothesis_source = "vision"
+        hypothesis_reason = (claude.visual_hypothesis_reason or "").strip() or None
+        if not hypothesis_reason and visual and visual.subject:
+            hypothesis_reason = f"Subject and style resemble {visual.subject.strip()}."
 
     short_summary = build_visual_summary(
         _to_visual_analysis(visual),
@@ -150,6 +156,7 @@ def claude_response_to_draft(claude: ClaudeResearchResponse) -> ResearchDraft:
         visual_hypothesis_title=hypothesis_title,
         visual_hypothesis_artist=hypothesis_artist,
         visual_hypothesis_confidence=hypothesis_confidence,
+        visual_hypothesis_reason=hypothesis_reason,
         hypothesis_source=hypothesis_source,
         period_or_movement=claude.period_or_movement or (visual.movement_style if visual else None),
         ocr_label_text=claude.ocr_label_text,

@@ -12,10 +12,13 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock, refresh: vi.fn() }),
 }));
 
+const getMock = vi.fn();
+
 vi.mock("@/lib/api", () => ({
   api: {
     post: (...args: unknown[]) => postMock(...args),
     put: vi.fn(),
+    get: (...args: unknown[]) => getMock(...args),
     upload: (...args: unknown[]) => uploadMock(...args),
   },
 }));
@@ -39,6 +42,7 @@ describe("ProgressiveArtworkForm", () => {
     uploadMock.mockReset();
     pushMock.mockReset();
     prepareMock.mockReset();
+    getMock.mockReset();
     prepareMock.mockImplementation(async (file: File) => ({
       file,
       wasNormalized: false,
@@ -99,6 +103,36 @@ describe("ProgressiveArtworkForm", () => {
     await waitFor(() => {
       expect(pushMock).toHaveBeenCalledWith("/visits/1");
     });
+  });
+
+  it("shows photo date prompt after quick draft save without redirect", async () => {
+    postMock.mockResolvedValueOnce({ id: 42, title: null, visit_id: 1, captured_date_source: "none" });
+    uploadMock.mockResolvedValueOnce({
+      id: 42,
+      title: null,
+      visit_id: 1,
+      captured_at: "2026-05-23T14:30:00Z",
+      captured_date_source: "exif",
+    });
+    getMock.mockResolvedValueOnce({ id: 1, visit_date: "2026-05-25" });
+
+    render(
+      <ProgressiveArtworkForm
+        visitId={1}
+        redirectOnSave={false}
+        openEnrichmentAfterSave={false}
+      />
+    );
+
+    const file = new File(["pixels"], "photo.jpg", { type: "image/jpeg" });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.click(screen.getByTestId("save-draft"));
+
+    expect(
+      await screen.findByText(/This photo appears to have been taken on/i)
+    ).toBeInTheDocument();
+    expect(pushMock).not.toHaveBeenCalled();
   });
 
   it("shows friendly message instead of raw Failed to fetch", async () => {

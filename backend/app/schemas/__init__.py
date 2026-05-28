@@ -341,6 +341,7 @@ class ResearchDraft(BaseModel):
     visual_hypothesis_title: str | None = None
     visual_hypothesis_artist: str | None = None
     visual_hypothesis_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    visual_hypothesis_reason: str | None = None
     hypothesis_source: str | None = None
     catalog_title: str | None = None
     catalog_artist: str | None = None
@@ -372,6 +373,7 @@ class ClaudeResearchResponse(BaseModel):
     visual_analysis: VisualAnalysisRead | None = None
     possible_title: str | None = None
     possible_artist: str | None = None
+    visual_hypothesis_reason: str | None = None
     period_or_movement: str | None = None
     visible_elements: list[str] = Field(min_length=1)
     ocr_label_text: str | None = None
@@ -558,6 +560,7 @@ class ArtworkIdentificationRead(BaseModel):
     visual_hypothesis_title: str | None = None
     visual_hypothesis_artist: str | None = None
     visual_hypothesis_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    visual_hypothesis_reason: str | None = None
     hypothesis_source: str | None = None
     catalog_title: str | None = None
     catalog_artist: str | None = None

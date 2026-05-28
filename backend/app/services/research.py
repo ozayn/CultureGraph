@@ -12,6 +12,7 @@ HYPOTHESIS_DRAFT_FIELDS = (
     "visual_hypothesis_title",
     "visual_hypothesis_artist",
     "visual_hypothesis_confidence",
+    "visual_hypothesis_reason",
     "hypothesis_source",
     "catalog_title",
     "catalog_artist",
@@ -144,6 +145,11 @@ class MockLLMProvider:
             visual_hypothesis_title=None if has_user_title else ("Four Dancers" if ballet_like else None),
             visual_hypothesis_artist=None if has_user_title else ("Edgar Degas" if ballet_like else None),
             visual_hypothesis_confidence=0.52 if ballet_like else None,
+            visual_hypothesis_reason=(
+                "Grouped ballet dancers in rehearsal with pastel handling typical of Degas."
+                if ballet_like
+                else None
+            ),
             hypothesis_source="vision" if ballet_like else None,
             period_or_movement=year if year != "an unspecified period" else visual.movement_style,
             confidence=0.52 if ballet_like else 0.42,

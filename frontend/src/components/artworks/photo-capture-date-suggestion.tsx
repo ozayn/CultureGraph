@@ -5,6 +5,10 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { formatCalendarDate, isoToCalendarDate } from "@/lib/calendar-date";
+import {
+  dismissPhotoDateSuggestion,
+  isPhotoDateSuggestionDismissed,
+} from "@/lib/photo-date-suggestion-storage";
 import type { Artwork, Visit } from "@/lib/types";
 
 interface PhotoCaptureDateSuggestionProps {
@@ -32,7 +36,9 @@ export function PhotoCaptureDateSuggestion({
   onVisitUpdated,
   className,
 }: PhotoCaptureDateSuggestionProps) {
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(
+    () => !isPhotoDateSuggestionDismissed(artwork.id)
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [applied, setApplied] = useState(false);
@@ -70,13 +76,7 @@ export function PhotoCaptureDateSuggestion({
     resolvedVisitDate != null &&
     photoDate === resolvedVisitDate;
 
-  if (
-    !visible ||
-    applied ||
-    artwork.captured_date_source !== "exif" ||
-    !artwork.captured_at ||
-    visitMatchesPhotoDate
-  ) {
+  if (!visible || applied || !artwork.captured_at || visitMatchesPhotoDate) {
     return null;
   }
 
@@ -84,6 +84,7 @@ export function PhotoCaptureDateSuggestion({
   const hasVisit = artwork.visit_id != null;
 
   function dismiss() {
+    dismissPhotoDateSuggestion(artwork.id);
     setVisible(false);
     onDismiss?.();
   }

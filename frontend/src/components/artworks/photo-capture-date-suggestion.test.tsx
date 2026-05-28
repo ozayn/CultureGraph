@@ -28,6 +28,7 @@ describe("PhotoCaptureDateSuggestion", () => {
   beforeEach(() => {
     getMock.mockReset();
     patchMock.mockReset();
+    window.sessionStorage.clear();
     getMock.mockResolvedValue({ id: 9, visit_date: "2026-05-25" });
   });
 
@@ -83,6 +84,23 @@ describe("PhotoCaptureDateSuggestion", () => {
     expect(
       screen.queryByText(/This photo appears to have been taken on/i)
     ).not.toBeInTheDocument();
+    expect(window.sessionStorage.getItem("culturegraph:photo-date-dismissed:1")).toBe("1");
+  });
+
+  it("shows when captured_at exists even if date source is none", () => {
+    render(
+      <PhotoCaptureDateSuggestion
+        artwork={{
+          ...artwork,
+          captured_date_source: "none",
+        }}
+        visitDate="2026-05-25"
+      />
+    );
+
+    expect(
+      screen.getByText(/This photo appears to have been taken on/i)
+    ).toBeInTheDocument();
   });
 
   it("shows nothing without EXIF capture metadata", () => {

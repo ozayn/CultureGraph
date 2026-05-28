@@ -69,6 +69,7 @@ export function ArtworkIdentificationPanel({
     visual_hypothesis_title,
     visual_hypothesis_artist,
     visual_hypothesis_confidence,
+    visual_hypothesis_reason,
   } = identification;
 
   const showExactSuggestion =
@@ -199,8 +200,11 @@ export function ArtworkIdentificationPanel({
               <span className="font-medium">{visual_hypothesis_artist}</span>
             </p>
           ) : null}
+          {visual_hypothesis_reason ? (
+            <p className="text-xs leading-relaxed text-muted-foreground">{visual_hypothesis_reason}</p>
+          ) : null}
           <p className="text-xs text-muted-foreground">
-            Not verified against a collection record.
+            Not verified against collection records.
           </p>
           {canEdit && artwork ? (
             <div className="flex flex-col gap-2 sm:flex-row">

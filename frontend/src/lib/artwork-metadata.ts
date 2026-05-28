@@ -197,6 +197,7 @@ export interface ResearchMetadataHints {
 
 function hypothesisLookupTitle(
   draft: {
+    possible_title?: string | null;
     visual_hypothesis_title?: string | null;
   },
   identification?: ArtworkIdentification | null
@@ -205,12 +206,15 @@ function hypothesisLookupTitle(
     return cleanAiTitle(identification.suggested_title ?? identification.catalog_title);
   }
   return cleanAiTitle(
-    identification?.visual_hypothesis_title ?? draft.visual_hypothesis_title
+    identification?.visual_hypothesis_title ??
+      draft.visual_hypothesis_title ??
+      draft.possible_title
   );
 }
 
 function hypothesisLookupArtist(
   draft: {
+    possible_artist?: string | null;
     visual_hypothesis_artist?: string | null;
   },
   identification?: ArtworkIdentification | null
@@ -219,7 +223,9 @@ function hypothesisLookupArtist(
     return cleanAiArtist(identification.suggested_artist ?? identification.catalog_artist);
   }
   return cleanAiArtist(
-    identification?.visual_hypothesis_artist ?? draft.visual_hypothesis_artist
+    identification?.visual_hypothesis_artist ??
+      draft.visual_hypothesis_artist ??
+      draft.possible_artist
   );
 }
 

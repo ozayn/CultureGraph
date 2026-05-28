@@ -77,6 +77,7 @@ def test_degas_like_image_preserves_visual_hypothesis_after_calibration() -> Non
     assert calibrated.visual_hypothesis_artist == "Edgar Degas"
     assert calibrated.hypothesis_source == "vision"
     assert "AI visual hypothesis" in identification.display_summary
+    assert "Not verified against collection records" in identification.display_summary
     assert calibrated.possible_title is None
     assert calibrated.possible_artist is None
 
@@ -99,6 +100,25 @@ def test_unverified_hypothesis_is_not_high_confidence_catalog_match() -> None:
     assert identification.suggested_title is None
     assert identification.suggested_artist is None
     assert identification.visual_hypothesis_title == "Four Dancers"
+
+
+def test_unverified_hypothesis_preserved_in_possible_match_mode() -> None:
+    draft = _degas_draft()
+    lookup = ArtworkLookupResponse(
+        candidates=[
+            _candidate("Four Dancers", artist="Edgar Degas", confidence=0.58),
+        ],
+        sources_searched=["National Gallery of Art"],
+        query_used="Four Dancers · Edgar Degas",
+        query_source="ai_title",
+    )
+
+    identification = build_identification(draft, lookup)
+
+    assert identification.identification_mode == "possible_match"
+    assert identification.visual_hypothesis_title == "Four Dancers"
+    assert identification.visual_hypothesis_artist == "Edgar Degas"
+    assert identification.suggested_title is None
 
 
 def test_catalog_match_takes_priority_over_visual_hypothesis() -> None:
