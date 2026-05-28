@@ -63,11 +63,13 @@ Rules:
 - Stage 1 is visual extraction. Do NOT treat possible_title or possible_artist as verified catalog facts.
 - Set possible_title and possible_artist ONLY when:
   (a) ocr_label_text explicitly names them on a legible wall label, OR
-  (b) the image strongly suggests a well-known, visually distinctive work (e.g. a famous ballet scene, iconic composition).
-- For (b), use widely recognized titles/artists only when the visual evidence is strong — never for generic portraits or vague scenes.
-- When (b) applies, also set visual_hypothesis_reason to one short sentence explaining the visible evidence (subject, composition, or iconography).
-- Unverified visual hypotheses must keep confidence below 0.55.
-- When only style/subject is clear (no plausible famous-work hypothesis), leave possible_title and possible_artist null.
+  (b) strong visible evidence supports a plausible specific work or attribution — multiple clues converge
+      (subject, composition, medium, dress, iconography, palette, or style signals).
+- For (b), a plausible hypothesis is enough when evidence is strong; the work does not need to be world-famous.
+- For (b), still leave possible_title and possible_artist null when only broad style/subject is clear
+  (e.g. generic portrait, unknown sitter, or vague interior with no distinctive iconography).
+- When (b) applies, set visual_hypothesis_reason to one short sentence citing the visible evidence.
+- Unverified visual hypotheses must keep confidence below 0.55 — they are hypotheses, not catalog matches.
 - visual_analysis: describe subject, composition, medium clues, period/style signals, clothing, palette, and notable objects.
 - movement_style: broad style label (e.g. "Northern Renaissance ecclesiastical portrait"), not a specific catalog title.
 - Base visual analysis on the image when provided; use user metadata as hints, not confirmed facts.
