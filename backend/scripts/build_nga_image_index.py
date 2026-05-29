@@ -13,6 +13,10 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+from scripts._venv import reexec_with_project_venv
+
+reexec_with_project_venv()
+
 from app.config import settings
 from app.database import SessionLocal
 from app.services.nga_visual_index import BuildOptions, run_build

@@ -22,8 +22,13 @@ async def test_visual_index_status_requires_auth() -> None:
 async def test_visual_index_status_returns_counts(
     auth_headers: dict[str, str],
     db_session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
     from app.models import CollectionArtwork, CollectionImageEmbedding
+    from app.services import visual_index_status
+
+    monkeypatch.setattr(visual_index_status, "THUMBNAIL_CACHE_DIR", tmp_path / "cache")
 
     record = CollectionArtwork(
         source_name=NGA_SOURCE_NAME,
