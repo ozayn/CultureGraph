@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     admin_emails: str = ""
     app_env: str = "development"
+    visual_embedding_backend: str = "openclip"
+    visual_embedding_model: str = "ViT-B-32"
+    visual_embedding_pretrained: str = "openai"
+    nga_index_limit: int = 2000
+    visual_match_top_k: int = 12
+    visual_match_high_threshold: float = 0.82
+    visual_match_possible_threshold: float = 0.68
 
     @property
     def is_production(self) -> bool:

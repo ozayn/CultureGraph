@@ -9,6 +9,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL",
     "postgresql://culturegraph:culturegraph@localhost:5432/culturegraph_test",
 )
+os.environ.setdefault("VISUAL_EMBEDDING_BACKEND", "test")
 
 from collections.abc import Generator, Iterator
 

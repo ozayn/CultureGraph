@@ -161,6 +161,38 @@ export interface ArtworkLookupResponse {
   retrieval_intent?: RetrievalIntent;
 }
 
+export type VisualMatchConfidenceLabel = "high" | "possible" | "weak";
+export type VisualMatchIndexStatus = "ready" | "missing" | "empty";
+
+export interface VisualMatchCandidate {
+  title: string;
+  artist?: string | null;
+  date?: string | null;
+  medium?: string | null;
+  image_url?: string | null;
+  thumbnail_url?: string | null;
+  object_url?: string | null;
+  source_name: string;
+  similarity_score: number;
+  confidence_label: VisualMatchConfidenceLabel;
+  match_reason: string;
+  accession_number?: string | null;
+  rights_label?: string | null;
+  external_id?: string | null;
+}
+
+export interface VisualMatchResponse {
+  candidates: VisualMatchCandidate[];
+  source_name?: string | null;
+  museum_collection_name?: string | null;
+  search_scope?: "museum" | "none";
+  embedding_model?: string | null;
+  notice?: string | null;
+  index_status?: VisualMatchIndexStatus;
+  query_image_url?: string | null;
+  disclaimer?: string;
+}
+
 export type ArtworkLookupMediumFilter = "2d" | "3d" | "any";
 
 export interface Annotation {

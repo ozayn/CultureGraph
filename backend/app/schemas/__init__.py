@@ -596,3 +596,35 @@ class ArtworkEnrichmentRead(BaseModel):
     lookup: ArtworkLookupResponse | None = None
     identification: ArtworkIdentificationRead | None = None
     visual_analysis: VisualAnalysisRead | None = None
+
+
+class VisualMatchCandidateRead(BaseModel):
+    title: str
+    artist: str | None = None
+    date: str | None = None
+    medium: str | None = None
+    image_url: str | None = None
+    thumbnail_url: str | None = None
+    object_url: str | None = None
+    source_name: str
+    similarity_score: float = Field(ge=0.0, le=1.0)
+    confidence_label: Literal["high", "possible", "weak"]
+    match_reason: str
+    accession_number: str | None = None
+    rights_label: str | None = None
+    external_id: str | None = None
+
+
+class VisualMatchResponse(BaseModel):
+    candidates: list[VisualMatchCandidateRead]
+    source_name: str | None = None
+    museum_collection_name: str | None = None
+    search_scope: Literal["museum", "none"] = "museum"
+    embedding_model: str | None = None
+    notice: str | None = None
+    index_status: Literal["ready", "missing", "empty"] = "ready"
+    query_image_url: str | None = None
+    disclaimer: str = (
+        "Best visual matches from the museum collection. "
+        "Review the catalog image before applying metadata."
+    )

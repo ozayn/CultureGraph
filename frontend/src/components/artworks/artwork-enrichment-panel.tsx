@@ -8,6 +8,7 @@ import { AiSuggestedAnnotations } from "@/components/artworks/ai-suggested-annot
 import {
   LookupCandidateList,
 } from "@/components/artworks/enrichment-lookup-candidates";
+import { VisualMatchCandidateList } from "@/components/artworks/visual-match-candidates";
 import { ArtworkIdentificationPanel } from "@/components/artworks/artwork-identification-panel";
 import {
   ResearchMetadataApply,
@@ -23,6 +24,7 @@ import {
 import { museumCollectionSearchLabel } from "@/lib/museum-collection";
 import { parseSuggestedAnnotations } from "@/lib/research-suggestions";
 import { useArtworkEnrichment } from "@/lib/use-artwork-enrichment";
+import { useArtworkVisualMatch } from "@/lib/use-artwork-visual-match";
 import type {
   AiSuggestedAnnotation,
   Annotation,
@@ -79,7 +81,13 @@ export function ArtworkEnrichmentPanel({
   });
   const [suggestions, setSuggestions] = useState<AiSuggestedAnnotation[]>([]);
   const [rerunning, setRerunning] = useState(false);
-  const [exactSearchActive, setExactSearchActive] = useState(false);
+  const [textSearchActive, setTextSearchActive] = useState(false);
+  const {
+    result: visualMatch,
+    loading: visualMatchLoading,
+    error: visualMatchError,
+    runVisualMatch,
+  } = useArtworkVisualMatch(artworkId);
   const autoStartedRef = useRef(false);
   const [revealed, setRevealed] = useState({
     identification: false,
@@ -101,8 +109,13 @@ export function ArtworkEnrichmentPanel({
   const stageLabel = useMemo(() => {
     const collectionLabel =
       state?.lookup?.museum_collection_name ?? visitMuseumName ?? null;
+    if (visualMatchLoading) {
+      return collectionLabel
+        ? `Searching ${collectionLabel} by visual similarity…`
+        : "Searching the museum collection by visual similarity…";
+    }
     const searchingCollectionLabel =
-      state?.lookup?.retrieval_intent === "exact_artwork" || exactSearchActive
+      textSearchActive
         ? collectionLabel
           ? `Searching the ${collectionLabel} collection…`
           : "Searching the museum collection…"
@@ -118,14 +131,14 @@ export function ArtworkEnrichmentPanel({
     if (state.status === "pending") return "Analyzing artwork…";
     if (state.status === "running") return "Analyzing artwork…";
     return null;
-  }, [exactSearchActive, state, visitMuseumName]);
+  }, [state, textSearchActive, visitMuseumName, visualMatchLoading]);
 
   useEffect(() => {
     if (!active && !rerunning && state?.lookup?.retrieval_intent === "exact_artwork") {
-      setExactSearchActive(true);
+      setTextSearchActive(true);
     }
     if (!active && !rerunning && state?.lookup?.retrieval_intent !== "exact_artwork") {
-      setExactSearchActive(false);
+      setTextSearchActive(false);
     }
   }, [active, rerunning, state?.lookup?.retrieval_intent]);
 
@@ -166,10 +179,16 @@ export function ArtworkEnrichmentPanel({
     onHintsChange?.(metadataHints);
   }, [metadataHints, onHintsChange]);
 
+  async function runVisualArtworkMatch() {
+    if (visualMatchLoading || active || rerunning) return;
+    setRevealed((current) => ({ ...current, lookup: true }));
+    await runVisualMatch();
+  }
+
   async function rerunEnrichment(options: { broadenSearch?: boolean; exactArtwork?: boolean } = {}) {
     if (active || rerunning) return;
     setRerunning(true);
-    setExactSearchActive(Boolean(options.exactArtwork));
+    setTextSearchActive(Boolean(options.exactArtwork));
     setRevealed({
       identification: false,
       context: false,
@@ -181,7 +200,7 @@ export function ArtworkEnrichmentPanel({
     } finally {
       setRerunning(false);
       if (!options.exactArtwork) {
-        setExactSearchActive(false);
+        setTextSearchActive(false);
       }
     }
   }
@@ -216,7 +235,7 @@ export function ArtworkEnrichmentPanel({
           <div>
             <h3 className="font-heading text-lg">AI assistant</h3>
             <p className="text-sm text-muted-foreground">
-              Visual analysis, retrieval-assisted identification, and collection matches.
+              Visual collection matching first, with optional AI style analysis after you confirm a match.
             </p>
           </div>
         </div>
@@ -227,17 +246,27 @@ export function ArtworkEnrichmentPanel({
               variant="default"
               size="sm"
               className="min-h-9"
-              disabled={active || rerunning}
+              disabled={active || rerunning || visualMatchLoading}
+              onClick={() => void runVisualArtworkMatch()}
+            >
+              Find artwork match
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-9"
+              disabled={active || rerunning || visualMatchLoading}
               onClick={() => void rerunEnrichment({ exactArtwork: true })}
             >
-              Find exact artwork
+              Try text-based search
             </Button>
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="min-h-9 self-start text-muted-foreground"
-              disabled={active || rerunning}
+              disabled={active || rerunning || visualMatchLoading}
               onClick={() => void rerunEnrichment()}
             >
               <RefreshCw className={cn("mr-1.5 size-3.5", rerunning && "animate-spin")} />
@@ -247,9 +276,11 @@ export function ArtworkEnrichmentPanel({
         ) : null}
       </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error || visualMatchError ? (
+        <p className="text-sm text-destructive">{visualMatchError ?? error}</p>
+      ) : null}
 
-      {active || rerunning ? (
+      {active || rerunning || visualMatchLoading ? (
         <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-3 text-sm text-foreground">
           <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
           <span>{stageLabel ?? "Analyzing artwork…"}</span>
@@ -262,9 +293,9 @@ export function ArtworkEnrichmentPanel({
         </p>
       ) : null}
 
-      {hasImage && canEdit && !artworkHasImageRegion(artwork) && !active && !rerunning ? (
+      {hasImage && canEdit && !artworkHasImageRegion(artwork) && !active && !rerunning && !visualMatchLoading ? (
         <p className="text-sm text-muted-foreground">
-          Set the artwork area on your photo before finding the exact catalog match.
+          Set the artwork area on your photo before searching for a visual match.
         </p>
       ) : null}
 
@@ -368,7 +399,18 @@ export function ArtworkEnrichmentPanel({
         </div>
       ) : null}
 
-      {state?.lookup && revealed.lookup ? (
+      {visualMatch && revealed.lookup ? (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-3">
+          <VisualMatchCandidateList
+            artwork={artwork}
+            match={visualMatch}
+            canEdit={canEdit}
+            onApplied={(updated) => onArtworkUpdated?.(updated)}
+          />
+        </div>
+      ) : null}
+
+      {state?.lookup && revealed.lookup && textSearchActive ? (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-3">
           <LookupCandidateList
             artwork={artwork}

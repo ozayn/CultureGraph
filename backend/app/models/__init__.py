@@ -170,3 +170,46 @@ class CulturalEntity(Base):
     )
 
     visit: Mapped["Visit"] = relationship(back_populates="cultural_entities")
+
+
+class CollectionArtwork(Base):
+    __tablename__ = "collection_artworks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_object_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    artist: Mapped[str | None] = mapped_column(String(512))
+    date: Mapped[str | None] = mapped_column(String(128))
+    medium: Mapped[str | None] = mapped_column(String(512))
+    image_url: Mapped[str | None] = mapped_column(String(1024))
+    thumbnail_url: Mapped[str | None] = mapped_column(String(1024))
+    object_url: Mapped[str | None] = mapped_column(String(1024))
+    rights_label: Mapped[str | None] = mapped_column(String(255))
+    metadata_json: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    embeddings: Mapped[list["CollectionImageEmbedding"]] = relationship(
+        back_populates="collection_artwork",
+        cascade="all, delete-orphan",
+    )
+
+
+class CollectionImageEmbedding(Base):
+    __tablename__ = "collection_image_embeddings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    collection_artwork_id: Mapped[int] = mapped_column(
+        ForeignKey("collection_artworks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    embedding_model: Mapped[str] = mapped_column(String(128), nullable=False)
+    embedding_vector: Mapped[list[float]] = mapped_column(JSON, nullable=False)
+    image_url: Mapped[str | None] = mapped_column(String(1024))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    collection_artwork: Mapped["CollectionArtwork"] = relationship(back_populates="embeddings")

@@ -16,6 +16,8 @@ from app.schemas import (
     ArtworkLookupResponse,
     ArtworkRead,
     ArtworkUpdate,
+    VisualMatchCandidateRead,
+    VisualMatchResponse,
 )
 from app.services.artwork_image_region import ArtworkImageRegion, regenerate_artwork_derivatives
 from app.services.artwork_images import normalize_artwork_image_update
@@ -26,6 +28,7 @@ from app.sources.routing import (
     museum_collection_display_name,
     resolve_lookup_sources,
 )
+from app.services.visual_matching import VisualMatchCandidate, match_artwork_visually
 from app.services.image_upload import (
     process_and_store_artwork_image,
     process_and_store_label_image,
@@ -149,6 +152,46 @@ def lookup_artwork_image(
         medium_type_filter=built.medium_type_filter,
         visit_museum_name=museum_name,
         broaden_search=broaden_sources,
+    )
+
+
+def _visual_match_read(candidate: VisualMatchCandidate) -> VisualMatchCandidateRead:
+    return VisualMatchCandidateRead(
+        title=candidate.title,
+        artist=candidate.artist,
+        date=candidate.date,
+        medium=candidate.medium,
+        image_url=candidate.image_url,
+        thumbnail_url=candidate.thumbnail_url,
+        object_url=candidate.object_url,
+        source_name=candidate.source_name,
+        similarity_score=candidate.similarity_score,
+        confidence_label=candidate.confidence_label,  # type: ignore[arg-type]
+        match_reason=candidate.match_reason,
+        accession_number=candidate.accession_number,
+        rights_label=candidate.rights_label,
+        external_id=candidate.external_id,
+    )
+
+
+@router.post("/{artwork_id}/visual-match", response_model=VisualMatchResponse)
+def visual_match_artwork(
+    artwork_id: int,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
+) -> VisualMatchResponse:
+    """Find nearest museum collection records by image embedding similarity."""
+    artwork = _get_artwork_or_404(db, artwork_id)
+    result = match_artwork_visually(db, artwork)
+    return VisualMatchResponse(
+        candidates=[_visual_match_read(candidate) for candidate in result.candidates],
+        source_name=result.source_name,
+        museum_collection_name=result.museum_collection_name,
+        search_scope=result.search_scope,  # type: ignore[arg-type]
+        embedding_model=result.embedding_model,
+        notice=result.notice,
+        index_status=result.index_status,  # type: ignore[arg-type]
+        query_image_url=result.query_image_url,
     )
 
 
