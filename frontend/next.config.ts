@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { securityResponseHeaders } from "./src/lib/security-headers";
+
 function apiImageRemotePattern() {
   const raw = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -22,6 +24,14 @@ function apiImageRemotePattern() {
 }
 
 const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [...securityResponseHeaders],
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       apiImageRemotePattern(),
