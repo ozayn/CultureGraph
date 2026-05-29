@@ -62,7 +62,33 @@ function hasStrongMatches(lookup: ArtworkLookupResponse): boolean {
   );
 }
 
-function sectionHeading(lookup: ArtworkLookupResponse): string {
+function sectionHeading(
+  lookup: ArtworkLookupResponse,
+  identification?: ArtworkIdentification | null
+): string {
+  if (identification?.retrieval_intent === "exact_artwork") {
+    if (identification.identification_mode === "catalog_match") {
+      return "Strong collection match";
+    }
+    if (hasStrongMatches(lookup) || lookup.candidates.length > 0) {
+      const shortLabel = museumShortLabel(lookup.museum_collection_name);
+      const artist =
+        identification.top_candidate?.artist?.split(" ").slice(-1)[0] ??
+        identification.suggested_artist?.split(" ").slice(-1)[0];
+      if (shortLabel && artist) {
+        return `Related ${shortLabel} works · Similar ${artist} works`;
+      }
+      if (shortLabel) {
+        return `Related ${shortLabel} works`;
+      }
+      if (artist) {
+        return `Similar ${artist} works`;
+      }
+      return "Related collection works";
+    }
+    return "No close collection match";
+  }
+
   const shortLabel = museumShortLabel(lookup.museum_collection_name);
   if (lookup.search_scope === "museum" && shortLabel) {
     if (hasStrongMatches(lookup)) {
@@ -152,7 +178,7 @@ export function LookupCandidateList({
     <div className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-          {sectionHeading(lookup)}
+          {sectionHeading(lookup, identification)}
         </p>
         {description ? (
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>

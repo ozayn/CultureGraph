@@ -542,7 +542,7 @@ class ArtworkLookupResponse(BaseModel):
         "ocr_label",
         "visual_keywords",
     ] = "saved_title"
-    query_strategy: Literal["exact", "fuzzy", "artist_fallback", "broad"] | None = None
+    query_strategy: Literal["semantic", "exact", "fuzzy", "artist_fallback", "broad"] | None = None
     artist_fallback: bool = False
     alternate_title: str | None = None
     expected_medium_type: str | None = None
@@ -554,12 +554,14 @@ class ArtworkLookupResponse(BaseModel):
     notice: str | None = None
     search_scope: Literal["museum", "broad", "none"] = "museum"
     museum_collection_name: str | None = None
+    retrieval_intent: Literal["standard", "exact_artwork"] = "standard"
 
 
 class ArtworkIdentificationRead(BaseModel):
-    identification_mode: Literal["catalog_match", "possible_match", "style_subject"]
+    identification_mode: Literal["catalog_match", "possible_match", "style_subject", "exact_not_found"]
     confidence_level: Literal["high", "medium", "low"]
     display_summary: str
+    retrieval_intent: Literal["standard", "exact_artwork"] = "standard"
     style_assessment: str | None = None
     subject_assessment: str | None = None
     iconography_notes: list[str] = Field(default_factory=list)

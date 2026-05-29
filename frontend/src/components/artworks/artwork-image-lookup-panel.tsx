@@ -45,6 +45,7 @@ const QUERY_SOURCE_LABELS: Record<ArtworkLookupQuerySource, string> = {
 };
 
 const QUERY_STRATEGY_LABELS: Record<ArtworkLookupQueryStrategy, string> = {
+  semantic: "Visual + semantic collection search",
   exact: "Exact title match",
   fuzzy: "Fuzzy title match",
   artist_fallback: "Related works by artist",

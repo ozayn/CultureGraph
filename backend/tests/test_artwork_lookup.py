@@ -743,5 +743,5 @@ async def test_lookup_approximate_ai_title_returns_degas_matches(
     assert lookup_response.status_code == 200
     payload = lookup_response.json()
     assert payload["candidates"]
-    assert payload["query_strategy"] in {"exact", "fuzzy", "artist_fallback", "broad"}
+    assert payload["query_strategy"] in {"semantic", "exact", "fuzzy", "artist_fallback", "broad"}
     assert any("degas" in (c.get("artist") or "").lower() for c in payload["candidates"])

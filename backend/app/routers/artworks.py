@@ -237,10 +237,6 @@ async def upload_artwork_image(
     db.commit()
     db.refresh(artwork)
 
-    from app.services.artwork_enrichment import request_artwork_enrichment
-
-    request_artwork_enrichment(db, artwork)
-
     logger.info(
         "artwork image stored artwork_id=%s url=%s bytes=%s",
         artwork_id,
@@ -362,4 +358,8 @@ def set_artwork_image_region(
     artwork.crop_height_percent = regenerated.crop_height_percent
     db.commit()
     db.refresh(artwork)
+
+    from app.services.artwork_enrichment import request_artwork_enrichment
+
+    request_artwork_enrichment(db, artwork, force=True)
     return artwork

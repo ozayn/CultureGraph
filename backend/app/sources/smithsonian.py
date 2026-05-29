@@ -34,12 +34,19 @@ def collect_smithsonian_scored_candidates(
         return []
 
     search_text, artist_text = resolve_search_terms(query)
-    if not search_text and not artist_text:
+    if not search_text and not artist_text and not query.expanded_search_terms:
         return []
 
     scored: list[tuple[float, dict, ArtworkLookupCandidate]] = []
     for entry in _load_index():
-        score = score_artwork_entry(entry, search_text, artist_text, query.year_period)
+        score = score_artwork_entry(
+            entry,
+            search_text,
+            artist_text,
+            query.year_period,
+            query=query,
+            strict_artist_gate=not query.semantic_search,
+        )
         if score < 0.15:
             continue
         museum_name = entry.get("source_name") or "Smithsonian Open Access"

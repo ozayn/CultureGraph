@@ -47,7 +47,8 @@ def _has_plausible_hypothesis(draft: ResearchDraft) -> bool:
     artist = (draft.visual_hypothesis_artist or "").strip()
     return bool(title or artist)
 
-IdentificationMode = Literal["catalog_match", "possible_match", "style_subject"]
+IdentificationMode = Literal["catalog_match", "possible_match", "style_subject", "exact_not_found"]
+RetrievalIntent = Literal["standard", "exact_artwork"]
 ConfidenceLevel = Literal["high", "medium", "low"]
 
 HIGH_IDENTITY = VERIFIED_IDENTITY_MIN
@@ -58,6 +59,7 @@ class ArtworkIdentification(BaseModel):
     identification_mode: IdentificationMode
     confidence_level: ConfidenceLevel
     display_summary: str
+    retrieval_intent: RetrievalIntent = "standard"
     style_assessment: str | None = None
     subject_assessment: str | None = None
     iconography_notes: list[str] = Field(default_factory=list)
@@ -338,7 +340,16 @@ def build_identification(
     visual: VisualAnalysis | None = None,
     *,
     visit_museum_name: str | None = None,
+    exact_artwork_search: bool = False,
 ) -> ArtworkIdentification:
+    if exact_artwork_search:
+        return _build_exact_artwork_identification(
+            draft,
+            lookup,
+            visual,
+            visit_museum_name=visit_museum_name,
+        )
+
     visual = visual or draft.visual_analysis
     if visual and not isinstance(visual, VisualAnalysis):
         visual = VisualAnalysis.model_validate(visual.model_dump())
@@ -548,6 +559,7 @@ def build_identification(
         identification_mode=mode,
         confidence_level=level,
         display_summary=display,
+        retrieval_intent="standard",
         style_assessment=style,
         subject_assessment=subject,
         iconography_notes=iconography,
@@ -561,6 +573,206 @@ def build_identification(
         visual_hypothesis_confidence=visual_hypothesis_confidence,
         visual_hypothesis_reason=visual_hypothesis_reason,
         hypothesis_source=hypothesis_source,
+        catalog_title=catalog_title,
+        catalog_artist=catalog_artist,
+        visual_keywords=keywords[:12],
+        visual_tags=visual_tags[:16],
+        catalog_confidence=identity_score if mode == "catalog_match" else None,
+        identity_certainty=identity_score,
+        visual_similarity=visual_score,
+        match_explanation=match_explanation,
+        uncertainty_notes=uncertainty_notes[:4],
+        evidence=evidence,
+    )
+
+
+def _build_exact_artwork_identification(
+    draft: ResearchDraft,
+    lookup: ArtworkLookupResponse,
+    visual: VisualAnalysis | None = None,
+    *,
+    visit_museum_name: str | None = None,
+) -> ArtworkIdentification:
+    visual = visual or draft.visual_analysis
+    if visual and not isinstance(visual, VisualAnalysis):
+        visual = VisualAnalysis.model_validate(visual.model_dump())
+    keywords = collect_visual_keywords(
+        visual,
+        period_or_movement=draft.period_or_movement,
+        ocr_label_text=None,
+    )
+    visual_tags = collect_weighted_visual_tags(visual)
+
+    reranked = rerank_candidates_with_visual(
+        lookup.candidates,
+        visual,
+        keywords,
+        draft=draft,
+        lookup=lookup,
+        visit_museum_name=visit_museum_name,
+    )
+    top = reranked[0] if reranked else None
+    alternatives = reranked[1:6] if len(reranked) > 1 else []
+
+    museum_collection_name = lookup.museum_collection_name or museum_collection_display_name(
+        visit_museum_name
+    )
+    museum_label = museum_short_label(museum_collection_name) if museum_collection_name else None
+    search_scope = lookup.search_scope or "museum"
+
+    style = _style_assessment(visual, draft.period_or_movement)
+    subject = _subject_assessment(visual)
+    iconography = _iconography_notes(visual)
+
+    identity_score = top.identity_certainty if top and top.identity_certainty is not None else (
+        top.confidence if top else None
+    )
+    visual_score = top.visual_similarity if top else None
+    low_flag = bool(top and top.low_confidence)
+    verified = bool(
+        top
+        and (top.identity_certainty or 0) >= HIGH_IDENTITY
+        and (
+            bool(draft.ocr_label_text)
+            or (top.match_tier == "high" and not _has_plausible_hypothesis(draft))
+        )
+    )
+    level = _confidence_level(identity_score, low_flag=low_flag, verified=verified)
+
+    match_reasons: list[str] = list(top.match_reasons) if top else []
+    uncertainty_notes: list[str] = []
+    match_explanation = top.match_explanation if top else None
+    suggested_title: str | None = None
+    suggested_artist: str | None = None
+    catalog_title: str | None = None
+    catalog_artist: str | None = None
+    mode: IdentificationMode = "exact_not_found"
+    display = ""
+
+    if lookup.query_used:
+        if museum_collection_name and search_scope == "museum":
+            match_reasons.append(
+                f"Visual + semantic collection search in {museum_collection_name}: {lookup.query_used}"
+            )
+        else:
+            match_reasons.append(f"Visual + semantic collection search: {lookup.query_used}")
+
+    collection_phrase = museum_collection_name or "museum collection"
+    hypothesis_artist_name = (draft.visual_hypothesis_artist or draft.possible_artist or "").strip()
+    artist_label = (
+        (top.artist.split()[-1] if top and top.artist else None)
+        or (hypothesis_artist_name.split()[-1] if hypothesis_artist_name else None)
+    )
+    if top and identity_score is not None and identity_score >= MEDIUM_IDENTITY and verified:
+        mode = "catalog_match"
+        artist_suffix = f" by {top.artist}" if top.artist else ""
+        display = f"Strong collection match: {top.title}{artist_suffix} ({top.source_name})."
+        suggested_title = top.title
+        suggested_artist = top.artist
+        catalog_title = top.title
+        catalog_artist = top.artist
+    elif top and (
+        (identity_score is not None and identity_score >= 0.45)
+        or (visual_score is not None and visual_score >= 0.22)
+        or not top.low_confidence
+    ):
+        mode = "possible_match"
+        artist_suffix = f" by {top.artist}" if top.artist else ""
+        if museum_label and artist_label:
+            display = (
+                f"Related {museum_label} works. "
+                f"Similar {artist_label} works include {top.title}{artist_suffix}. "
+                "Compare the catalog image with your photo."
+            )
+        elif museum_label:
+            display = (
+                f"Related {museum_label} works. "
+                f"Top candidate: {top.title}{artist_suffix}. "
+                "Compare the catalog image with your photo."
+            )
+        elif artist_label:
+            display = (
+                f"Similar {artist_label} works include {top.title}{artist_suffix}. "
+                "Compare the catalog image with your photo."
+            )
+        else:
+            display = (
+                f"Related collection works include {top.title}{artist_suffix}. "
+                "Compare the catalog image with your photo."
+            )
+        suggested_title = None
+        suggested_artist = None
+        level = "medium" if (identity_score or 0) >= 0.55 else "low"
+        uncertainty_notes.append(
+            "Visual, semantic, and catalog overlap suggest related records — confirm against the museum image."
+        )
+    else:
+        mode = "exact_not_found"
+        if museum_label and artist_label:
+            display = f"No close match in the {museum_label} collection. Showing similar {artist_label} works if available."
+        elif museum_label:
+            display = f"No close match in the {museum_label} collection."
+        else:
+            display = f"No close match found in the {collection_phrase}."
+        suggested_title = None
+        suggested_artist = None
+        level = "low"
+        uncertainty_notes.append(
+            "No strong catalog match from visual + semantic retrieval. Style analysis is shown separately below."
+        )
+
+    evidence = None
+    if top:
+        title_score, artist_score, _ = _candidate_text_scores(top, draft, lookup)
+        calibrated = calibrate_candidate_confidence(
+            title_score=title_score,
+            artist_score=artist_score,
+            text_score=top.confidence,
+            candidate_title=top.title,
+            candidate_artist=top.artist,
+            search_title=_draft_search_title(draft, lookup),
+            search_artist=_draft_search_artist(draft),
+            has_title_query=False,
+            match_reasons=list(top.match_reasons or []),
+            ocr_label_text=draft.ocr_label_text,
+            visual_subject=visual.subject if visual else None,
+            visual_keywords=keywords,
+            visual_overlap=visual_score or 0.0,
+            museum_context_match=_candidate_museum_context_match(
+                top,
+                museum_collection_name=museum_collection_name,
+                search_scope=search_scope,
+            ),
+        )
+        evidence = IdentityEvidenceRead(
+            exact_title_match=calibrated.evidence.exact_title_match,
+            ocr_supported=calibrated.evidence.ocr_supported,
+            artist_aligned=calibrated.evidence.artist_aligned,
+            clip_similarity=calibrated.evidence.clip_similarity,
+            reverse_image_similarity=calibrated.evidence.reverse_image_similarity,
+            museum_context_match=calibrated.evidence.museum_context_match,
+            composition_overlap=calibrated.evidence.composition_overlap,
+            subject_overlap=calibrated.evidence.subject_overlap,
+        )
+
+    return ArtworkIdentification(
+        identification_mode=mode,
+        confidence_level=level,
+        display_summary=display,
+        retrieval_intent="exact_artwork",
+        style_assessment=style,
+        subject_assessment=subject,
+        iconography_notes=iconography,
+        top_candidate=top,
+        alternative_matches=alternatives,
+        match_reasons=match_reasons[:6],
+        suggested_title=suggested_title,
+        suggested_artist=suggested_artist,
+        visual_hypothesis_title=None,
+        visual_hypothesis_artist=None,
+        visual_hypothesis_confidence=None,
+        visual_hypothesis_reason=None,
+        hypothesis_source=None,
         catalog_title=catalog_title,
         catalog_artist=catalog_artist,
         visual_keywords=keywords[:12],
@@ -599,6 +811,22 @@ def calibrate_research_draft(
         if identification.suggested_artist:
             updated.possible_artist = identification.suggested_artist
         updated.confidence = identification.identity_certainty or updated.confidence
+    elif identification.retrieval_intent == "exact_artwork":
+        updated.catalog_title = identification.catalog_title
+        updated.catalog_artist = identification.catalog_artist
+        updated.catalog_confidence = identification.catalog_confidence
+        updated.possible_title = None
+        updated.possible_artist = None
+        updated.visual_hypothesis_title = None
+        updated.visual_hypothesis_artist = None
+        updated.visual_hypothesis_confidence = None
+        updated.visual_hypothesis_reason = None
+        updated.hypothesis_source = None
+        if identification.identity_certainty is not None:
+            updated.confidence = min(
+                identification.identity_certainty,
+                draft.confidence or identification.identity_certainty,
+            )
     else:
         updated.catalog_title = None
         updated.catalog_artist = None

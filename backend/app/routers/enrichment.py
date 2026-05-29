@@ -59,6 +59,7 @@ def start_artwork_enrichment(
     _user: Annotated[dict[str, str], Depends(require_admin_user)],
     db: Session = Depends(get_db),
     broaden_search: bool = Query(default=False),
+    exact_artwork: bool = Query(default=False),
 ) -> ArtworkEnrichmentRead:
     artwork = _get_artwork_or_404(db, artwork_id)
     if not artwork.image_url:
@@ -67,7 +68,13 @@ def start_artwork_enrichment(
             detail="Upload a photo before running AI enrichment.",
         )
 
-    request_artwork_enrichment(db, artwork, broaden_search=broaden_search)
+    request_artwork_enrichment(
+        db,
+        artwork,
+        broaden_search=broaden_search,
+        exact_artwork_search=exact_artwork,
+        force=True,
+    )
     db.refresh(artwork)
 
     return ArtworkEnrichmentRead(

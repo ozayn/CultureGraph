@@ -218,6 +218,107 @@ def visual_keywords_query(keywords: Iterable[str], *, limit: int = 8) -> str:
     return " · ".join(parts)
 
 
+_PORTRAIT_HINTS = (
+    "portrait",
+    "young man",
+    "young woman",
+    "man",
+    "woman",
+    "figure",
+    "bust",
+    "head",
+    "sitter",
+)
+_RENAISSANCE_HINTS = ("renaissance", "italian", "northern", "florentine", "flemish", "venetian")
+_GARMENT_COLOR_HINTS = ("red", "pink", "crimson", "rose", "scarlet", "maroon")
+
+
+def _subject_search_terms(subject: str | None) -> list[str]:
+    if not subject:
+        return []
+    normalized = normalize(subject)
+    terms: list[str] = []
+    if "portrait" in normalized:
+        terms.append("portrait")
+    if "young man" in normalized or ("young" in normalized and "man" in normalized):
+        terms.append("young man")
+    elif "young woman" in normalized or ("young" in normalized and "woman" in normalized):
+        terms.append("young woman")
+    elif " man" in f" {normalized}" or normalized.endswith(" man"):
+        terms.append("portrait")
+    for hint in _PORTRAIT_HINTS:
+        if hint in normalized and hint not in terms:
+            terms.append(hint)
+    if subject.strip() and subject.strip() not in terms:
+        terms.append(subject.strip())
+    return _dedupe_preserve_order(terms)
+
+
+def _garment_color_terms(visual: VisualAnalysis) -> list[str]:
+    terms: list[str] = []
+    palette_blob = normalize(" ".join(visual.color_palette))
+    clothing_blob = normalize(" ".join(visual.clothing))
+    combined = f"{palette_blob} {clothing_blob}"
+    for color in _GARMENT_COLOR_HINTS:
+        if color in combined:
+            terms.append(f"{color} garment")
+    terms.extend(visual.clothing[:3])
+    return _dedupe_preserve_order(terms)
+
+
+def _period_style_terms(visual: VisualAnalysis, period_or_movement: str | None) -> list[str]:
+    terms: list[str] = []
+    if period_or_movement:
+        terms.append(period_or_movement)
+    terms.extend(visual.period_clues[:3])
+    if visual.movement_style:
+        terms.append(visual.movement_style)
+    terms.extend(visual.style_signals[:3])
+
+    blob = normalize(" ".join(terms))
+    for hint in _RENAISSANCE_HINTS:
+        if hint in blob and hint.title() not in terms and hint not in terms:
+            terms.append(hint)
+    if "renaissance" in blob and "Renaissance" not in terms:
+        terms.append("Renaissance")
+    return _dedupe_preserve_order(terms)
+
+
+def _medium_terms(visual: VisualAnalysis) -> list[str]:
+    terms = list(visual.medium_clues[:4])
+    blob = normalize(" ".join(terms))
+    if "oil" in blob and not any("oil" in normalize(item) for item in terms):
+        terms.append("oil painting")
+    return _dedupe_preserve_order(terms)
+
+
+def collect_exact_artwork_keywords(
+    visual: VisualAnalysis | None,
+    *,
+    period_or_movement: str | None = None,
+) -> list[str]:
+    """High-recall visual terms for exact artwork retrieval in a museum collection."""
+    if not visual:
+        return []
+
+    keywords: list[str] = []
+
+    def extend(values: Iterable[str]) -> None:
+        keywords.extend(_dedupe_preserve_order(values))
+
+    extend(_subject_search_terms(visual.subject))
+    extend(_garment_color_terms(visual))
+    extend(_period_style_terms(visual, period_or_movement))
+    extend(_medium_terms(visual))
+    extend(visual.visual_tags[:8])
+    extend(visual.composition[:2])
+    extend(visual.notable_objects[:2])
+    extend(visual.posture_gesture[:2])
+    extend(visual.thematic_cues[:2])
+
+    return _dedupe_preserve_order(keywords)
+
+
 def visual_tag_ranking_adjustment(
     candidate_text: str,
     visual_tags: list[str],

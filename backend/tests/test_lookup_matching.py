@@ -28,7 +28,7 @@ def test_lookup_four_dancers_degas_returns_nga_matches() -> None:
     result = lookup_artwork_candidates(query)
     matches = _all_matches(result)
     assert matches
-    assert result.query_strategy in {"exact", "fuzzy", "artist_fallback", "broad"}
+    assert result.query_strategy in {"semantic", "exact", "fuzzy", "artist_fallback", "broad"}
     titles = " ".join(candidate.title.lower() for candidate in matches)
     assert "dancer" in titles or "degas" in titles.lower()
     degas_hits = [c for c in matches if c.artist and "degas" in c.artist.lower()]
@@ -45,5 +45,5 @@ def test_lookup_artist_fallback_strategy_when_title_absent_in_index() -> None:
     result = lookup_artwork_candidates(query)
     matches = _all_matches(result)
     assert matches
-    assert result.query_strategy in {"exact", "artist_fallback", "broad", "fuzzy"}
+    assert result.query_strategy in {"semantic", "exact", "artist_fallback", "broad", "fuzzy"}
     assert any("degas" in (c.artist or "").lower() for c in matches)

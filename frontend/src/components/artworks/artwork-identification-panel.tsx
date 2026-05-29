@@ -7,14 +7,30 @@ import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { isPlaceholderTitle } from "@/lib/artwork-metadata";
-import type { Artwork, ArtworkIdentification } from "@/lib/types";
+import type { Artwork, ArtworkIdentification, IdentificationMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const MODE_LABELS: Record<ArtworkIdentification["identification_mode"], string> = {
+const MODE_LABELS: Record<IdentificationMode, string> = {
   catalog_match: "Collection match",
   possible_match: "Related / possible matches",
   style_subject: "Style & subject analysis",
+  exact_not_found: "No close collection match",
 };
+
+function modeLabel(
+  identification: Pick<ArtworkIdentification, "identification_mode" | "retrieval_intent">
+): string {
+  if (identification.retrieval_intent === "exact_artwork") {
+    if (identification.identification_mode === "catalog_match") {
+      return "Strong collection match";
+    }
+    if (identification.identification_mode === "possible_match") {
+      return "Related collection works";
+    }
+    return "No close collection match";
+  }
+  return MODE_LABELS[identification.identification_mode];
+}
 
 const CONFIDENCE_STYLES: Record<ArtworkIdentification["confidence_level"], string> = {
   high: "border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
@@ -77,6 +93,8 @@ export function ArtworkIdentificationPanel({
     identification_mode === "catalog_match" && (suggested_title || suggested_artist);
 
   const showVisualHypothesis =
+    identification.retrieval_intent !== "exact_artwork" &&
+    identification_mode !== "exact_not_found" &&
     identification_mode !== "catalog_match" &&
     Boolean(visual_hypothesis_title || visual_hypothesis_artist);
 
@@ -115,7 +133,7 @@ export function ArtworkIdentificationPanel({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-          {MODE_LABELS[identification_mode]}
+          {modeLabel(identification)}
         </span>
         <span
           className={cn(
@@ -238,7 +256,9 @@ export function ArtworkIdentificationPanel({
         </div>
       ) : null}
 
-      {(style_assessment || subject_assessment) && !showExactSuggestion ? (
+      {(style_assessment || subject_assessment) &&
+      identification.retrieval_intent !== "exact_artwork" &&
+      !showExactSuggestion ? (
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           {style_assessment ? (
             <div>

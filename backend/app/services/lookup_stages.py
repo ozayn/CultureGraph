@@ -1,9 +1,9 @@
-"""Multi-stage museum lookup: exact → fuzzy → artist fallback → broad."""
+"""Multi-stage museum lookup: semantic → fuzzy → artist fallback → broad."""
 
 from __future__ import annotations
 
 from app.services.lookup_ranking import partition_lookup_candidates, rank_lookup_candidates
-from app.services.lookup_types import STRATEGY_ORDER, LookupResult, LookupStrategy
+from app.services.lookup_types import SEMANTIC_STRATEGY_ORDER, STRATEGY_ORDER, LookupResult, LookupStrategy
 from app.sources.aic import collect_aic_scored_candidates
 from app.sources.base import ArtworkLookupQuery
 from app.sources.met import collect_met_scored_candidates
@@ -37,7 +37,7 @@ def lookup_artwork_candidates_staged(
     if "wikimedia" in sources:
         raw.extend(collect_wikimedia_scored_candidates(query))
 
-    candidate_limit = 24 if len(sources) == 1 else 12
+    candidate_limit = 36 if force_broad else (24 if len(sources) == 1 else 12)
     result = _rank_staged(
         raw,
         query,
@@ -72,7 +72,13 @@ def _rank_staged(
     if not raw:
         return LookupResult(candidates=[], query_strategy=None)
 
-    strategies: tuple[LookupStrategy, ...] = ("broad",) if force_broad else STRATEGY_ORDER
+    strategies: tuple[LookupStrategy, ...]
+    if query.semantic_search:
+        strategies = SEMANTIC_STRATEGY_ORDER
+    elif force_broad:
+        strategies = ("broad",)
+    else:
+        strategies = STRATEGY_ORDER
 
     fallback_related: list = []
     fallback_strategy: LookupStrategy | None = None
@@ -127,6 +133,8 @@ def _wikimedia_fallback_query(query: ArtworkLookupQuery) -> ArtworkLookupQuery:
         expected_medium_type=query.expected_medium_type,
         medium_type_filter=query.medium_type_filter,
         medium_hint=query.medium_hint,
+        semantic_search=query.semantic_search,
+        expanded_search_terms=query.expanded_search_terms,
     )
 
 

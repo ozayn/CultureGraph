@@ -135,6 +135,7 @@ export type ArtworkLookupQuerySource =
   | "visual_keywords";
 
 export type ArtworkLookupQueryStrategy =
+  | "semantic"
   | "exact"
   | "fuzzy"
   | "artist_fallback"
@@ -157,6 +158,7 @@ export interface ArtworkLookupResponse {
   notice?: string | null;
   search_scope?: ArtworkLookupSearchScope;
   museum_collection_name?: string | null;
+  retrieval_intent?: RetrievalIntent;
 }
 
 export type ArtworkLookupMediumFilter = "2d" | "3d" | "any";
@@ -197,7 +199,13 @@ export interface ResearchDraft {
   source?: string;
 }
 
-export type IdentificationMode = "catalog_match" | "possible_match" | "style_subject";
+export type IdentificationMode =
+  | "catalog_match"
+  | "possible_match"
+  | "style_subject"
+  | "exact_not_found";
+
+export type RetrievalIntent = "standard" | "exact_artwork";
 export type IdentificationConfidenceLevel = "high" | "medium" | "low";
 
 export interface IdentityEvidence {
@@ -236,6 +244,7 @@ export interface ArtworkIdentification {
   identification_mode: IdentificationMode;
   confidence_level: IdentificationConfidenceLevel;
   display_summary: string;
+  retrieval_intent?: RetrievalIntent;
   style_assessment?: string | null;
   subject_assessment?: string | null;
   iconography_notes?: string[];

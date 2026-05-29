@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -18,7 +20,15 @@ from app.routers import (
     visits,
 )
 
-app = FastAPI(title="CultureGraph API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    from app.services.artwork_enrichment import bind_app_event_loop
+
+    bind_app_event_loop(asyncio.get_running_loop())
+    yield
+
+
+app = FastAPI(title="CultureGraph API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

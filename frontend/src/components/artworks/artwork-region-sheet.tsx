@@ -57,7 +57,7 @@ export function ArtworkRegionSheet({
       open={open}
       onOpenChange={onOpenChange}
       title="Select the artwork area"
-      description="Frame the artwork inside your photo. Thumbnails and AI research will focus on this region."
+      description="Frame the artwork inside your photo. Thumbnails, AI vision, and exact artwork search use this cropped region."
     >
       {sourceUrl ? (
         <ArtworkRegionSelector

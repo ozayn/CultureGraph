@@ -7,10 +7,17 @@ from typing import Literal
 
 from app.sources.base import ArtworkLookupCandidate
 
-LookupStrategy = Literal["exact", "fuzzy", "artist_fallback", "broad"]
+LookupStrategy = Literal["semantic", "exact", "fuzzy", "artist_fallback", "broad"]
 
 STRATEGY_ORDER: tuple[LookupStrategy, ...] = (
-    "exact",
+    "semantic",
+    "fuzzy",
+    "artist_fallback",
+    "broad",
+)
+
+SEMANTIC_STRATEGY_ORDER: tuple[LookupStrategy, ...] = (
+    "semantic",
     "fuzzy",
     "artist_fallback",
     "broad",

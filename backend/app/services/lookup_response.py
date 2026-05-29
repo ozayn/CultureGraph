@@ -50,10 +50,10 @@ def lookup_notice(
             artist_label = (query.artist or "").strip() or "this artist"
             if collection_label:
                 return (
-                    f"No exact title match in {collection_label}. "
+                    f"No close match in {collection_label}. "
                     f"Showing related works by {artist_label}."
                 )
-            return f"No exact title match found. Showing related works by {artist_label}."
+            return f"No close match found. Showing related works by {artist_label}."
         return None
 
     if lookup_result.related_candidates and not lookup_result.candidates:
@@ -96,6 +96,7 @@ def lookup_response_from_result(
     search_scope: str | None = None,
     visit_museum_name: str | None = None,
     broaden_search: bool = False,
+    retrieval_intent: str = "standard",
 ) -> ArtworkLookupResponse:
     resolved_scope = search_scope or lookup_search_scope(
         query=query,
@@ -124,6 +125,7 @@ def lookup_response_from_result(
         medium_type_filter=medium_type_filter,
         search_scope=resolved_scope,  # type: ignore[arg-type]
         museum_collection_name=museum_collection_name,
+        retrieval_intent=retrieval_intent,  # type: ignore[arg-type]
         notice=lookup_notice(
             lookup_result=lookup_result,
             query=query,

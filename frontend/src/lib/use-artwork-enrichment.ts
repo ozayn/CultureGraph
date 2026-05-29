@@ -164,11 +164,14 @@ async function refreshEnrichmentEntry(
 
 async function startEnrichmentEntry(
   artworkId: number,
-  broadenSearch = false
+  options: { broadenSearch?: boolean; exactArtwork?: boolean } = {}
 ): Promise<ArtworkEnrichmentState | null> {
   try {
-    const query = broadenSearch ? "?broaden_search=true" : "";
-    await api.post(`/api/artworks/${artworkId}/enrichment${query}`);
+    const params = new URLSearchParams();
+    if (options.broadenSearch) params.set("broaden_search", "true");
+    if (options.exactArtwork) params.set("exact_artwork", "true");
+    const query = params.toString();
+    await api.post(`/api/artworks/${artworkId}/enrichment${query ? `?${query}` : ""}`);
   } catch {
     // Upload handler may have already queued enrichment.
   }
@@ -238,7 +241,8 @@ export function useArtworkEnrichment({
   );
 
   const startEnrichment = useCallback(
-    (broadenSearch = false) => startEnrichmentEntry(artworkId, broadenSearch),
+    (options: { broadenSearch?: boolean; exactArtwork?: boolean } = {}) =>
+      startEnrichmentEntry(artworkId, options),
     [artworkId]
   );
 

@@ -127,6 +127,26 @@ def resolve_search_terms(query: ArtworkLookupQuery) -> tuple[str, str]:
     return "", artist if not is_placeholder_artist(artist) else ""
 
 
+def api_search_query(
+    query: ArtworkLookupQuery,
+    search_text: str,
+    artist_text: str,
+    *,
+    suffix: str | None = None,
+) -> str:
+    """Build a museum API search string with semantic query expansion when enabled."""
+    if query.semantic_search and query.expanded_search_terms:
+        parts = list(query.expanded_search_terms[:8])
+        if artist_text and artist_text not in parts:
+            parts.append(artist_text)
+        if suffix and suffix not in parts:
+            parts.append(suffix)
+        return " ".join(part.strip() for part in parts if part.strip())
+
+    parts = [part for part in (search_text, artist_text, suffix) if part]
+    return " ".join(parts).strip()
+
+
 def expanded_tokens(text: str) -> set[str]:
     tokens: set[str] = set()
     for token in normalize(text).split():
@@ -355,10 +375,31 @@ def score_artwork_entry_detailed(
     artist_key: str = "artist",
     medium_key: str = "medium",
     strict_artist_gate: bool = True,
+    query: ArtworkLookupQuery | None = None,
 ) -> ScoreDetails:
     title = entry.get(title_key) or ""
     artist = entry.get(artist_key) or ""
     medium = entry.get(medium_key) or ""
+
+    effective_artist = artist_text or ((query.artist or "").strip() if query else "")
+    if query and query.semantic_search:
+        from app.services.semantic_retrieval import best_semantic_entry_score
+
+        phrases = query.expanded_search_terms or ((search_text,) if search_text else ())
+        combined, title_score, artist_score = best_semantic_entry_score(
+            entry,
+            phrases,
+            effective_artist,
+            year_period,
+            title_key=title_key,
+            artist_key=artist_key,
+            medium_key=medium_key,
+        )
+        if strict_artist_gate and effective_artist and artist_score < 0.38:
+            return ScoreDetails(combined=0.0, title_score=title_score, artist_score=artist_score)
+        if year_period:
+            combined = min(combined + year_bonus(year_period, entry.get("begin_year"), entry.get("end_year")), 1.0)
+        return ScoreDetails(combined=combined, title_score=title_score, artist_score=artist_score)
 
     title_score = title_similarity(search_text, title, medium) if search_text else 0.0
     artist_score = artist_similarity(artist_text, artist) if artist_text else 0.0
@@ -398,6 +439,7 @@ def score_artwork_entry(
     artist_key: str = "artist",
     medium_key: str = "medium",
     strict_artist_gate: bool = True,
+    query: ArtworkLookupQuery | None = None,
 ) -> float:
     return score_artwork_entry_detailed(
         entry,
@@ -408,6 +450,7 @@ def score_artwork_entry(
         artist_key=artist_key,
         medium_key=medium_key,
         strict_artist_gate=strict_artist_gate,
+        query=query,
     ).combined
 
 

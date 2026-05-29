@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 from typing import Any
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from sqlalchemy.orm import Session
 
@@ -25,7 +26,7 @@ from app.services.artwork_identification import (
     lookup_with_identification_candidates,
 )
 from app.services.artwork_lookup import lookup_artwork_candidates
-from app.services.lookup_query import build_retrieval_lookup_query
+from app.services.lookup_query import build_exact_artwork_lookup_query, build_retrieval_lookup_query
 from app.services.research import (
     ResearchConfigurationError,
     ResearchProviderError,
@@ -42,7 +43,17 @@ from app.sources.routing import museum_collection_display_name, resolve_lookup_s
 
 logger = logging.getLogger(__name__)
 
-_ENRICHMENT_BROADEN: dict[int, bool] = {}
+
+@dataclass
+class EnrichmentOptions:
+    broaden_search: bool = False
+    exact_artwork_search: bool = False
+
+
+_ENRICHMENT_OPTIONS: dict[int, EnrichmentOptions] = {}
+_app_event_loop: asyncio.AbstractEventLoop | None = None
+_background_loop: asyncio.AbstractEventLoop | None = None
+_background_loop_lock = threading.Lock()
 
 ENRICHMENT_STATUS_IDLE = "idle"
 ENRICHMENT_STATUS_PENDING = "pending"
@@ -53,6 +64,18 @@ ENRICHMENT_STATUS_FAILED = "failed"
 STAGE_IDENTIFYING = "identifying"
 STAGE_SEARCHING_COLLECTIONS = "searching_collections"
 STAGE_GENERATING_ANNOTATIONS = "generating_annotations"
+
+
+def _artwork_has_crop(artwork: Artwork) -> bool:
+    return all(
+        value is not None
+        for value in (
+            artwork.crop_x_percent,
+            artwork.crop_y_percent,
+            artwork.crop_width_percent,
+            artwork.crop_height_percent,
+        )
+    )
 
 
 def _artwork_research_context(artwork: Artwork) -> dict[str, Any]:
@@ -66,6 +89,7 @@ def _artwork_research_context(artwork: Artwork) -> dict[str, Any]:
         "image_url": artwork.image_url,
         "label_image_url": artwork.label_image_url,
         "label_ocr_text": artwork.label_ocr_text,
+        "crop_applied": _artwork_has_crop(artwork),
     }
 
 
@@ -93,9 +117,13 @@ def _build_lookup_response(
     draft: ResearchDraft,
     *,
     broaden_search: bool = False,
+    exact_artwork_search: bool = False,
 ) -> ArtworkLookupResponse:
     museum_name = artwork.visit.museum_name if artwork.visit else None
-    built = build_retrieval_lookup_query(artwork, db, draft, museum_name=museum_name)
+    if exact_artwork_search:
+        built = build_exact_artwork_lookup_query(artwork, db, draft, museum_name=museum_name)
+    else:
+        built = build_retrieval_lookup_query(artwork, db, draft, museum_name=museum_name)
     query = built.query
     if broaden_search:
         query = replace(query, source="all")
@@ -111,10 +139,12 @@ def _build_lookup_response(
             medium_type_filter=built.medium_type_filter,
             search_scope="none",
             museum_collection_name=None if broaden_search else museum_collection_display_name(museum_name),
+            retrieval_intent="exact_artwork" if exact_artwork_search else "standard",
         )
 
     lookup_result = lookup_artwork_candidates(
         query,
+        force_broad=exact_artwork_search or broaden_search,
         allow_wikimedia_fallback=broaden_search,
     )
 
@@ -129,6 +159,7 @@ def _build_lookup_response(
         visual_keywords=built.query_source == "visual_keywords",
         visit_museum_name=museum_name,
         broaden_search=broaden_search,
+        retrieval_intent="exact_artwork" if exact_artwork_search else "standard",
     )
 
 
@@ -144,17 +175,72 @@ def _set_enrichment_state(
     artwork.enrichment_error = error
 
 
-def schedule_artwork_enrichment(artwork_id: int, *, broaden_search: bool = False) -> None:
-    """Fire-and-forget enrichment from sync request handlers."""
-    if broaden_search:
-        _ENRICHMENT_BROADEN[artwork_id] = True
+def bind_app_event_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Capture the ASGI server loop for scheduling from sync request handlers."""
+    global _app_event_loop
+    _app_event_loop = loop
+
+
+def _background_event_loop() -> asyncio.AbstractEventLoop:
+    global _background_loop
+    with _background_loop_lock:
+        if _background_loop is None or _background_loop.is_closed():
+            loop = asyncio.new_event_loop()
+
+            def _run_loop() -> None:
+                asyncio.set_event_loop(loop)
+                loop.run_forever()
+
+            thread = threading.Thread(
+                target=_run_loop,
+                name="culturegraph-enrichment",
+                daemon=True,
+            )
+            thread.start()
+            _background_loop = loop
+        return _background_loop
+
+
+def _dispatch_enrichment_task(artwork_id: int) -> None:
+    coro = _run_enrichment_task(artwork_id)
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        asyncio.run(_run_enrichment_task(artwork_id))
+        loop = None
+    else:
+        loop.create_task(coro)
         return
 
-    loop.create_task(_run_enrichment_task(artwork_id))
+    target_loop = (
+        _app_event_loop
+        if _app_event_loop is not None and _app_event_loop.is_running()
+        else _background_event_loop()
+    )
+    future = asyncio.run_coroutine_threadsafe(coro, target_loop)
+    future.add_done_callback(_log_enrichment_dispatch_result)
+
+
+def _log_enrichment_dispatch_result(future: asyncio.Future) -> None:
+    try:
+        future.result()
+    except Exception:
+        logger.exception("artwork enrichment background task failed")
+
+
+def schedule_artwork_enrichment(
+    artwork_id: int,
+    *,
+    broaden_search: bool = False,
+    exact_artwork_search: bool = False,
+) -> None:
+    """Fire-and-forget enrichment from sync or async request handlers."""
+    if broaden_search or exact_artwork_search:
+        current = _ENRICHMENT_OPTIONS.get(artwork_id, EnrichmentOptions())
+        _ENRICHMENT_OPTIONS[artwork_id] = EnrichmentOptions(
+            broaden_search=current.broaden_search or broaden_search,
+            exact_artwork_search=current.exact_artwork_search or exact_artwork_search,
+        )
+    _dispatch_enrichment_task(artwork_id)
 
 
 async def _run_enrichment_task(artwork_id: int) -> None:
@@ -181,11 +267,13 @@ def request_artwork_enrichment(
     artwork: Artwork,
     *,
     broaden_search: bool = False,
+    exact_artwork_search: bool = False,
+    force: bool = False,
 ) -> bool:
     """Mark artwork pending and schedule enrichment if eligible."""
     if not artwork.image_url:
         return False
-    if artwork.enrichment_status in {
+    if not force and artwork.enrichment_status in {
         ENRICHMENT_STATUS_PENDING,
         ENRICHMENT_STATUS_RUNNING,
     }:
@@ -194,12 +282,18 @@ def request_artwork_enrichment(
     _set_enrichment_state(artwork, status=ENRICHMENT_STATUS_PENDING, stage=None, error=None)
     db.commit()
     db.refresh(artwork)
-    schedule_artwork_enrichment(artwork.id, broaden_search=broaden_search)
+    schedule_artwork_enrichment(
+        artwork.id,
+        broaden_search=broaden_search,
+        exact_artwork_search=exact_artwork_search,
+    )
     return True
 
 
 async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
-    broaden_search = _ENRICHMENT_BROADEN.pop(artwork_id, False)
+    options = _ENRICHMENT_OPTIONS.pop(artwork_id, EnrichmentOptions())
+    broaden_search = options.broaden_search
+    exact_artwork_search = options.exact_artwork_search
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         return
@@ -240,6 +334,7 @@ async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
             artwork,
             draft,
             broaden_search=broaden_search,
+            exact_artwork_search=exact_artwork_search,
         )
         visual = _draft_visual_analysis(draft)
         museum_name = artwork.visit.museum_name if artwork.visit else None
@@ -248,6 +343,7 @@ async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
             lookup_response,
             visual,
             visit_museum_name=museum_name,
+            exact_artwork_search=exact_artwork_search,
         )
         calibrated = calibrate_research_draft(draft, identification, visual)
         lookup_response = lookup_with_identification_candidates(lookup_response, identification)

@@ -15,6 +15,7 @@ import {
 } from "@/components/artworks/research-metadata-apply";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { artworkHasImageRegion } from "@/lib/artwork-region";
 import {
   synthesizeIdentificationFromDraft,
   type ResearchMetadataHints,
@@ -78,6 +79,7 @@ export function ArtworkEnrichmentPanel({
   });
   const [suggestions, setSuggestions] = useState<AiSuggestedAnnotation[]>([]);
   const [rerunning, setRerunning] = useState(false);
+  const [exactSearchActive, setExactSearchActive] = useState(false);
   const autoStartedRef = useRef(false);
   const [revealed, setRevealed] = useState({
     identification: false,
@@ -100,11 +102,15 @@ export function ArtworkEnrichmentPanel({
     const collectionLabel =
       state?.lookup?.museum_collection_name ?? visitMuseumName ?? null;
     const searchingCollectionLabel =
-      state?.lookup?.search_scope === "broad"
-        ? "Searching open museum collections…"
-        : collectionLabel
-          ? `${museumCollectionSearchLabel(collectionLabel)}…`
-          : STAGE_LABELS.searching_collections;
+      state?.lookup?.retrieval_intent === "exact_artwork" || exactSearchActive
+        ? collectionLabel
+          ? `Finding exact artwork in ${collectionLabel}…`
+          : "Finding exact artwork in museum collection…"
+        : state?.lookup?.search_scope === "broad"
+          ? "Searching open museum collections…"
+          : collectionLabel
+            ? `${museumCollectionSearchLabel(collectionLabel)}…`
+            : STAGE_LABELS.searching_collections;
 
     if (!state) return "Analyzing artwork…";
     if (state.stage === "searching_collections") return searchingCollectionLabel;
@@ -112,7 +118,16 @@ export function ArtworkEnrichmentPanel({
     if (state.status === "pending") return "Analyzing artwork…";
     if (state.status === "running") return "Analyzing artwork…";
     return null;
-  }, [state, visitMuseumName]);
+  }, [exactSearchActive, state, visitMuseumName]);
+
+  useEffect(() => {
+    if (!active && !rerunning && state?.lookup?.retrieval_intent === "exact_artwork") {
+      setExactSearchActive(true);
+    }
+    if (!active && !rerunning && state?.lookup?.retrieval_intent !== "exact_artwork") {
+      setExactSearchActive(false);
+    }
+  }, [active, rerunning, state?.lookup?.retrieval_intent]);
 
   useEffect(() => {
     if (state?.draft?.suggested_annotations) {
@@ -151,8 +166,9 @@ export function ArtworkEnrichmentPanel({
     onHintsChange?.(metadataHints);
   }, [metadataHints, onHintsChange]);
 
-  async function rerunEnrichment(broadenSearch = false) {
+  async function rerunEnrichment(options: { broadenSearch?: boolean; exactArtwork?: boolean } = {}) {
     setRerunning(true);
+    setExactSearchActive(Boolean(options.exactArtwork));
     setRevealed({
       identification: false,
       context: false,
@@ -160,9 +176,12 @@ export function ArtworkEnrichmentPanel({
       lookup: false,
     });
     try {
-      await startEnrichment(broadenSearch);
+      await startEnrichment(options);
     } finally {
       setRerunning(false);
+      if (!options.exactArtwork) {
+        setExactSearchActive(false);
+      }
     }
   }
 
@@ -177,6 +196,11 @@ export function ArtworkEnrichmentPanel({
   }
 
   const showAmbientHeader = active || draft || loading;
+  const showStyleAnalysisSection =
+    Boolean(draft?.short_summary) &&
+    (effectiveIdentification?.retrieval_intent === "exact_artwork" ||
+      effectiveIdentification?.identification_mode === "style_subject" ||
+      effectiveIdentification?.identification_mode === "exact_not_found");
 
   return (
     <section
@@ -196,17 +220,29 @@ export function ArtworkEnrichmentPanel({
           </div>
         </div>
         {canEdit && hasImage ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="min-h-9 self-start text-muted-foreground"
-            disabled={active || rerunning}
-            onClick={() => void rerunEnrichment()}
-          >
-            <RefreshCw className={cn("mr-1.5 size-3.5", rerunning && "animate-spin")} />
-            Run AI again
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="min-h-9"
+              disabled={active || rerunning}
+              onClick={() => void rerunEnrichment({ exactArtwork: true })}
+            >
+              Find exact artwork
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="min-h-9 self-start text-muted-foreground"
+              disabled={active || rerunning}
+              onClick={() => void rerunEnrichment()}
+            >
+              <RefreshCw className={cn("mr-1.5 size-3.5", rerunning && "animate-spin")} />
+              Run AI again
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -222,6 +258,12 @@ export function ArtworkEnrichmentPanel({
       {!hasImage && !loading ? (
         <p className="text-sm text-muted-foreground">
           Add a photo to start automatic AI enrichment.
+        </p>
+      ) : null}
+
+      {hasImage && canEdit && !artworkHasImageRegion(artwork) && !active && !rerunning ? (
+        <p className="text-sm text-muted-foreground">
+          Set the artwork area on your photo before finding the exact catalog match.
         </p>
       ) : null}
 
@@ -270,7 +312,19 @@ export function ArtworkEnrichmentPanel({
         </div>
       ) : null}
 
-      {draft && revealed.context ? (
+      {showStyleAnalysisSection && draft && revealed.context ? (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-2 rounded-lg border border-border/80 bg-muted/20 p-4">
+          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+            Style analysis
+          </p>
+          <p className="text-sm leading-relaxed text-foreground">{draft.short_summary}</p>
+          {draft.historical_context ? (
+            <p className="text-sm leading-relaxed text-muted-foreground">{draft.historical_context}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {draft && revealed.context && !showStyleAnalysisSection ? (
         <div className="space-y-4 text-base leading-relaxed animate-in fade-in slide-in-from-bottom-2 duration-500">
           {draft.period_or_movement ? (
             <div>
@@ -332,7 +386,7 @@ export function ArtworkEnrichmentPanel({
               variant="outline"
               size="sm"
               className="min-h-9 w-full"
-              onClick={() => void rerunEnrichment(true)}
+              onClick={() => void rerunEnrichment({ broadenSearch: true })}
             >
               Broaden search
             </Button>

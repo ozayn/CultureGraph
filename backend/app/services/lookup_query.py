@@ -12,7 +12,14 @@ from app.models import Artwork, CulturalEntity, CulturalEntityType, ResearchNote
 from app.schemas import ResearchDraft
 from app.services.lookup_medium import infer_expected_medium_type, resolve_medium_type_filter
 from app.services.research import load_identification_meta
-from app.services.visual_analysis import collect_visual_keywords, extract_artist_from_ocr, extract_title_from_ocr, visual_keywords_query
+from app.services.semantic_retrieval import combined_search_phrases
+from app.services.visual_analysis import (
+    collect_exact_artwork_keywords,
+    collect_visual_keywords,
+    extract_artist_from_ocr,
+    extract_title_from_ocr,
+    visual_keywords_query,
+)
 from app.sources.base import ArtworkLookupQuery
 from app.sources.matching import is_placeholder_artist, is_placeholder_title, normalize
 
@@ -208,6 +215,12 @@ def _pack(
     if clean_artist and is_placeholder_artist(clean_artist):
         clean_artist = None
 
+    expanded_terms = combined_search_phrases(
+        title=clean_title or None,
+        artist=clean_artist,
+    )
+    semantic_search = bool(expanded_terms)
+
     query_used = clean_title
     if not query_used and clean_artist:
         query_used = clean_artist
@@ -226,6 +239,8 @@ def _pack(
             expected_medium_type=expected_medium_type,
             medium_type_filter=medium_type_filter,
             medium_hint=medium_hint,
+            semantic_search=semantic_search,
+            expanded_search_terms=expanded_terms,
         ),
         query_used=query_used or "",
         query_source=query_source,
@@ -457,6 +472,108 @@ def build_retrieval_lookup_query(
         museum_name=museum_name,
         medium_type=medium_type,
         medium_override=medium_override,
+    )
+
+
+def build_exact_artwork_lookup_query(
+    artwork: Artwork,
+    db: Session,
+    draft: ResearchDraft,
+    *,
+    museum_name: str | None,
+    medium_type: str | None = None,
+    medium_override: str | None = None,
+) -> BuiltLookupQuery:
+    """Build a visual + semantic collection search for catalog matching."""
+    from dataclasses import replace
+
+    from app.services.visual_analysis import VisualAnalysis
+
+    visual = None
+    if draft.visual_analysis:
+        visual = VisualAnalysis.model_validate(draft.visual_analysis.model_dump())
+
+    ai_medium = _medium_from_draft_annotations(draft)
+    expected_medium = infer_expected_medium_type(
+        artwork_medium=artwork.medium,
+        ai_medium=ai_medium,
+        notes=artwork.personal_notes,
+        medium_override=medium_override,
+    )
+    medium_filter = resolve_medium_type_filter(expected_medium, medium_type)
+    medium_hint = (
+        (medium_override or "").strip()
+        or (artwork.medium or "").strip()
+        or (ai_medium or "").strip()
+        or None
+    )
+
+    hypothesis_title = (
+        (draft.visual_hypothesis_title or "").strip()
+        or (draft.possible_title or "").strip()
+        or None
+    )
+    if hypothesis_title and is_placeholder_title(hypothesis_title):
+        hypothesis_title = None
+
+    hypothesis_artist = _resolve_artist(
+        artwork.artist,
+        draft.visual_hypothesis_artist or draft.possible_artist,
+        None,
+    )
+
+    keywords = collect_exact_artwork_keywords(
+        visual,
+        period_or_movement=draft.period_or_movement,
+    )
+    if not keywords:
+        keywords = collect_visual_keywords(
+            visual,
+            period_or_movement=draft.period_or_movement,
+            ocr_label_text=None,
+        )
+
+    expanded_terms = combined_search_phrases(
+        title=hypothesis_title,
+        artist=hypothesis_artist,
+        visual_keywords=keywords,
+    )
+    query_text = visual_keywords_query(keywords, limit=12)
+    if not query_text and expanded_terms:
+        query_text = " · ".join(expanded_terms[:8])
+
+    built = _pack(
+        artwork,
+        museum_name,
+        None,
+        query_text or (hypothesis_title or ""),
+        hypothesis_artist,
+        query_source="visual_keywords",
+        expected_medium_type=expected_medium,
+        medium_type_filter=medium_filter,
+        medium_hint=medium_hint,
+    )
+    merged_terms = tuple(dict.fromkeys([*expanded_terms, *built.query.expanded_search_terms]))
+    query_used = built.query_used
+    if hypothesis_title and hypothesis_artist:
+        query_used = f"{hypothesis_title} · {hypothesis_artist} · {query_used}".strip(" · ")
+    elif hypothesis_title:
+        query_used = f"{hypothesis_title} · {query_used}".strip(" · ")
+
+    return BuiltLookupQuery(
+        query=replace(
+            built.query,
+            has_title_query=False,
+            semantic_search=True,
+            expanded_search_terms=merged_terms,
+            artist=hypothesis_artist,
+        ),
+        query_used=query_used,
+        query_source=built.query_source,
+        artist_used=hypothesis_artist or built.artist_used,
+        alternate_title=built.alternate_title,
+        expected_medium_type=built.expected_medium_type,
+        medium_type_filter=built.medium_type_filter,
     )
 
 

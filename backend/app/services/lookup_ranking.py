@@ -29,6 +29,7 @@ MatchTier = Literal["high", "possible", "weak"]
 POSSIBLE_CONFIDENCE_MIN = STRONG_IDENTITY_MIN
 
 STRATEGY_THRESHOLDS: dict[LookupStrategy, dict[str, float]] = {
+    "semantic": {"low": 0.34, "high": 0.62, "min_title": 0.12, "min_artist": 0.38},
     "exact": {"low": 0.48, "high": 0.70, "min_title": 0.32, "min_artist": 0.48},
     "fuzzy": {"low": 0.42, "high": 0.65, "min_title": 0.24, "min_artist": 0.42},
     "artist_fallback": {"low": 0.38, "high": 0.58, "min_title": 0.0, "min_artist": 0.48},
@@ -71,7 +72,7 @@ def rank_lookup_candidates(
     raw: list[tuple[float, dict, ArtworkLookupCandidate]],
     query: ArtworkLookupQuery,
     *,
-    strategy: LookupStrategy = "exact",
+    strategy: LookupStrategy = "semantic",
     limit: int = 12,
 ) -> list[ArtworkLookupCandidate]:
     if not raw:
@@ -99,6 +100,7 @@ def rank_lookup_candidates(
             artist_text,
             query.year_period,
             strict_artist_gate=strict_artist,
+            query=query if query.semantic_search or strategy == "semantic" else None,
         )
         title_score = details.title_score
         artist_score = details.artist_score
@@ -131,6 +133,10 @@ def rank_lookup_candidates(
                 title_score=title_score,
                 artist_score=artist_score,
             ):
+                continue
+
+        if strategy == "semantic" and not query.semantic_search and has_title_query:
+            if title_score < 0.08 and artist_score < 0.42 and score < low_min:
                 continue
 
         if score < low_min:
@@ -237,6 +243,15 @@ def rank_lookup_candidates(
                 or (item[2] >= 0.72 and item[1] >= 0.12)
                 or item[5] == "high"
             ]
+    elif strategy == "semantic" and enriched:
+        enriched = [
+            item
+            for item in enriched
+            if item[0] >= low_min
+            or item[2] >= min_artist
+            or item[1] >= min_title
+            or (item[6].visual_similarity or 0) >= 0.2
+        ] or enriched
 
     enriched.sort(
         key=lambda item: (

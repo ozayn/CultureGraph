@@ -13,6 +13,8 @@ class ArtworkLookupQuery:
     expected_medium_type: str = "unknown"
     medium_type_filter: str = "any"
     medium_hint: str | None = None
+    semantic_search: bool = False
+    expanded_search_terms: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

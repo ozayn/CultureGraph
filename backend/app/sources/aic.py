@@ -8,7 +8,7 @@ from typing import Any
 import requests
 
 from app.sources.base import ArtworkLookupCandidate, ArtworkLookupQuery
-from app.sources.matching import resolve_search_terms, score_artwork_entry
+from app.sources.matching import api_search_query, resolve_search_terms, score_artwork_entry
 from app.sources.museums import AIC_SOURCE_NAME
 from app.sources.routing import resolve_lookup_sources
 
@@ -34,10 +34,10 @@ def collect_aic_scored_candidates(
         return []
 
     search_text, artist_text = resolve_search_terms(query)
-    if not search_text and not artist_text:
+    if not search_text and not artist_text and not query.expanded_search_terms:
         return []
 
-    search_query = " ".join(part for part in (search_text, artist_text) if part).strip()
+    search_query = api_search_query(query, search_text, artist_text)
     entries = _search_artworks(search_query)
     if not entries:
         return []
@@ -47,7 +47,14 @@ def collect_aic_scored_candidates(
         if not entry.get("image_url"):
             continue
 
-        score = score_artwork_entry(entry, search_text, artist_text, query.year_period)
+        score = score_artwork_entry(
+            entry,
+            search_text,
+            artist_text,
+            query.year_period,
+            query=query,
+            strict_artist_gate=not query.semantic_search,
+        )
         if score < 0.15:
             continue
 
