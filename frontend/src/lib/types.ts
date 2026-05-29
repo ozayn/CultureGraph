@@ -25,12 +25,16 @@ export interface AiSuggestedAnnotation {
   accepted_annotation_id?: number | null;
 }
 
+export type AudioNoteLanguage = "en" | "fa" | "mixed" | "unknown";
+
 export interface AudioInterpretation {
   cleaned_note: string;
+  cleaned_note_original_language?: string | null;
   observations: string[];
   visual_elements: string[];
   questions: string[];
   tags: string[];
+  tag_aliases?: string[];
   suggested_annotations: AiSuggestedAnnotation[];
   related_entities: string[];
 }
@@ -42,6 +46,9 @@ export interface AudioNote {
   audio_url: string;
   duration_seconds: number | null;
   transcript: string | null;
+  transcript_original: string | null;
+  detected_language: AudioNoteLanguage | null;
+  transcript_english: string | null;
   cleaned_note: string | null;
   interpretation: AudioInterpretation | null;
   created_at: string;

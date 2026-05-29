@@ -15,6 +15,7 @@ import {
   formatRecordingTimer,
   GalleryAudioRecorder,
 } from "@/lib/audio-recorder";
+import { languageLabel } from "@/lib/audio-language";
 import { resolveImageUrl } from "@/lib/media-url";
 import { suggestedAnnotationToAnnotationPayload } from "@/lib/research-suggestions";
 import type {
@@ -81,6 +82,8 @@ export function AudioNotePanel({
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState<AudioNote | null>(null);
   const [transcript, setTranscript] = useState("");
+  const [transcriptEnglish, setTranscriptEnglish] = useState<string | null>(null);
+  const [detectedLanguage, setDetectedLanguage] = useState<AudioNote["detected_language"]>(null);
   const [interpretation, setInterpretation] = useState<AudioInterpretation | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +131,8 @@ export function AudioNotePanel({
     setLocalPreviewUrl(null);
     setSavedNote(null);
     setTranscript("");
+    setTranscriptEnglish(null);
+    setDetectedLanguage(null);
     setInterpretation(null);
     setBusy(null);
     setError(null);
@@ -184,6 +189,8 @@ export function AudioNotePanel({
     setRecording(false);
     setSavedNote(null);
     setTranscript("");
+    setTranscriptEnglish(null);
+    setDetectedLanguage(null);
     setInterpretation(null);
     setStep("record");
     setPlaying(false);
@@ -204,6 +211,14 @@ export function AudioNotePanel({
     }
   }
 
+  function applyNoteState(note: AudioNote) {
+    setSavedNote(note);
+    setTranscript(note.transcript_original ?? note.transcript ?? "");
+    setTranscriptEnglish(note.transcript_english);
+    setDetectedLanguage(note.detected_language);
+    setInterpretation(note.interpretation ?? null);
+  }
+
   async function uploadRecording() {
     if (!localBlob) return;
     setBusy("upload");
@@ -215,9 +230,7 @@ export function AudioNotePanel({
         visit_id: visitId ? String(visitId) : undefined,
         duration_seconds: localDuration ? String(Math.round(localDuration * 100) / 100) : undefined,
       });
-      setSavedNote(note);
-      setTranscript(note.transcript ?? "");
-      setInterpretation(note.interpretation ?? null);
+      applyNoteState(note);
       setStep("review");
       setSuccess("Recording saved.");
     } catch (e) {
@@ -236,7 +249,7 @@ export function AudioNotePanel({
       let note = savedNote;
       if (transcript.trim()) {
         note = await api.post<AudioNote>(`/api/audio-notes/${note.id}/transcribe`, {
-          transcript: transcript.trim(),
+          transcript_original: transcript.trim(),
         });
       } else {
         try {
@@ -254,15 +267,12 @@ export function AudioNotePanel({
           return;
         }
       }
-      setSavedNote(note);
-      setTranscript(note.transcript ?? transcript);
+      applyNoteState(note);
       setBusy("interpret");
       note = await api.post<AudioNote>(`/api/audio-notes/${note.id}/interpret`);
-      setSavedNote(note);
-      setTranscript(note.transcript ?? "");
-      setInterpretation(note.interpretation ?? null);
+      applyNoteState(note);
       setStep("interpretation");
-      setSuccess("Transcript ready for review.");
+      setSuccess("English interpretation ready for review.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not transcribe or interpret.");
     } finally {
@@ -295,7 +305,7 @@ export function AudioNotePanel({
       }
       if (savedNote && transcript.trim()) {
         await api.patch(`/api/audio-notes/${savedNote.id}`, {
-          transcript: transcript.trim(),
+          transcript_original: transcript.trim(),
           cleaned_note: interpretation?.cleaned_note ?? null,
         });
       }
@@ -345,9 +355,7 @@ export function AudioNotePanel({
   }
 
   const title = artworkId ? "Record artwork note" : "Record visit note";
-  const description = artworkId
-    ? "Speak observations while you are in front of the work."
-    : "Capture quick thoughts about this museum visit.";
+  const description = "Record in English, Farsi, or both.";
 
   return (
     <BottomSheet open={open} onOpenChange={onOpenChange} title={title} description={description}>
@@ -363,7 +371,7 @@ export function AudioNotePanel({
                   ? "Recording…"
                   : localBlob
                     ? "Review your recording"
-                    : `Up to ${Math.floor(AUDIO_NOTE_MAX_DURATION_SECONDS / 60)} minutes`}
+                    : `Record in English, Farsi, or both · up to ${Math.floor(AUDIO_NOTE_MAX_DURATION_SECONDS / 60)} min`}
               </p>
             </div>
 
@@ -450,17 +458,30 @@ export function AudioNotePanel({
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="audio-note-transcript">
-                Transcript
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm font-medium" htmlFor="audio-note-transcript">
+                  Original transcript
+                </label>
+                {detectedLanguage ? (
+                  <Badge variant="secondary">{languageLabel(detectedLanguage)}</Badge>
+                ) : null}
+              </div>
               <Textarea
                 id="audio-note-transcript"
                 rows={5}
                 value={transcript}
                 onChange={(event) => setTranscript(event.target.value)}
-                placeholder="Edit the transcript before saving…"
+                placeholder="Edit the original transcript before interpretation…"
+                dir={detectedLanguage === "fa" ? "rtl" : detectedLanguage === "mixed" ? "auto" : "ltr"}
               />
             </div>
+
+            {transcriptEnglish ? (
+              <div className="space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+                <p className="text-sm font-medium">English transcript</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">{transcriptEnglish}</p>
+              </div>
+            ) : null}
 
             {step === "review" ? (
               <Button
@@ -478,12 +499,29 @@ export function AudioNotePanel({
 
             {interpretation ? (
               <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                  English interpretation
+                </p>
                 <div>
                   <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
                     Cleaned note
                   </p>
                   <p className="mt-1 text-base leading-relaxed">{interpretation.cleaned_note}</p>
                 </div>
+
+                {interpretation.cleaned_note_original_language ? (
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                      Note in original language
+                    </p>
+                    <p
+                      className="mt-1 text-base leading-relaxed"
+                      dir={detectedLanguage === "fa" || detectedLanguage === "mixed" ? "auto" : "ltr"}
+                    >
+                      {interpretation.cleaned_note_original_language}
+                    </p>
+                  </div>
+                ) : null}
 
                 {interpretation.observations.length > 0 ? (
                   <div>
@@ -513,7 +551,7 @@ export function AudioNotePanel({
                   </div>
                 ) : null}
 
-                {interpretation.tags.length > 0 ? (
+                {interpretation.tags.length > 0 || (interpretation.tag_aliases?.length ?? 0) > 0 ? (
                   <div>
                     <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
                       Tags
@@ -521,6 +559,11 @@ export function AudioNotePanel({
                     <div className="mt-2 flex flex-wrap gap-2">
                       {interpretation.tags.map((item) => (
                         <Badge key={item} variant="outline">
+                          {item}
+                        </Badge>
+                      ))}
+                      {(interpretation.tag_aliases ?? []).map((item) => (
+                        <Badge key={`alias-${item}`} variant="secondary">
                           {item}
                         </Badge>
                       ))}

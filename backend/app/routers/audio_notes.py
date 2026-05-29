@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
@@ -21,10 +21,12 @@ from app.services.audio_interpretation import (
     build_interpretation_context,
     get_interpretation_provider,
 )
+from app.services.audio_language import AudioNoteLanguage, refine_detected_language
 from app.services.audio_transcription import (
     TranscriptionError,
     get_transcription_provider,
     resolve_audio_file_path,
+    transcribe_manual_text,
 )
 from app.services.audio_upload import (
     read_audio_upload,
@@ -59,6 +61,19 @@ def _validate_parent_ids(
     return visit_id, artwork_id
 
 
+def _note_language(note: AudioNote) -> AudioNoteLanguage | None:
+    if not note.detected_language:
+        return None
+    return cast(AudioNoteLanguage, note.detected_language)
+
+
+def _apply_transcription_result(note: AudioNote, *, original: str, detected_language: str, english: str | None) -> None:
+    note.transcript_original = original
+    note.transcript = original
+    note.detected_language = detected_language
+    note.transcript_english = english
+
+
 def _audio_note_read(note: AudioNote) -> AudioNoteRead:
     interpretation = None
     if isinstance(note.interpretation_json, dict):
@@ -66,13 +81,20 @@ def _audio_note_read(note: AudioNote) -> AudioNoteRead:
             interpretation = AudioInterpretationRead.model_validate(note.interpretation_json)
         except Exception:
             interpretation = None
+    original = note.transcript_original or note.transcript
+    language: Literal["en", "fa", "mixed", "unknown"] | None = None
+    if note.detected_language in {"en", "fa", "mixed", "unknown"}:
+        language = note.detected_language  # type: ignore[assignment]
     return AudioNoteRead(
         id=note.id,
         visit_id=note.visit_id,
         artwork_id=note.artwork_id,
         audio_url=note.audio_url,
         duration_seconds=note.duration_seconds,
-        transcript=note.transcript,
+        transcript=original,
+        transcript_original=original,
+        detected_language=language,
+        transcript_english=note.transcript_english,
         cleaned_note=note.cleaned_note,
         interpretation=interpretation,
         created_at=note.created_at,
@@ -145,8 +167,16 @@ def update_audio_note_transcript(
     db: Session = Depends(get_db),
 ) -> AudioNoteRead:
     note = _get_audio_note_or_404(db, note_id)
-    if payload.transcript is not None:
-        note.transcript = payload.transcript.strip() or None
+    original = payload.transcript_original if payload.transcript_original is not None else payload.transcript
+    if original is not None:
+        cleaned = original.strip() or None
+        note.transcript_original = cleaned
+        note.transcript = cleaned
+        if cleaned:
+            note.detected_language = refine_detected_language(cleaned)
+        else:
+            note.detected_language = None
+            note.transcript_english = None
     if payload.cleaned_note is not None:
         note.cleaned_note = payload.cleaned_note.strip() or None
     db.commit()
@@ -162,10 +192,20 @@ async def transcribe_audio_note(
     payload: AudioTranscribeRequest | None = None,
 ) -> AudioNoteRead:
     note = _get_audio_note_or_404(db, note_id)
-    manual = (payload.transcript if payload else None) or ""
-    manual = manual.strip()
+    manual = ""
+    if payload:
+        manual = (payload.transcript_original or payload.transcript or "").strip()
     if manual:
-        note.transcript = manual
+        try:
+            result = transcribe_manual_text(manual)
+        except TranscriptionError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _apply_transcription_result(
+            note,
+            original=result.transcript_original,
+            detected_language=result.detected_language,
+            english=result.transcript_english,
+        )
         db.commit()
         db.refresh(note)
         return _audio_note_read(note)
@@ -173,11 +213,16 @@ async def transcribe_audio_note(
     provider = get_transcription_provider()
     try:
         path = resolve_audio_file_path(note.audio_url)
-        transcript = await provider.transcribe_file(path, filename=path.name)
+        result = await provider.transcribe_file(path, filename=path.name)
     except TranscriptionError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    note.transcript = transcript
+    _apply_transcription_result(
+        note,
+        original=result.transcript_original,
+        detected_language=result.detected_language,
+        english=result.transcript_english,
+    )
     db.commit()
     db.refresh(note)
     return _audio_note_read(note)
@@ -190,7 +235,7 @@ async def interpret_audio_note(
     db: Session = Depends(get_db),
 ) -> AudioNoteRead:
     note = _get_audio_note_or_404(db, note_id)
-    transcript = (note.transcript or "").strip()
+    transcript = (note.transcript_original or note.transcript or "").strip()
     if not transcript:
         raise HTTPException(status_code=400, detail="Transcribe the note before interpreting.")
 
@@ -199,6 +244,8 @@ async def interpret_audio_note(
         draft = await provider.interpret(
             transcript=transcript,
             context=_interpretation_context(db, note),
+            detected_language=_note_language(note) or "unknown",
+            transcript_english=note.transcript_english,
         )
     except AudioInterpretationError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

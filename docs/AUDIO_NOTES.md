@@ -41,4 +41,15 @@ If `OPENAI_API_KEY` is missing, admins can type a transcript manually before int
 - `POST /api/audio-notes/{id}/interpret` — structured JSON interpretation
 - `DELETE /api/audio-notes/{id}`
 
-Public users cannot upload or transcribe audio notes in the current release.
+## Bilingual notes (English / Farsi)
+
+Transcription stores:
+
+- `transcript_original` — as spoken/written
+- `detected_language` — `en`, `fa`, `mixed`, or `unknown`
+- `transcript_english` — optional companion when Whisper translation is available
+
+Interpretation returns English structured fields by default, with optional
+`cleaned_note_original_language` and `tag_aliases` for important Farsi terms.
+
+Users can record in English, Farsi, or both. Edit the original transcript before interpretation.

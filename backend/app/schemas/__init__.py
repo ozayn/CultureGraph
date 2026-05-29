@@ -632,10 +632,12 @@ class VisualMatchResponse(BaseModel):
 
 class AudioInterpretationRead(BaseModel):
     cleaned_note: str
+    cleaned_note_original_language: str | None = None
     observations: list[str] = Field(default_factory=list)
     visual_elements: list[str] = Field(default_factory=list)
     questions: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    tag_aliases: list[str] = Field(default_factory=list)
     suggested_annotations: list[AiSuggestedAnnotation] = Field(default_factory=list)
     related_entities: list[str] = Field(default_factory=list)
 
@@ -649,6 +651,9 @@ class AudioNoteRead(BaseModel):
     audio_url: str
     duration_seconds: float | None = None
     transcript: str | None = None
+    transcript_original: str | None = None
+    detected_language: Literal["en", "fa", "mixed", "unknown"] | None = None
+    transcript_english: str | None = None
     cleaned_note: str | None = None
     interpretation: AudioInterpretationRead | None = None
     created_at: datetime
@@ -656,8 +661,10 @@ class AudioNoteRead(BaseModel):
 
 class AudioNoteTranscriptUpdate(BaseModel):
     transcript: str | None = None
+    transcript_original: str | None = None
     cleaned_note: str | None = None
 
 
 class AudioTranscribeRequest(BaseModel):
     transcript: str | None = None
+    transcript_original: str | None = None

@@ -130,6 +130,40 @@ async def test_transcribe_fallback_without_openai_key(
 
 
 @pytest.mark.asyncio
+async def test_manual_farsi_transcript_detects_language(
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "openai_api_key", None)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        artwork_response = await client.post(
+            "/api/artworks",
+            headers=auth_headers,
+            json={"title": "Farsi note"},
+        )
+        artwork_id = artwork_response.json()["id"]
+        upload_response = await client.post(
+            "/api/audio-notes",
+            headers=auth_headers,
+            data={"artwork_id": str(artwork_id)},
+            files={"file": ("note.wav", _tiny_wav_bytes(), "audio/wav")},
+        )
+        note_id = upload_response.json()["id"]
+
+        transcribe_response = await client.post(
+            f"/api/audio-notes/{note_id}/transcribe",
+            headers=auth_headers,
+            json={"transcript_original": "لباس قرمز و چهره رسمی کودک را می‌بینم."},
+        )
+
+    assert transcribe_response.status_code == 200
+    payload = transcribe_response.json()
+    assert payload["detected_language"] == "fa"
+    assert payload["transcript_original"].startswith("لباس")
+
+
+@pytest.mark.asyncio
 async def test_manual_transcript_and_interpretation_placeholder(
     auth_headers: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
@@ -172,14 +206,16 @@ async def test_manual_transcript_and_interpretation_placeholder(
     assert payload["interpretation"]["observations"]
 
 
-def test_interpretation_json_validates() -> None:
+def test_interpretation_json_validates_bilingual_fields() -> None:
     draft = AudioInterpretationDraft.model_validate(
         {
             "cleaned_note": "The child looks aristocratic.",
+            "cleaned_note_original_language": "کودک اشرافی به نظر می‌رسد.",
             "observations": ["Formal red clothing"],
             "visual_elements": ["red fabric"],
             "questions": ["Who is the child?"],
             "tags": ["portrait"],
+            "tag_aliases": ["لباس قرمز"],
             "suggested_annotations": [
                 {
                     "category": "observation",
@@ -194,6 +230,8 @@ def test_interpretation_json_validates() -> None:
     provider = get_interpretation_provider()
     assert provider is not None
     assert draft.cleaned_note.startswith("The child")
+    assert draft.cleaned_note_original_language
+    assert draft.tag_aliases == ["لباس قرمز"]
 
 
 @pytest.mark.asyncio

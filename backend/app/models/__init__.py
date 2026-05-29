@@ -224,6 +224,9 @@ class AudioNote(Base):
     audio_url: Mapped[str] = mapped_column(String(512), nullable=False)
     duration_seconds: Mapped[float | None] = mapped_column(Float)
     transcript: Mapped[str | None] = mapped_column(Text)
+    transcript_original: Mapped[str | None] = mapped_column(Text)
+    detected_language: Mapped[str | None] = mapped_column(String(16))
+    transcript_english: Mapped[str | None] = mapped_column(Text)
     cleaned_note: Mapped[str | None] = mapped_column(Text)
     interpretation_json: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(
