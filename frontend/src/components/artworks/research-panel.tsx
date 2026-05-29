@@ -8,7 +8,8 @@ import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { SignInInlineHint } from "@/components/auth/sign-in-inline-hint";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, RESEARCH_REQUEST_TIMEOUT_MS } from "@/lib/api";
+import { mapRequestError } from "@/lib/request-errors";
 import { parseSuggestedAnnotations } from "@/lib/research-suggestions";
 import type { ResearchMetadataHints } from "@/lib/artwork-metadata";
 import type { AiSuggestedAnnotation, Annotation, Artwork, CulturalEntity, ResearchDraft, ResearchNote } from "@/lib/types";
@@ -74,6 +75,7 @@ export function ResearchPanel({
   const [error, setError] = useState<string | null>(null);
   const [deletingNote, setDeletingNote] = useState<ResearchNote | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [generateInFlight, setGenerateInFlight] = useState(false);
 
   function loadDraft(nextDraft: ResearchDraft, noteId: number | null = null) {
     setDraft(nextDraft);
@@ -138,10 +140,16 @@ export function ResearchPanel({
   }, [artworkId]);
 
   const generateDraft = useCallback(async () => {
+    if (generateInFlight) return;
+    setGenerateInFlight(true);
     setLoading(true);
     setError(null);
     try {
-      const result = await api.post<ResearchDraft>(`/api/artworks/${artworkId}/research`);
+      const result = await api.post<ResearchDraft>(
+        `/api/artworks/${artworkId}/research`,
+        undefined,
+        { timeoutMs: RESEARCH_REQUEST_TIMEOUT_MS }
+      );
       const saved = await api.get<ResearchNote[]>(`/api/artworks/${artworkId}/research`);
       setNotes(saved);
       const latest = saved[0];
@@ -151,11 +159,12 @@ export function ResearchPanel({
         loadDraft(result);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not generate research.");
+      setError(mapRequestError(e, "Could not generate research."));
     } finally {
       setLoading(false);
+      setGenerateInFlight(false);
     }
-  }, [artworkId]);
+  }, [artworkId, generateInFlight]);
 
   useEffect(() => {
     onReady?.(generateDraft);
@@ -255,7 +264,7 @@ export function ResearchPanel({
         <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:items-end">
           <Button
             onClick={() => void generateDraft()}
-            disabled={loading || !canEdit}
+            disabled={loading || generateInFlight || !canEdit}
             variant="outline"
             size="touch"
             className="w-full sm:w-auto"

@@ -37,7 +37,7 @@ def lookup_artwork_candidates_staged(
     if "wikimedia" in sources:
         raw.extend(collect_wikimedia_scored_candidates(query))
 
-    candidate_limit = 36 if force_broad else (24 if len(sources) == 1 else 12)
+    candidate_limit = 36 if force_broad else (20 if query.semantic_search else (24 if len(sources) == 1 else 12))
     result = _rank_staged(
         raw,
         query,

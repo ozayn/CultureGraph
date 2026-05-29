@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ENRICHMENT_REQUEST_TIMEOUT_MS } from "@/lib/api";
 import {
   ENRICHMENT_MAX_POLL_DURATION_MS,
   ENRICHMENT_POLL_INTERVAL_MS,
@@ -8,16 +9,21 @@ import {
   resetArtworkEnrichmentStoreForTests,
   useArtworkEnrichment,
 } from "@/lib/use-artwork-enrichment";
+import { REQUEST_ABORT_MESSAGE } from "@/lib/request-errors";
 
 const getMock = vi.fn();
 const postMock = vi.fn();
 
-vi.mock("@/lib/api", () => ({
-  api: {
-    get: (...args: unknown[]) => getMock(...args),
-    post: (...args: unknown[]) => postMock(...args),
-  },
-}));
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return {
+    ...actual,
+    api: {
+      get: (...args: unknown[]) => getMock(...args),
+      post: (...args: unknown[]) => postMock(...args),
+    },
+  };
+});
 
 function pendingState() {
   return {
@@ -86,7 +92,9 @@ describe("useArtworkEnrichment", () => {
 
     expect(result.current.state?.status).toBe("completed");
     expect(getMock).toHaveBeenCalledTimes(1);
-    expect(getMock).toHaveBeenCalledWith("/api/artworks/7/enrichment");
+    expect(getMock).toHaveBeenCalledWith("/api/artworks/7/enrichment", {
+      timeoutMs: ENRICHMENT_REQUEST_TIMEOUT_MS,
+    });
   });
 
   it("polls only while enrichment is pending or running", async () => {
@@ -184,6 +192,65 @@ describe("useArtworkEnrichment", () => {
     });
 
     expect(getMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses long timeout for enrichment GET and POST", async () => {
+    postMock.mockResolvedValueOnce(undefined);
+    getMock.mockResolvedValueOnce(pendingState());
+
+    const { result } = renderHook(() => useArtworkEnrichment({ artworkId: 7 }));
+    await flushPromises();
+
+    await act(async () => {
+      await result.current.startEnrichment({ exactArtwork: true });
+    });
+
+    expect(postMock).toHaveBeenCalledWith(
+      "/api/artworks/7/enrichment?exact_artwork=true",
+      undefined,
+      { timeoutMs: ENRICHMENT_REQUEST_TIMEOUT_MS }
+    );
+    expect(getMock).toHaveBeenCalledWith("/api/artworks/7/enrichment", {
+      timeoutMs: ENRICHMENT_REQUEST_TIMEOUT_MS,
+    });
+  });
+
+  it("deduplicates concurrent startEnrichment calls", async () => {
+    let resolvePost: (() => void) | undefined;
+    postMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePost = resolve;
+        })
+    );
+    getMock.mockResolvedValue(pendingState());
+
+    const { result } = renderHook(() => useArtworkEnrichment({ artworkId: 7 }));
+    await flushPromises();
+
+    let first: Promise<unknown> | undefined;
+    let second: Promise<unknown> | undefined;
+    await act(async () => {
+      first = result.current.startEnrichment({ exactArtwork: true });
+      second = result.current.startEnrichment({ exactArtwork: true });
+    });
+
+    expect(postMock).toHaveBeenCalledTimes(1);
+    resolvePost?.();
+    await act(async () => {
+      await Promise.all([first, second]);
+    });
+  });
+
+  it("maps abort errors to friendly enrichment copy", async () => {
+    getMock.mockRejectedValueOnce(
+      new DOMException("signal is aborted without reason", "AbortError")
+    );
+
+    const { result } = renderHook(() => useArtworkEnrichment({ artworkId: 7 }));
+    await flushPromises();
+
+    expect(result.current.error).toBe(REQUEST_ABORT_MESSAGE);
   });
 });
 

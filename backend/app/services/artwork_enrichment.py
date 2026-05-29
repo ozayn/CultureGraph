@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import threading
+import time
 from typing import Any
 
 from dataclasses import dataclass, replace
@@ -144,7 +145,7 @@ def _build_lookup_response(
 
     lookup_result = lookup_artwork_candidates(
         query,
-        force_broad=exact_artwork_search or broaden_search,
+        force_broad=broaden_search,
         allow_wikimedia_fallback=broaden_search,
     )
 
@@ -298,6 +299,14 @@ async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
     if not artwork:
         return
 
+    started_at = time.perf_counter()
+    logger.info(
+        "enrichment start artwork_id=%s exact_artwork=%s broaden_search=%s",
+        artwork_id,
+        exact_artwork_search,
+        broaden_search,
+    )
+
     if not artwork.image_url:
         _set_enrichment_state(
             artwork,
@@ -329,12 +338,20 @@ async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
         db.commit()
         db.refresh(artwork)
 
-        lookup_response = _build_lookup_response(
+        lookup_started = time.perf_counter()
+        lookup_response = await asyncio.to_thread(
+            _build_lookup_response,
             db,
             artwork,
             draft,
             broaden_search=broaden_search,
             exact_artwork_search=exact_artwork_search,
+        )
+        logger.info(
+            "enrichment lookup finished artwork_id=%s duration=%.2fs candidates=%s",
+            artwork_id,
+            time.perf_counter() - lookup_started,
+            len(lookup_response.candidates),
         )
         visual = _draft_visual_analysis(draft)
         museum_name = artwork.visit.museum_name if artwork.visit else None
@@ -377,6 +394,11 @@ async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
             error=None,
         )
         db.commit()
+        logger.info(
+            "enrichment completed artwork_id=%s duration=%.2fs",
+            artwork_id,
+            time.perf_counter() - started_at,
+        )
     except (ResearchConfigurationError, ResearchProviderError) as exc:
         _set_enrichment_state(
             artwork,
@@ -394,6 +416,11 @@ async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
             error="Could not complete AI enrichment.",
         )
         db.commit()
+        logger.exception(
+            "enrichment failed artwork_id=%s duration=%.2fs",
+            artwork_id,
+            time.perf_counter() - started_at,
+        )
         raise exc
 
 

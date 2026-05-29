@@ -34,8 +34,8 @@ import type {
 import { cn } from "@/lib/utils";
 
 const STAGE_LABELS: Record<ArtworkEnrichmentStage, string> = {
-  identifying: "Identifying artwork…",
-  searching_collections: "Searching museum collections…",
+  identifying: "Analyzing artwork…",
+  searching_collections: "Searching the museum collection…",
   generating_annotations: "Generating annotation suggestions…",
 };
 
@@ -104,8 +104,8 @@ export function ArtworkEnrichmentPanel({
     const searchingCollectionLabel =
       state?.lookup?.retrieval_intent === "exact_artwork" || exactSearchActive
         ? collectionLabel
-          ? `Finding exact artwork in ${collectionLabel}…`
-          : "Finding exact artwork in museum collection…"
+          ? `Searching the ${collectionLabel} collection…`
+          : "Searching the museum collection…"
         : state?.lookup?.search_scope === "broad"
           ? "Searching open museum collections…"
           : collectionLabel
@@ -167,6 +167,7 @@ export function ArtworkEnrichmentPanel({
   }, [metadataHints, onHintsChange]);
 
   async function rerunEnrichment(options: { broadenSearch?: boolean; exactArtwork?: boolean } = {}) {
+    if (active || rerunning) return;
     setRerunning(true);
     setExactSearchActive(Boolean(options.exactArtwork));
     setRevealed({

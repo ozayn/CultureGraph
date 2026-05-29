@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
-import { api } from "@/lib/api";
+import { api, ENRICHMENT_REQUEST_TIMEOUT_MS } from "@/lib/api";
+import { mapRequestError } from "@/lib/request-errors";
 import type { ArtworkEnrichmentState, ArtworkEnrichmentStatus } from "@/lib/types";
 
 export const ENRICHMENT_POLL_INTERVAL_MS = 4_000;
@@ -30,6 +31,7 @@ interface EnrichmentEntry {
   pollTimer: ReturnType<typeof setInterval> | null;
   pollStartedAt: number | null;
   inFlight: Promise<ArtworkEnrichmentState | null> | null;
+  startInFlight: Promise<ArtworkEnrichmentState | null> | null;
 }
 
 const entries = new Map<number, EnrichmentEntry>();
@@ -56,6 +58,7 @@ function getEntry(artworkId: number): EnrichmentEntry {
       pollTimer: null,
       pollStartedAt: null,
       inFlight: null,
+      startInFlight: null,
     };
     entries.set(artworkId, entry);
   }
@@ -135,7 +138,8 @@ async function refreshEnrichmentEntry(
   entry.inFlight = (async () => {
     try {
       const next = await api.get<ArtworkEnrichmentState>(
-        `/api/artworks/${artworkId}/enrichment`
+        `/api/artworks/${artworkId}/enrichment`,
+        { timeoutMs: ENRICHMENT_REQUEST_TIMEOUT_MS }
       );
       entry.snapshot = {
         state: next,
@@ -149,7 +153,7 @@ async function refreshEnrichmentEntry(
       entry.snapshot = {
         ...entry.snapshot,
         loading: false,
-        error: error instanceof Error ? error.message : "Could not load AI enrichment.",
+        error: mapRequestError(error, "Could not load AI enrichment."),
       };
       notify(entry);
       syncPolling(entry);
@@ -166,17 +170,34 @@ async function startEnrichmentEntry(
   artworkId: number,
   options: { broadenSearch?: boolean; exactArtwork?: boolean } = {}
 ): Promise<ArtworkEnrichmentState | null> {
-  try {
-    const params = new URLSearchParams();
-    if (options.broadenSearch) params.set("broaden_search", "true");
-    if (options.exactArtwork) params.set("exact_artwork", "true");
-    const query = params.toString();
-    await api.post(`/api/artworks/${artworkId}/enrichment${query ? `?${query}` : ""}`);
-  } catch {
-    // Upload handler may have already queued enrichment.
+  const entry = getEntry(artworkId);
+  if (entry.startInFlight) {
+    return entry.startInFlight;
   }
 
-  return refreshEnrichmentEntry(artworkId);
+  entry.startInFlight = (async () => {
+    try {
+      const params = new URLSearchParams();
+      if (options.broadenSearch) params.set("broaden_search", "true");
+      if (options.exactArtwork) params.set("exact_artwork", "true");
+      const query = params.toString();
+      await api.post(
+        `/api/artworks/${artworkId}/enrichment${query ? `?${query}` : ""}`,
+        undefined,
+        { timeoutMs: ENRICHMENT_REQUEST_TIMEOUT_MS }
+      );
+    } catch {
+      // Upload handler may have already queued enrichment.
+    }
+
+    return refreshEnrichmentEntry(artworkId);
+  })();
+
+  try {
+    return await entry.startInFlight;
+  } finally {
+    entry.startInFlight = null;
+  }
 }
 
 function subscribeToEnrichmentEntry(

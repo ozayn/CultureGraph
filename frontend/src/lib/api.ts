@@ -5,11 +5,17 @@ import { displayImageUrl, resolveImageUrl } from "@/lib/media-url";
 
 export { apiUrl, getApiBase } from "@/lib/api-config";
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 25_000;
 /** Museum-note import can call Claude and needs a longer client timeout than CRUD. */
 export const IMPORT_REQUEST_TIMEOUT_MS = 120_000;
 /** Photo uploads on mobile need more time after client-side normalization. */
 export const UPLOAD_REQUEST_TIMEOUT_MS = 120_000;
+/** Museum collection lookup can scan large indexes with semantic scoring. */
+export const LOOKUP_REQUEST_TIMEOUT_MS = 90_000;
+/** AI enrichment POST/GET polling — Claude vision + collection retrieval. */
+export const ENRICHMENT_REQUEST_TIMEOUT_MS = 120_000;
+/** Standalone research generation calls Claude synchronously. */
+export const RESEARCH_REQUEST_TIMEOUT_MS = 120_000;
 
 export function mediaUrl(path: string | null | undefined): string | null {
   return resolveImageUrl(path);
@@ -84,7 +90,8 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get: <T>(path: string, options?: Pick<ApiRequestOptions, "timeoutMs">) =>
+    request<T>(path, { timeoutMs: options?.timeoutMs }),
   post: <T>(
     path: string,
     body?: unknown,

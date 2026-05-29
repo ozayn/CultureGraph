@@ -8,7 +8,14 @@ from pathlib import Path
 
 from app.sources.routing import resolve_lookup_sources
 from app.sources.base import ArtworkLookupCandidate, ArtworkLookupQuery
-from app.sources.matching import resolve_search_terms, score_artwork_entry
+from app.sources.matching import (
+    artist_similarity,
+    artists_share_surname,
+    expanded_tokens,
+    normalize,
+    resolve_search_terms,
+    score_artwork_entry,
+)
 from app.sources.museums import NGA_SOURCE_NAME, is_nga_museum
 
 __all__ = [
@@ -20,6 +27,7 @@ __all__ = [
 ]
 
 NGA_INDEX_PATH = Path(__file__).resolve().parent.parent / "data" / "nga_lookup_index.json"
+NGA_MAX_SEMANTIC_CANDIDATES = 1800
 
 
 def should_search_nga(query: ArtworkLookupQuery) -> bool:
@@ -39,6 +47,8 @@ def collect_nga_scored_candidates(
     scored: list[tuple[float, dict, ArtworkLookupCandidate]] = []
     for raw_entry in _load_index():
         entry = _normalize_nga_index_entry(raw_entry)
+        if not _passes_lookup_prefilter(entry, query, search_text, artist_text):
+            continue
         score = score_artwork_entry(
             entry,
             search_text,
@@ -69,7 +79,43 @@ def collect_nga_scored_candidates(
                 ),
             )
         )
+        if query.semantic_search and len(scored) >= NGA_MAX_SEMANTIC_CANDIDATES:
+            break
     return scored
+
+
+def _passes_lookup_prefilter(
+    entry: dict,
+    query: ArtworkLookupQuery,
+    search_text: str,
+    artist_text: str,
+) -> bool:
+    title = entry.get("title") or ""
+    artist = entry.get("artist") or ""
+    if not title.strip():
+        return False
+
+    if artist_text and artist:
+        if not artists_share_surname(artist_text, artist) and artist_similarity(artist_text, artist) < 0.35:
+            return False
+
+    if not query.semantic_search and not query.expanded_search_terms:
+        return True
+
+    haystack = normalize(f"{title} {entry.get('medium') or ''}")
+    if search_text and normalize(search_text) in haystack:
+        return True
+
+    title_tokens = expanded_tokens(title)
+    for phrase in query.expanded_search_terms[:12]:
+        phrase_tokens = expanded_tokens(phrase)
+        if phrase_tokens & title_tokens:
+            return True
+
+    if artist_text and artist and artist_similarity(artist_text, artist) >= 0.45:
+        return True
+
+    return not query.expanded_search_terms and not search_text
 
 
 def search_nga_collection(

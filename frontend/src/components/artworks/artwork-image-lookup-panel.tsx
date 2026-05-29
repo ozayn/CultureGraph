@@ -15,7 +15,8 @@ import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api";
+import { api, LOOKUP_REQUEST_TIMEOUT_MS } from "@/lib/api";
+import { mapRequestError } from "@/lib/request-errors";
 import {
   inferLookupMediumFilter,
   isPlaceholderTitle,
@@ -365,6 +366,7 @@ export function ArtworkImageLookupPanel({
 }: ArtworkImageLookupPanelProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [lookupInFlight, setLookupInFlight] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -386,6 +388,8 @@ export function ArtworkImageLookupPanel({
 
   const fetchLookup = useCallback(
     async (params: LookupSearchParams = {}) => {
+      if (lookupInFlight) return;
+      setLookupInFlight(true);
       setLoading(true);
       setError(null);
       setResponse(null);
@@ -398,7 +402,8 @@ export function ArtworkImageLookupPanel({
             artist: params.artist,
             searchMode: params.searchMode,
             broadenSources: params.broadenSources,
-          })
+          }),
+          { timeoutMs: LOOKUP_REQUEST_TIMEOUT_MS }
         );
         setResponse(result);
         if (result.medium_type_filter) {
@@ -421,14 +426,15 @@ export function ArtworkImageLookupPanel({
         }
       } catch (e) {
         setError(
-          e instanceof Error ? e.message : "Lookup failed. Check your connection and try again."
+          mapRequestError(e, "Lookup failed. Check your connection and try again.")
         );
         setResponse(null);
       } finally {
         setLoading(false);
+        setLookupInFlight(false);
       }
     },
-    [artwork.id, collectionLabel, mediumTypeFilter]
+    [artwork.id, collectionLabel, lookupInFlight, mediumTypeFilter]
   );
 
   const runAutoLookup = useCallback(
@@ -447,6 +453,8 @@ export function ArtworkImageLookupPanel({
 
   const runBroadenLookup = useCallback(
     async () => {
+      if (lookupInFlight) return;
+      setLookupInFlight(true);
       setLoading(true);
       setError(null);
       setPendingApply(null);
@@ -457,7 +465,8 @@ export function ArtworkImageLookupPanel({
             title: manualTitle || undefined,
             artist: manualArtist || undefined,
             broadenSources: true,
-          })
+          }),
+          { timeoutMs: LOOKUP_REQUEST_TIMEOUT_MS }
         );
         setResponse(result);
         if (!result.candidates.length && result.notice) {
@@ -466,12 +475,13 @@ export function ArtworkImageLookupPanel({
           setError("No matches found even with a broadened search.");
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Lookup failed.");
+        setError(mapRequestError(e, "Lookup failed."));
       } finally {
         setLoading(false);
+        setLookupInFlight(false);
       }
     },
-    [artwork.id, manualArtist, manualTitle, mediumTypeFilter]
+    [artwork.id, lookupInFlight, manualArtist, manualTitle, mediumTypeFilter]
   );
 
   const openLookup = useCallback(
