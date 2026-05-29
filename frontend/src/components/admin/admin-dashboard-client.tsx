@@ -203,6 +203,18 @@ export function AdminDashboardClient() {
     }
   }, [fetchDashboardData]);
 
+  const refreshUploadHealth = useCallback(async () => {
+    try {
+      const data = await api.get<AdminUploadHealth>("/api/admin/upload-health");
+      setUploadHealth(data);
+      setUploadHealthError(null);
+    } catch (e) {
+      setUploadHealthError(
+        e instanceof Error ? e.message : "Could not load upload storage health."
+      );
+    }
+  }, []);
+
   const pageCount = useMemo(
     () => Math.max(1, Math.ceil(total / PAGE_SIZE)),
     [total]
@@ -322,6 +334,7 @@ export function AdminDashboardClient() {
         health={uploadHealth}
         loading={loading && !uploadHealth}
         error={uploadHealthError}
+        onHealthRefresh={refreshUploadHealth}
       />
 
       {summary ? (

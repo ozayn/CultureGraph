@@ -29,6 +29,7 @@ vi.mock("@/lib/api", () => ({
           storage_backend: "filesystem",
           persistent: true,
           missing_count: 0,
+          missing_record_count: 0,
           records: [],
         };
       }

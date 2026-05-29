@@ -1,19 +1,53 @@
 "use client";
 
-import type { AdminUploadHealth } from "@/lib/admin-types";
+import { useMemo, useState } from "react";
+
+import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
+import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
+import type { AdminClearMissingUploadsResponse, AdminUploadHealth } from "@/lib/admin-types";
 import { cn } from "@/lib/utils";
 
 interface UploadStorageHealthCardProps {
   health: AdminUploadHealth | null;
   loading?: boolean;
   error?: string | null;
+  onHealthRefresh?: () => Promise<void>;
 }
 
 export function UploadStorageHealthCard({
   health,
   loading = false,
   error = null,
+  onHealthRefresh,
 }: UploadStorageHealthCardProps) {
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearLoading, setClearLoading] = useState(false);
+  const [clearError, setClearError] = useState<string | null>(null);
+
+  const affectedRecords = useMemo(() => {
+    if (!health) return 0;
+    if (health.missing_record_count > 0) {
+      return health.missing_record_count;
+    }
+    return new Set(health.records.map((record) => `${record.record_type}:${record.record_id}`))
+      .size;
+  }, [health]);
+
+  async function confirmClearMissing() {
+    setClearLoading(true);
+    setClearError(null);
+    try {
+      await api.post<AdminClearMissingUploadsResponse>("/api/admin/upload-health/clear-missing");
+      setClearOpen(false);
+      await onHealthRefresh?.();
+    } catch (e) {
+      setClearError(e instanceof Error ? e.message : "Could not clear missing upload references.");
+    } finally {
+      setClearLoading(false);
+    }
+  }
+
   return (
     <section
       className={cn(
@@ -31,6 +65,7 @@ export function UploadStorageHealthCard({
       ) : null}
 
       {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+      {clearError ? <p className="mt-2 text-sm text-destructive">{clearError}</p> : null}
 
       {health ? (
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
@@ -69,18 +104,41 @@ export function UploadStorageHealthCard({
       ) : null}
 
       {health && health.missing_count > 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">
-          {health.missing_count} database path{health.missing_count === 1 ? "" : "s"} point to
-          missing files on disk.
-          {health.records.length > 0 ? (
-            <>
-              {" "}
-              Example: {health.records[0].record_type} #{health.records[0].record_id} (
-              {health.records[0].field}).
-            </>
-          ) : null}
-        </p>
+        <div className="mt-3 space-y-3">
+          <p className="text-sm text-muted-foreground">
+            {health.missing_count} database path{health.missing_count === 1 ? "" : "s"} point to
+            missing files on disk across {affectedRecords} record
+            {affectedRecords === 1 ? "" : "s"}.
+            {health.records.length > 0 ? (
+              <>
+                {" "}
+                Example: {health.records[0].record_type} #{health.records[0].record_id} (
+                {health.records[0].field}).
+              </>
+            ) : null}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="touch"
+            onClick={() => setClearOpen(true)}
+          >
+            Clear missing file references
+          </Button>
+        </div>
       ) : null}
+
+      <ConfirmDeleteDialog
+        open={clearOpen}
+        onOpenChange={setClearOpen}
+        title="Clear missing file references?"
+        description={`This will remove broken upload paths from ${affectedRecords} record${
+          affectedRecords === 1 ? "" : "s"
+        }. The artworks will remain.`}
+        confirmLabel="Clear references"
+        loading={clearLoading}
+        onConfirm={confirmClearMissing}
+      />
     </section>
   );
 }

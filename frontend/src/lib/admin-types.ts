@@ -117,5 +117,11 @@ export interface AdminUploadHealth {
   storage_backend: string;
   persistent: boolean;
   missing_count: number;
+  missing_record_count: number;
   records: AdminMissingUploadRecord[];
+}
+
+export interface AdminClearMissingUploadsResponse {
+  cleared_paths: number;
+  affected_records: number;
 }

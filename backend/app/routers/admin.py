@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import require_listed_admin_user
@@ -13,6 +13,7 @@ from app.schemas.admin import (
     AdminArtworkRecord,
     AdminBulkDeleteRequest,
     AdminBulkDeleteResponse,
+    AdminClearMissingUploadsResponse,
     AdminEntityListResponse,
     AdminEntityRecord,
     AdminListMeta,
@@ -43,7 +44,10 @@ from app.services.admin_queries import (
     normalize_search,
     paginate,
 )
-from app.services.upload_health import collect_missing_upload_records, count_missing_upload_records
+from app.services.upload_health import (
+    clear_missing_upload_references,
+    summarize_missing_upload_records,
+)
 from app.services.upload_storage import get_upload_storage
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -69,13 +73,32 @@ def admin_upload_health(
     limit: int = Query(default=100, ge=1, le=500),
 ) -> AdminUploadHealthRead:
     storage = get_upload_storage()
-    missing = collect_missing_upload_records(db, limit=limit)
+    records, missing_count, missing_record_count = summarize_missing_upload_records(
+        db, sample_limit=limit
+    )
     return AdminUploadHealthRead(
         upload_dir=str(storage.upload_root()),
         storage_backend=storage.backend_name,
         persistent=storage.is_persistent(),
-        missing_count=count_missing_upload_records(db),
-        records=[AdminMissingUploadRecord.model_validate(item) for item in missing],
+        missing_count=missing_count,
+        missing_record_count=missing_record_count,
+        records=[AdminMissingUploadRecord.model_validate(item) for item in records],
+    )
+
+
+@router.post(
+    "/upload-health/clear-missing",
+    response_model=AdminClearMissingUploadsResponse,
+    status_code=status.HTTP_200_OK,
+)
+def admin_clear_missing_uploads(
+    _user: Annotated[dict[str, str | None], Depends(require_listed_admin_user)],
+    db: Session = Depends(get_db),
+) -> AdminClearMissingUploadsResponse:
+    cleared_paths, affected_records = clear_missing_upload_references(db)
+    return AdminClearMissingUploadsResponse(
+        cleared_paths=cleared_paths,
+        affected_records=affected_records,
     )
 
 

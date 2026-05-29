@@ -126,4 +126,10 @@ class AdminUploadHealthRead(BaseModel):
     storage_backend: str
     persistent: bool
     missing_count: int
+    missing_record_count: int
     records: list[AdminMissingUploadRecord]
+
+
+class AdminClearMissingUploadsResponse(BaseModel):
+    cleared_paths: int
+    affected_records: int

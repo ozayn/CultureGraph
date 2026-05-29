@@ -50,11 +50,26 @@ async def test_admin_upload_health_lists_missing_files(
 
         health_response = await client.get("/api/admin/upload-health", headers=auth_headers)
 
-    assert health_response.status_code == 200
-    payload = health_response.json()
-    assert payload["missing_count"] >= 1
-    assert payload["persistent"] is False
-    assert any(item["record_id"] == artwork_id for item in payload["records"])
+        assert health_response.status_code == 200
+        payload = health_response.json()
+        assert payload["missing_count"] >= 1
+        assert payload["missing_record_count"] >= 1
+        assert payload["persistent"] is False
+        assert any(item["record_id"] == artwork_id for item in payload["records"])
+
+        clear_response = await client.post(
+            "/api/admin/upload-health/clear-missing",
+            headers=auth_headers,
+        )
+        assert clear_response.status_code == 200
+        assert clear_response.json()["cleared_paths"] >= 1
+        assert clear_response.json()["affected_records"] >= 1
+
+        health_after = await client.get("/api/admin/upload-health", headers=auth_headers)
+        assert health_after.json()["missing_count"] == 0
+
+        artwork_after = await client.get(f"/api/artworks/{artwork_id}", headers=auth_headers)
+        assert artwork_after.json()["image_url"] is None
 
 
 @pytest.mark.asyncio
@@ -72,3 +87,12 @@ async def test_admin_upload_health_requires_admin(auth_headers: dict[str, str]) 
 
         ok = await client.get("/api/admin/upload-health", headers=auth_headers)
         assert ok.status_code == 200
+
+        clear_unauth = await client.post("/api/admin/upload-health/clear-missing")
+        assert clear_unauth.status_code == 401
+
+        clear_forbidden = await client.post(
+            "/api/admin/upload-health/clear-missing",
+            headers=stranger,
+        )
+        assert clear_forbidden.status_code == 403

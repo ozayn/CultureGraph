@@ -100,3 +100,72 @@ def collect_missing_upload_records(db: Session, *, limit: int = 200) -> list[dic
 
 def count_missing_upload_records(db: Session) -> int:
     return len(collect_missing_upload_records(db, limit=10_000))
+
+
+def count_missing_upload_record_ids(db: Session) -> int:
+    missing = collect_missing_upload_records(db, limit=10_000)
+    return len({(item["record_type"], item["record_id"]) for item in missing})
+
+
+def summarize_missing_upload_records(
+    db: Session,
+    *,
+    sample_limit: int = 100,
+) -> tuple[list[dict[str, Any]], int, int]:
+    missing = collect_missing_upload_records(db, limit=10_000)
+    record_count = len({(item["record_type"], item["record_id"]) for item in missing})
+    return missing[:sample_limit], len(missing), record_count
+
+
+def clear_missing_upload_references(db: Session) -> tuple[int, int]:
+    """Null out broken upload paths. Audio notes with missing files are removed."""
+    missing = collect_missing_upload_records(db, limit=10_000)
+    if not missing:
+        return 0, 0
+
+    artwork_fields: dict[int, set[str]] = {}
+    entity_fields: dict[int, set[str]] = {}
+    audio_note_ids: set[int] = set()
+
+    for item in missing:
+        record_type = item["record_type"]
+        record_id = item["record_id"]
+        field = item["field"]
+        if record_type == "artwork":
+            artwork_fields.setdefault(record_id, set()).add(field)
+        elif record_type == "cultural_entity":
+            entity_fields.setdefault(record_id, set()).add(field)
+        elif record_type == "audio_note" and field == "audio_url":
+            audio_note_ids.add(record_id)
+
+    for artwork_id, fields in artwork_fields.items():
+        artwork = db.get(Artwork, artwork_id)
+        if not artwork:
+            continue
+        for field in fields:
+            if field in {
+                "image_url",
+                "image_master_url",
+                "image_thumbnail_url",
+                "label_image_url",
+                "label_image_thumbnail_url",
+            }:
+                setattr(artwork, field, None)
+
+    for entity_id, fields in entity_fields.items():
+        entity = db.get(CulturalEntity, entity_id)
+        if not entity:
+            continue
+        for field in fields:
+            if field in {"image_url", "thumbnail_url"}:
+                setattr(entity, field, None)
+
+    for note_id in audio_note_ids:
+        note = db.get(AudioNote, note_id)
+        if note:
+            db.delete(note)
+
+    db.commit()
+
+    affected_records = len(artwork_fields) + len(entity_fields) + len(audio_note_ids)
+    return len(missing), affected_records
