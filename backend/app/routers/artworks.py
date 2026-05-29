@@ -196,7 +196,7 @@ def lens_search_artwork(
     _user: Annotated[dict[str, str], Depends(require_admin_user)],
     db: Session = Depends(get_db),
 ) -> LensSearchResponse:
-    """Optional web visual search fallback via SerpApi Google Lens (admin only)."""
+    """Optional web visual search fallback (admin only)."""
     artwork = _get_artwork_or_404(db, artwork_id)
     try:
         result = search_artwork_with_lens(artwork)

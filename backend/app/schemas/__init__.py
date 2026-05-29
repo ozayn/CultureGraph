@@ -648,7 +648,7 @@ class LensSearchResponse(BaseModel):
     notice: str | None = None
     query_image_url: str | None = None
     disclaimer: str = (
-        "Results come from optional third-party web visual search (SerpApi), "
+        "Results come from optional third-party web visual search, "
         "not an official Google Lens API. Review each source before applying "
         "any image or metadata."
     )

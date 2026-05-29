@@ -53,13 +53,15 @@ Used for: artwork enrichment, standalone research, wall-label OCR.
 
 See [ai/audio-notes.md](ai/audio-notes.md).
 
-### SerpApi (web visual search)
+### Web visual search
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SERPAPI_API_KEY` | — | Google Lens via SerpApi |
+| `WEB_VISUAL_SEARCH_PROVIDER` | `serpapi` | Active provider: `serpapi` or `searchapi` |
+| `SERPAPI_API_KEY` | — | SerpApi Google Lens (when provider is `serpapi`) |
+| `SEARCHAPI_API_KEY` | — | SearchAPI.io Google Lens (when provider is `searchapi`) |
 | `PUBLIC_API_BASE_URL` | — | Public API origin for `/uploads/` image URLs |
-| `SERPAPI_TIMEOUT_SECONDS` | `45` | Upstream timeout |
+| `SERPAPI_TIMEOUT_SECONDS` | `45` | Upstream timeout (both providers) |
 | `LENS_SEARCH_MAX_RESULTS` | `12` | Max candidates returned |
 
 See [integrations/lens-search.md](integrations/lens-search.md).
