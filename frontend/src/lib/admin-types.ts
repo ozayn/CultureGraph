@@ -125,3 +125,11 @@ export interface AdminClearMissingUploadsResponse {
   cleared_paths: number;
   affected_records: number;
 }
+
+export interface AdminVisualIndexStatus {
+  indexed_count: number;
+  embedding_model: string;
+  last_updated: string | null;
+  thumbnail_cache_size: number;
+  source_name: string;
+}

@@ -191,6 +191,7 @@ def visual_match_artwork(
         embedding_model=result.embedding_model,
         notice=result.notice,
         index_status=result.index_status,  # type: ignore[arg-type]
+        indexed_count=result.indexed_count,
         query_image_url=result.query_image_url,
     )
 

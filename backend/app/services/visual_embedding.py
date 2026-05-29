@@ -60,25 +60,36 @@ class TestEmbeddingBackend:
         return normalize_vector(repeated.tolist())
 
 
+def _resolve_torch_device(torch) -> str:
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 class OpenCLIPEmbeddingBackend:
     def __init__(self, model_name: str, pretrained: str) -> None:
         import open_clip
         import torch
 
         self._torch = torch
+        self._device = _resolve_torch_device(torch)
         self._model, _, self._preprocess = open_clip.create_model_and_transforms(
             model_name,
             pretrained=pretrained,
         )
+        self._model = self._model.to(self._device)
         self._model.eval()
+        logger.info("OpenCLIP embedding backend using device=%s", self._device)
 
     def embed_image(self, image: Image.Image) -> list[float]:
         rgb = image.convert("RGB")
-        tensor = self._preprocess(rgb).unsqueeze(0)
+        tensor = self._preprocess(rgb).unsqueeze(0).to(self._device)
         with self._torch.no_grad():
             features = self._model.encode_image(tensor)
             features = features / features.norm(dim=-1, keepdim=True)
-        return normalize_vector(features.squeeze(0).cpu().numpy().tolist())
+        return normalize_vector(features.squeeze(0).detach().cpu().numpy().tolist())
 
 
 @lru_cache(maxsize=1)

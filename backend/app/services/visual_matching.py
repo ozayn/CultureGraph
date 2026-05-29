@@ -16,16 +16,18 @@ from app.services.visual_embedding import (
     embed_image_path,
     resolve_artwork_image_path,
 )
+from app.services.visual_index_status import collection_index_count
 from app.sources.museums import NGA_SOURCE_NAME, is_nga_museum
 from app.sources.routing import museum_collection_display_name
 from app.sources.matching import artist_similarity, is_placeholder_artist, is_placeholder_title
 
 logger = logging.getLogger(__name__)
 
-INDEX_MISSING_NOTICE = (
-    "Visual index not built yet. Run the NGA image index script: "
-    "python scripts/build_nga_image_index.py"
-)
+
+def visual_index_building_notice(indexed_count: int) -> str:
+    if indexed_count > 0:
+        return f"NGA visual index: {indexed_count:,} artworks indexed."
+    return "NGA visual index is still building."
 
 
 @dataclass(frozen=True)
@@ -56,19 +58,8 @@ class VisualMatchResult:
     embedding_model: str | None
     notice: str | None
     index_status: str
+    indexed_count: int
     query_image_url: str | None
-
-
-def collection_index_count(db: Session, *, source_name: str, embedding_model: str) -> int:
-    return (
-        db.query(CollectionImageEmbedding)
-        .join(CollectionArtwork)
-        .filter(
-            CollectionArtwork.source_name == source_name,
-            CollectionImageEmbedding.embedding_model == embedding_model,
-        )
-        .count()
-    )
 
 
 def resolve_visual_match_source(museum_name: str | None) -> str | None:
@@ -91,6 +82,7 @@ def match_artwork_visually(db: Session, artwork: Artwork) -> VisualMatchResult:
             embedding_model=EMBEDDING_MODEL_KEY,
             notice="Upload a photo before searching by visual similarity.",
             index_status="missing",
+            indexed_count=0,
             query_image_url=None,
         )
 
@@ -103,6 +95,7 @@ def match_artwork_visually(db: Session, artwork: Artwork) -> VisualMatchResult:
             embedding_model=EMBEDDING_MODEL_KEY,
             notice="Visual matching is available for National Gallery of Art visits in this MVP.",
             index_status="missing",
+            indexed_count=0,
             query_image_url=artwork.image_url,
         )
 
@@ -114,8 +107,9 @@ def match_artwork_visually(db: Session, artwork: Artwork) -> VisualMatchResult:
             museum_collection_name=collection_label,
             search_scope="museum",
             embedding_model=EMBEDDING_MODEL_KEY,
-            notice=INDEX_MISSING_NOTICE,
+            notice=visual_index_building_notice(0),
             index_status="empty",
+            indexed_count=0,
             query_image_url=artwork.image_url,
         )
 
@@ -131,6 +125,7 @@ def match_artwork_visually(db: Session, artwork: Artwork) -> VisualMatchResult:
             embedding_model=EMBEDDING_MODEL_KEY,
             notice=str(exc),
             index_status="ready",
+            indexed_count=indexed_count,
             query_image_url=artwork.image_url,
         )
 
@@ -177,6 +172,7 @@ def match_artwork_visually(db: Session, artwork: Artwork) -> VisualMatchResult:
         embedding_model=EMBEDDING_MODEL_KEY,
         notice=None,
         index_status="ready",
+        indexed_count=indexed_count,
         query_image_url=artwork.image_url,
     )
 

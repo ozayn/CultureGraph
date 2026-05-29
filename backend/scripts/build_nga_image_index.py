@@ -3,15 +3,11 @@
 
 from __future__ import annotations
 
-import json
+import argparse
+import logging
 import os
 import sys
-from io import BytesIO
 from pathlib import Path
-
-import requests
-from PIL import Image
-from sqlalchemy.orm import Session
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(BACKEND_ROOT) not in sys.path:
@@ -19,139 +15,86 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import CollectionArtwork, CollectionImageEmbedding
-from app.services.visual_embedding import EMBEDDING_MODEL_KEY, VisualEmbeddingError, embed_pil_image
-from app.sources.museums import NGA_SOURCE_NAME
+from app.services.nga_visual_index import BuildOptions, run_build
+from app.services.visual_embedding import EMBEDDING_MODEL_KEY, VisualEmbeddingError
 
-NGA_LOOKUP_INDEX = BACKEND_ROOT / "app" / "data" / "nga_lookup_index.json"
-THUMB_TIMEOUT = 20
+logger = logging.getLogger(__name__)
 
 
-def _load_records(limit: int) -> list[dict]:
-    if not NGA_LOOKUP_INDEX.is_file():
-        raise SystemExit(
-            f"Missing {NGA_LOOKUP_INDEX}. Run scripts/build_nga_lookup_index.py first."
-        )
-    records = json.loads(NGA_LOOKUP_INDEX.read_text(encoding="utf-8"))
-    if not isinstance(records, list):
-        raise SystemExit("NGA lookup index must be a JSON list.")
-    return [record for record in records if isinstance(record, dict)][:limit]
-
-
-def _upsert_artwork(db: Session, record: dict) -> CollectionArtwork:
-    object_id = str(record.get("object_id") or "").strip()
-    title = (record.get("title") or "").strip()
-    if not object_id or not title:
-        raise ValueError("Record missing object_id or title")
-
-    existing = (
-        db.query(CollectionArtwork)
-        .filter(
-            CollectionArtwork.source_name == NGA_SOURCE_NAME,
-            CollectionArtwork.source_object_id == object_id,
-        )
-        .one_or_none()
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Build NGA collection thumbnails and image embeddings for visual matching."
     )
-    payload = {
-        "title": title,
-        "artist": record.get("artist"),
-        "date": record.get("date"),
-        "medium": record.get("medium"),
-        "image_url": record.get("image_url"),
-        "thumbnail_url": record.get("image_thumbnail_url") or record.get("image_url"),
-        "object_url": record.get("object_url"),
-        "rights_label": record.get("rights_label"),
-        "metadata_json": {
-            "accession_number": record.get("accession_number"),
-            "begin_year": record.get("begin_year"),
-            "end_year": record.get("end_year"),
-        },
-    }
-    if existing:
-        for key, value in payload.items():
-            setattr(existing, key, value)
-        return existing
-
-    artwork = CollectionArtwork(
-        source_name=NGA_SOURCE_NAME,
-        source_object_id=object_id,
-        **payload,
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum records to process in this run (default: NGA_INDEX_LIMIT or settings).",
     )
-    db.add(artwork)
-    db.flush()
-    return artwork
-
-
-def _download_image(url: str | None) -> Image.Image | None:
-    if not url or not url.strip():
-        return None
-    try:
-        response = requests.get(url, timeout=THUMB_TIMEOUT)
-        response.raise_for_status()
-        return Image.open(BytesIO(response.content))
-    except Exception:
-        return None
-
-
-def _ensure_embedding(db: Session, artwork: CollectionArtwork, image: Image.Image, image_url: str) -> bool:
-    existing = (
-        db.query(CollectionImageEmbedding)
-        .filter(
-            CollectionImageEmbedding.collection_artwork_id == artwork.id,
-            CollectionImageEmbedding.embedding_model == EMBEDDING_MODEL_KEY,
-        )
-        .one_or_none()
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from the saved offset in data/nga_visual_index_state.json.",
     )
-    if existing:
-        return False
-
-    vector = embed_pil_image(image)
-    db.add(
-        CollectionImageEmbedding(
-            collection_artwork_id=artwork.id,
-            embedding_model=EMBEDDING_MODEL_KEY,
-            embedding_vector=vector,
-            image_url=image_url,
-        )
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Re-embed artworks even when embeddings already exist for the active model.",
     )
-    return True
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=25,
+        help="Commit to the database and log progress every N records.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Log planned work without writing embeddings or committing database changes.",
+    )
+    return parser.parse_args()
+
+
+def resolve_limit(cli_limit: int | None) -> int:
+    if cli_limit is not None:
+        return max(1, cli_limit)
+    env_limit = os.environ.get("NGA_INDEX_LIMIT")
+    if env_limit:
+        return max(1, int(env_limit))
+    return max(1, settings.nga_index_limit)
 
 
 def main() -> None:
-    limit = int(os.environ.get("NGA_INDEX_LIMIT", settings.nga_index_limit))
-    records = _load_records(limit)
-    print(f"Indexing up to {len(records)} NGA records with model {EMBEDDING_MODEL_KEY}")
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    args = parse_args()
+    if args.batch_size < 1:
+        raise SystemExit("--batch-size must be at least 1")
+
+    options = BuildOptions(
+        limit=resolve_limit(args.limit),
+        resume=args.resume,
+        rebuild=args.rebuild,
+        batch_size=args.batch_size,
+        dry_run=args.dry_run,
+    )
 
     db = SessionLocal()
-    created_embeddings = 0
-    skipped = 0
     try:
-        for index, record in enumerate(records, start=1):
-            try:
-                artwork = _upsert_artwork(db, record)
-            except ValueError:
-                skipped += 1
-                continue
-
-            image_url = artwork.thumbnail_url or artwork.image_url
-            image = _download_image(image_url)
-            if image is None:
-                skipped += 1
-                continue
-
-            if _ensure_embedding(db, artwork, image, image_url or ""):
-                created_embeddings += 1
-
-            if index % 25 == 0:
-                db.commit()
-                print(f"processed={index} new_embeddings={created_embeddings} skipped={skipped}")
-
-        db.commit()
+        metrics = run_build(db, options)
     finally:
         db.close()
 
+    elapsed = metrics.elapsed_seconds
     print(
-        f"Done. records={len(records)} new_embeddings={created_embeddings} skipped={skipped}"
+        "Done. "
+        f"processed={metrics.processed} "
+        f"new_embeddings={metrics.new_embeddings} "
+        f"reused={metrics.reused_embeddings} "
+        f"skipped={metrics.skipped} "
+        f"cache_hits={metrics.cache_hits} "
+        f"downloads={metrics.downloads} "
+        f"elapsed_s={elapsed:.1f}",
+        flush=True,
     )
 
 

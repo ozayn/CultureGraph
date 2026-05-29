@@ -623,6 +623,7 @@ class VisualMatchResponse(BaseModel):
     embedding_model: str | None = None
     notice: str | None = None
     index_status: Literal["ready", "missing", "empty"] = "ready"
+    indexed_count: int = 0
     query_image_url: str | None = None
     disclaimer: str = (
         "Best visual matches from the museum collection. "

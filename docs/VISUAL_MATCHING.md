@@ -29,6 +29,8 @@ For unit tests only (no real CLIP model):
 export VISUAL_EMBEDDING_BACKEND=test
 ```
 
+On Apple Silicon (MacBook Pro M4), OpenCLIP uses PyTorch MPS automatically when available.
+
 ### 2. Run migrations
 
 ```bash
@@ -50,20 +52,72 @@ python scripts/build_nga_lookup_index.py
 
 ### 4. Build the visual index
 
+Recommended first test on a MacBook Pro M4:
+
 ```bash
-export NGA_INDEX_LIMIT=500   # start small locally
-python scripts/build_nga_image_index.py
+python scripts/build_nga_image_index.py --limit 500
+```
+
+CLI options:
+
+| Flag | Purpose |
+|------|---------|
+| `--limit N` | Process at most N records in this run |
+| `--resume` | Continue from `data/nga_visual_index_state.json` offset |
+| `--rebuild` | Re-embed even when embeddings already exist |
+| `--batch-size N` | Commit and log progress every N records (default 25) |
+| `--dry-run` | Log planned work without DB writes or embeddings |
+
+Progress logging example:
+
+```text
+Indexed 120 / 500 artworks
 ```
 
 The script:
 
 - loads NGA open-data records with image URLs
 - upserts `collection_artworks`
-- downloads thumbnails
-- computes/caches embeddings
+- downloads thumbnails into `data/nga_thumbnail_cache/` (reused on later runs)
+- computes embeddings with OpenCLIP (`embedding_model` stored per row)
 - stores vectors in `collection_image_embeddings`
+- skips records already embedded unless `--rebuild`
+- prints timing metrics at the end (`elapsed_s=...`)
 
-Re-running the script skips records that already have embeddings for the active model.
+Resume a larger build:
+
+```bash
+python scripts/build_nga_image_index.py --limit 500 --resume
+python scripts/build_nga_image_index.py --limit 1500 --resume
+```
+
+## Estimated disk usage (local M4)
+
+| Item | Approximate size |
+|------|------------------|
+| OpenCLIP + PyTorch wheels | 400–800 MB in `.venv` |
+| Thumbnail cache (`--limit 500`) | 25–75 MB |
+| Thumbnail cache (`--limit 2000`) | 100–300 MB |
+| Postgres embeddings (`--limit 2000`) | ~5–15 MB JSON vectors |
+
+Thumbnail cache and resume state live under `backend/data/` and are gitignored.
+
+## Estimated runtime (MacBook Pro M4)
+
+Rough order of magnitude with `VISUAL_EMBEDDING_BACKEND=openclip` and MPS:
+
+| Batch | New embeddings | Typical wall time |
+|-------|----------------|-------------------|
+| `--limit 500` | ~400–500 | 15–35 minutes |
+| `--limit 2000` | ~1500–2000 | 1–2.5 hours |
+
+Re-runs with cached thumbnails and existing embeddings are much faster because the script skips completed records unless `--rebuild`.
+
+Dry-run a batch without writing:
+
+```bash
+python scripts/build_nga_image_index.py --limit 50 --dry-run
+```
 
 ## Configuration
 
@@ -72,8 +126,19 @@ Re-running the script skips records that already have embeddings for the active 
 | `VISUAL_EMBEDDING_BACKEND` | `openclip` | `openclip` or `test` |
 | `VISUAL_EMBEDDING_MODEL` | `ViT-B-32` | OpenCLIP model name |
 | `VISUAL_EMBEDDING_PRETRAINED` | `openai` | OpenCLIP weights tag |
-| `NGA_INDEX_LIMIT` | `2000` | Max records indexed by build script |
+| `NGA_INDEX_LIMIT` | `2000` | Default `--limit` when flag omitted |
 | `VISUAL_MATCH_TOP_K` | `12` | Candidates returned to UI |
+
+## Admin status
+
+`GET /api/admin/visual-index-status` returns:
+
+- `indexed_count`
+- `embedding_model`
+- `last_updated`
+- `thumbnail_cache_size` (bytes)
+
+The admin dashboard shows this card beside upload storage health.
 
 ## Production / Railway notes
 
@@ -83,7 +148,7 @@ Re-running the script skips records that already have embeddings for the active 
 - Expect additional Postgres storage for embeddings (~512 floats per indexed artwork).
 - For Railway MVP, consider:
   - indexing only NGA
-  - keeping `NGA_INDEX_LIMIT` low initially
+  - keeping `--limit` low initially
   - running indexing from a separate worker/container
 
 ## Current scope
@@ -92,6 +157,7 @@ Re-running the script skips records that already have embeddings for the active 
 - Uses the cropped display image when available.
 - Honest confidence labels: `high`, `possible`, `weak`.
 - UI copy: **Best visual matches**, not verified identification.
+- Empty index UI: **NGA visual index is still building**; once indexed, the UI shows artwork counts.
 
 ## Future plan
 

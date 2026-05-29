@@ -27,3 +27,7 @@ frontend/out/
 # Logs
 *.log
 npm-debug.log*
+
+# Visual index build artifacts
+backend/data/nga_thumbnail_cache/
+backend/data/nga_visual_index_state.json

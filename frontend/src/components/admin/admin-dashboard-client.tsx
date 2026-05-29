@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { UploadStorageHealthCard } from "@/components/admin/upload-storage-health-card";
+import { VisualIndexStatusCard } from "@/components/admin/visual-index-status-card";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { Button } from "@/components/ui/button";
 import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
@@ -26,6 +27,7 @@ import {
   type AdminSummary,
   type AdminTab,
   type AdminUploadHealth,
+  type AdminVisualIndexStatus,
   type AdminVisitRecord,
 } from "@/lib/admin-types";
 import { entityThumbnailUrl } from "@/lib/thumbnails";
@@ -67,6 +69,8 @@ export function AdminDashboardClient() {
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [uploadHealth, setUploadHealth] = useState<AdminUploadHealth | null>(null);
   const [uploadHealthError, setUploadHealthError] = useState<string | null>(null);
+  const [visualIndexStatus, setVisualIndexStatus] = useState<AdminVisualIndexStatus | null>(null);
+  const [visualIndexStatusError, setVisualIndexStatusError] = useState<string | null>(null);
   const [records, setRecords] = useState<AdminRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -109,12 +113,13 @@ export function AdminDashboardClient() {
     });
     if (search) params.set("search", search);
 
-    const [summaryResult, recordsResult, healthResult] = await Promise.allSettled([
+    const [summaryResult, recordsResult, healthResult, visualIndexResult] = await Promise.allSettled([
       api.get<AdminSummary>("/api/admin/summary"),
       api.get<AdminPaginated<AdminRecord>>(
         `${ADMIN_TAB_PATHS[activeTab]}?${params.toString()}`
       ),
       api.get<AdminUploadHealth>("/api/admin/upload-health"),
+      api.get<AdminVisualIndexStatus>("/api/admin/visual-index-status"),
     ]);
 
     if (summaryResult.status === "rejected") {
@@ -130,12 +135,21 @@ export function AdminDashboardClient() {
           ? healthResult.reason.message
           : "Could not load upload storage health."
         : null;
+    const visualIndexStatusError =
+      visualIndexResult.status === "rejected"
+        ? visualIndexResult.reason instanceof Error
+          ? visualIndexResult.reason.message
+          : "Could not load visual index status."
+        : null;
 
     return {
       summaryData: summaryResult.value,
       recordsData: recordsResult.value,
       uploadHealthData: healthResult.status === "fulfilled" ? healthResult.value : null,
       uploadHealthError,
+      visualIndexStatusData:
+        visualIndexResult.status === "fulfilled" ? visualIndexResult.value : null,
+      visualIndexStatusError,
     };
   }, [activeTab, offset, search]);
 
@@ -149,13 +163,22 @@ export function AdminDashboardClient() {
       setError(null);
       setUnauthorized(false);
       setUploadHealthError(null);
+      setVisualIndexStatusError(null);
       try {
-        const { summaryData, recordsData, uploadHealthData, uploadHealthError: healthError } =
-          await fetchDashboardData();
+        const {
+          summaryData,
+          recordsData,
+          uploadHealthData,
+          uploadHealthError: healthError,
+          visualIndexStatusData,
+          visualIndexStatusError: indexError,
+        } = await fetchDashboardData();
         if (cancelled) return;
         setSummary(summaryData);
         setUploadHealth(uploadHealthData);
         setUploadHealthError(healthError);
+        setVisualIndexStatus(visualIndexStatusData);
+        setVisualIndexStatusError(indexError);
         setRecords(recordsData.records);
         setTotal(recordsData.meta.total);
       } catch (e) {
@@ -183,12 +206,21 @@ export function AdminDashboardClient() {
     setError(null);
     setUnauthorized(false);
     setUploadHealthError(null);
+    setVisualIndexStatusError(null);
     try {
-      const { summaryData, recordsData, uploadHealthData, uploadHealthError: healthError } =
-        await fetchDashboardData();
+      const {
+        summaryData,
+        recordsData,
+        uploadHealthData,
+        uploadHealthError: healthError,
+        visualIndexStatusData,
+        visualIndexStatusError: indexError,
+      } = await fetchDashboardData();
       setSummary(summaryData);
       setUploadHealth(uploadHealthData);
       setUploadHealthError(healthError);
+      setVisualIndexStatus(visualIndexStatusData);
+      setVisualIndexStatusError(indexError);
       setRecords(recordsData.records);
       setTotal(recordsData.meta.total);
     } catch (e) {
@@ -335,6 +367,12 @@ export function AdminDashboardClient() {
         loading={loading && !uploadHealth}
         error={uploadHealthError}
         onHealthRefresh={refreshUploadHealth}
+      />
+
+      <VisualIndexStatusCard
+        status={visualIndexStatus}
+        loading={loading && !visualIndexStatus}
+        error={visualIndexStatusError}
       />
 
       {summary ? (

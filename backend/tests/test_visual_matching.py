@@ -109,7 +109,8 @@ def test_visual_match_empty_index_returns_build_notice(db_session, tmp_path, mon
     result = match_artwork_visually(db_session, artwork)
     assert result.index_status == "empty"
     assert result.notice
-    assert "Visual index not built yet" in result.notice
+    assert "still building" in result.notice
+    assert result.indexed_count == 0
 
 
 def test_visual_match_endpoint(db_session, auth_headers, tmp_path, monkeypatch) -> None:

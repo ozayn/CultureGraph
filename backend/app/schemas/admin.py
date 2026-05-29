@@ -133,3 +133,11 @@ class AdminUploadHealthRead(BaseModel):
 class AdminClearMissingUploadsResponse(BaseModel):
     cleared_paths: int
     affected_records: int
+
+
+class AdminVisualIndexStatusRead(BaseModel):
+    indexed_count: int
+    embedding_model: str
+    last_updated: datetime | None = None
+    thumbnail_cache_size: int
+    source_name: str

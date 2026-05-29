@@ -22,6 +22,7 @@ from app.schemas.admin import (
     AdminResearchNoteRecord,
     AdminSummaryRead,
     AdminUploadHealthRead,
+    AdminVisualIndexStatusRead,
     AdminVisitListResponse,
     AdminVisitRecord,
 )
@@ -49,6 +50,7 @@ from app.services.upload_health import (
     summarize_missing_upload_records,
 )
 from app.services.upload_storage import get_upload_storage
+from app.services.visual_index_status import get_visual_index_status
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -83,6 +85,21 @@ def admin_upload_health(
         missing_count=missing_count,
         missing_record_count=missing_record_count,
         records=[AdminMissingUploadRecord.model_validate(item) for item in records],
+    )
+
+
+@router.get("/visual-index-status", response_model=AdminVisualIndexStatusRead)
+def admin_visual_index_status(
+    _user: Annotated[dict[str, str | None], Depends(require_listed_admin_user)],
+    db: Session = Depends(get_db),
+) -> AdminVisualIndexStatusRead:
+    visual_status = get_visual_index_status(db)
+    return AdminVisualIndexStatusRead(
+        indexed_count=visual_status.indexed_count,
+        embedding_model=visual_status.embedding_model,
+        last_updated=visual_status.last_updated,
+        thumbnail_cache_size=visual_status.thumbnail_cache_size,
+        source_name=visual_status.source_name,
     )
 
 

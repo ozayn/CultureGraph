@@ -218,6 +218,7 @@ export interface VisualMatchResponse {
   embedding_model?: string | null;
   notice?: string | null;
   index_status?: VisualMatchIndexStatus;
+  indexed_count?: number;
   query_image_url?: string | null;
   disclaimer?: string;
 }

@@ -31,6 +31,16 @@ interface VisualMatchCandidateListProps {
   onApplied: (artwork: Artwork) => void;
 }
 
+function visualIndexNotice(match: VisualMatchResponse): string | null {
+  if (match.index_status === "empty") {
+    return "NGA visual index is still building.";
+  }
+  if (match.indexed_count && match.indexed_count > 0) {
+    return `NGA visual index: ${match.indexed_count.toLocaleString()} artworks indexed.`;
+  }
+  return match.notice ?? null;
+}
+
 export function VisualMatchCandidateList({
   artwork,
   match,
@@ -81,8 +91,9 @@ export function VisualMatchCandidateList({
   }
 
   if (!match.candidates.length) {
-    return match.notice ? (
-      <p className="text-sm text-muted-foreground">{match.notice}</p>
+    const notice = visualIndexNotice(match);
+    return notice ? (
+      <p className="text-sm text-muted-foreground">{notice}</p>
     ) : null;
   }
 
@@ -90,6 +101,11 @@ export function VisualMatchCandidateList({
     <div className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{heading}</p>
+        {match.indexed_count && match.indexed_count > 0 ? (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Searching {match.indexed_count.toLocaleString()} indexed NGA artworks
+          </p>
+        ) : null}
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
           {match.disclaimer ??
             "Compare catalog thumbnails with your photo before applying metadata."}
