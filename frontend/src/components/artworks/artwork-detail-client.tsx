@@ -53,6 +53,7 @@ interface ArtworkDetailClientProps {
   annotations: Annotation[];
   culturalEntities?: CulturalEntity[];
   visitDate?: string | null;
+  visitMuseumName?: string | null;
   autoEnrich?: boolean;
 }
 
@@ -61,6 +62,7 @@ export function ArtworkDetailClient({
   annotations: initialAnnotations,
   culturalEntities = [],
   visitDate = null,
+  visitMuseumName = null,
   autoEnrich = false,
 }: ArtworkDetailClientProps) {
   const router = useRouter();
@@ -306,6 +308,7 @@ export function ArtworkDetailClient({
     artwork={artwork}
     canEdit={canEdit}
     hasImage={hasImage}
+    visitMuseumName={visitMuseumName}
     aiTitleHint={labelLookupHints?.title ?? researchHints?.lookupTitle ?? researchHints?.title}
     aiArtistHint={labelLookupHints?.artist ?? researchHints?.lookupArtist ?? researchHints?.artist}
     aiMediumHint={researchHints?.medium}
@@ -464,6 +467,7 @@ export function ArtworkDetailClient({
         />
         <ArtworkEnrichmentPanel
           artwork={artwork}
+          visitMuseumName={visitMuseumName}
           canEdit={canEdit}
           hasImage={hasImage}
           autoFocus={autoEnrich}

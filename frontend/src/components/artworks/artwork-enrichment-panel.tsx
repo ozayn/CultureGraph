@@ -19,6 +19,7 @@ import {
   synthesizeIdentificationFromDraft,
   type ResearchMetadataHints,
 } from "@/lib/artwork-metadata";
+import { museumCollectionSearchLabel } from "@/lib/museum-collection";
 import { parseSuggestedAnnotations } from "@/lib/research-suggestions";
 import { useArtworkEnrichment } from "@/lib/use-artwork-enrichment";
 import type {
@@ -39,6 +40,7 @@ const STAGE_LABELS: Record<ArtworkEnrichmentStage, string> = {
 
 interface ArtworkEnrichmentPanelProps {
   artwork: Artwork;
+  visitMuseumName?: string | null;
   canEdit?: boolean;
   hasImage?: boolean;
   autoFocus?: boolean;
@@ -51,6 +53,7 @@ interface ArtworkEnrichmentPanelProps {
 
 export function ArtworkEnrichmentPanel({
   artwork,
+  visitMuseumName = null,
   canEdit = true,
   hasImage = false,
   autoFocus = false,
@@ -94,12 +97,22 @@ export function ArtworkEnrichmentPanel({
   );
 
   const stageLabel = useMemo(() => {
+    const collectionLabel =
+      state?.lookup?.museum_collection_name ?? visitMuseumName ?? null;
+    const searchingCollectionLabel =
+      state?.lookup?.search_scope === "broad"
+        ? "Searching open museum collections…"
+        : collectionLabel
+          ? `${museumCollectionSearchLabel(collectionLabel)}…`
+          : STAGE_LABELS.searching_collections;
+
     if (!state) return "Analyzing artwork…";
+    if (state.stage === "searching_collections") return searchingCollectionLabel;
     if (state.stage) return STAGE_LABELS[state.stage];
     if (state.status === "pending") return "Analyzing artwork…";
     if (state.status === "running") return "Analyzing artwork…";
     return null;
-  }, [state]);
+  }, [state, visitMuseumName]);
 
   useEffect(() => {
     if (state?.draft?.suggested_annotations) {
@@ -138,7 +151,7 @@ export function ArtworkEnrichmentPanel({
     onHintsChange?.(metadataHints);
   }, [metadataHints, onHintsChange]);
 
-  async function rerunEnrichment() {
+  async function rerunEnrichment(broadenSearch = false) {
     setRerunning(true);
     setRevealed({
       identification: false,
@@ -147,7 +160,7 @@ export function ArtworkEnrichmentPanel({
       lookup: false,
     });
     try {
-      await startEnrichment();
+      await startEnrichment(broadenSearch);
     } finally {
       setRerunning(false);
     }
@@ -301,7 +314,7 @@ export function ArtworkEnrichmentPanel({
       ) : null}
 
       {state?.lookup && revealed.lookup ? (
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-3">
           <LookupCandidateList
             artwork={artwork}
             lookup={state.lookup}
@@ -309,6 +322,21 @@ export function ArtworkEnrichmentPanel({
             canEdit={canEdit}
             onApplied={(updated) => onArtworkUpdated?.(updated)}
           />
+          {canEdit &&
+          hasImage &&
+          state.lookup.search_scope === "museum" &&
+          !active &&
+          !rerunning ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-9 w-full"
+              onClick={() => void rerunEnrichment(true)}
+            >
+              Broaden search
+            </Button>
+          ) : null}
         </div>
       ) : null}
 

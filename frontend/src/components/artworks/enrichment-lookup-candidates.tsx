@@ -6,6 +6,7 @@ import { useState } from "react";
 import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { museumShortLabel } from "@/lib/museum-collection";
 import type {
   Artwork,
   ArtworkIdentification,
@@ -62,6 +63,13 @@ function hasStrongMatches(lookup: ArtworkLookupResponse): boolean {
 }
 
 function sectionHeading(lookup: ArtworkLookupResponse): string {
+  const shortLabel = museumShortLabel(lookup.museum_collection_name);
+  if (lookup.search_scope === "museum" && shortLabel) {
+    if (hasStrongMatches(lookup)) {
+      return `${lookup.museum_collection_name} matches`;
+    }
+    return `Possible ${shortLabel} candidates`;
+  }
   if (hasStrongMatches(lookup)) {
     return "Official collection matches";
   }
@@ -151,7 +159,9 @@ export function LookupCandidateList({
         ) : null}
         {lookup.sources_searched.length > 0 ? (
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Sources: {lookup.sources_searched.join(" · ")}
+            {lookup.search_scope === "museum" && lookup.museum_collection_name
+              ? `Collection: ${lookup.museum_collection_name}`
+              : `Sources: ${lookup.sources_searched.join(" · ")}`}
           </p>
         ) : null}
       </div>

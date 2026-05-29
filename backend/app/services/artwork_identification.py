@@ -21,6 +21,7 @@ from app.services.visual_analysis import (
     visual_tag_ranking_adjustment,
 )
 from app.sources.matching import normalize, score_artwork_entry_detailed
+from app.sources.routing import museum_collection_display_name, museum_short_label
 
 
 def _token_set(text: str) -> set[str]:
@@ -132,6 +133,30 @@ def _candidate_text_scores(
     return details.title_score, details.artist_score, details.combined
 
 
+def _museum_source_ranking_adjustment(
+    candidate: ArtworkLookupCandidateRead,
+    *,
+    museum_collection_name: str | None,
+    search_scope: str,
+) -> float:
+    if search_scope != "museum" or not museum_collection_name:
+        return 0.0
+    if candidate.source_name == museum_collection_name:
+        return 0.08
+    return -0.12
+
+
+def _candidate_museum_context_match(
+    candidate: ArtworkLookupCandidateRead,
+    *,
+    museum_collection_name: str | None,
+    search_scope: str,
+) -> bool:
+    if search_scope != "museum" or not museum_collection_name:
+        return False
+    return candidate.source_name == museum_collection_name
+
+
 def rerank_candidates_with_visual(
     candidates: list[ArtworkLookupCandidateRead],
     visual: VisualAnalysis | None,
@@ -139,6 +164,7 @@ def rerank_candidates_with_visual(
     *,
     draft: ResearchDraft | None = None,
     lookup: ArtworkLookupResponse | None = None,
+    visit_museum_name: str | None = None,
 ) -> list[ArtworkLookupCandidateRead]:
     if not candidates:
         return []
@@ -150,6 +176,10 @@ def rerank_candidates_with_visual(
         related_questions=[],
     )
     lookup = lookup or ArtworkLookupResponse(candidates=candidates, sources_searched=[])
+    search_scope = lookup.search_scope or "museum"
+    museum_collection_name = lookup.museum_collection_name or museum_collection_display_name(
+        visit_museum_name
+    )
     if visual and not isinstance(visual, VisualAnalysis):
         visual = VisualAnalysis.model_validate(visual.model_dump())
     visual_tags = collect_weighted_visual_tags(visual)
@@ -175,10 +205,24 @@ def rerank_candidates_with_visual(
             filter(None, [candidate.title, candidate.artist, candidate.medium])
         )
         tag_adjustment = visual_tag_ranking_adjustment(candidate_text, visual_tags, visual)
+        museum_adjustment = _museum_source_ranking_adjustment(
+            candidate,
+            museum_collection_name=museum_collection_name,
+            search_scope=search_scope,
+        )
+        museum_context_match = _candidate_museum_context_match(
+            candidate,
+            museum_collection_name=museum_collection_name,
+            search_scope=search_scope,
+        )
         if tag_adjustment >= 0.08:
             match_reasons.append("Distinctive visual tag overlap")
         elif tag_adjustment <= -0.08:
             match_reasons.append("Visual tag mismatch")
+        if museum_context_match:
+            match_reasons.append("Visit museum collection match")
+        elif museum_adjustment < 0 and museum_collection_name:
+            match_reasons.append("Outside visit museum collection")
 
         calibrated = calibrate_candidate_confidence(
             title_score=title_score,
@@ -204,6 +248,7 @@ def rerank_candidates_with_visual(
                     re.I,
                 )
             ),
+            museum_context_match=museum_context_match,
         )
 
         updated = candidate.model_copy(
@@ -220,7 +265,7 @@ def rerank_candidates_with_visual(
         reranked.append(
             (
                 calibrated.identity_certainty,
-                (updated.visual_similarity or 0.0) + tag_adjustment,
+                (updated.visual_similarity or 0.0) + tag_adjustment + museum_adjustment,
                 updated,
             )
         )
@@ -291,6 +336,8 @@ def build_identification(
     draft: ResearchDraft,
     lookup: ArtworkLookupResponse,
     visual: VisualAnalysis | None = None,
+    *,
+    visit_museum_name: str | None = None,
 ) -> ArtworkIdentification:
     visual = visual or draft.visual_analysis
     if visual and not isinstance(visual, VisualAnalysis):
@@ -308,9 +355,16 @@ def build_identification(
         keywords,
         draft=draft,
         lookup=lookup,
+        visit_museum_name=visit_museum_name,
     )
     top = reranked[0] if reranked else None
     alternatives = reranked[1:4] if len(reranked) > 1 else []
+
+    museum_collection_name = lookup.museum_collection_name or museum_collection_display_name(
+        visit_museum_name
+    )
+    museum_label = museum_short_label(museum_collection_name) if museum_collection_name else None
+    search_scope = lookup.search_scope or "museum"
 
     style = _style_assessment(visual, draft.period_or_movement)
     subject = _subject_assessment(visual)
@@ -345,7 +399,16 @@ def build_identification(
     display = ""
 
     if lookup.query_used:
-        match_reasons.append(f"Searched collections for: {lookup.query_used}")
+        if museum_collection_name and search_scope == "museum":
+            match_reasons.append(f"Searched {museum_collection_name} for: {lookup.query_used}")
+        else:
+            match_reasons.append(f"Searched collections for: {lookup.query_used}")
+
+    possible_candidates_prefix = (
+        f"Possible {museum_label} candidates"
+        if museum_label and search_scope == "museum"
+        else None
+    )
 
     if top and identity_score is not None and identity_score >= MEDIUM_IDENTITY and verified:
         mode = "catalog_match"
@@ -359,10 +422,16 @@ def build_identification(
         mode = "possible_match"
         artist_suffix = f" by {top.artist}" if top.artist else ""
         style_bit = style or "this period/style"
-        display = (
-            f"Strong probable match: {top.title}{artist_suffix}. "
-            f"Also consider {style_bit} — verify against the image and catalog record."
-        )
+        if possible_candidates_prefix:
+            display = (
+                f"{possible_candidates_prefix}: {top.title}{artist_suffix}. "
+                f"Also consider {style_bit} — verify against the image and catalog record."
+            )
+        else:
+            display = (
+                f"Strong probable match: {top.title}{artist_suffix}. "
+                f"Also consider {style_bit} — verify against the image and catalog record."
+            )
         suggested_title = None
         suggested_artist = None
         uncertainty_notes.append("Identity is probable but not verified without label OCR or exact title confirmation.")
@@ -371,10 +440,17 @@ def build_identification(
         mode = "possible_match"
         style_bit = style or "this period/style"
         subject_bit = subject or "the depicted subject"
-        display = (
-            f"Visually similar to {_related_works_phrase(top)}. "
-            f"Possibly {style_bit} depicting {subject_bit.rstrip('.')} — treat as a related work, not an exact match."
-        )
+        if possible_candidates_prefix:
+            display = (
+                f"{possible_candidates_prefix}. "
+                f"Visually similar to {_related_works_phrase(top)}. "
+                f"Possibly {style_bit} depicting {subject_bit.rstrip('.')} — treat as related, not exact."
+            )
+        else:
+            display = (
+                f"Visually similar to {_related_works_phrase(top)}. "
+                f"Possibly {style_bit} depicting {subject_bit.rstrip('.')} — treat as a related work, not an exact match."
+            )
         suggested_title = None
         suggested_artist = None
         level = "low"
@@ -383,10 +459,17 @@ def build_identification(
         mode = "possible_match"
         style_bit = style or "this period/style"
         subject_bit = subject or "the depicted subject"
-        display = (
-            f"Related work: possibly {style_bit} depicting {subject_bit.rstrip('.')} "
-            f"— compare with {_related_works_phrase(top)} below."
-        )
+        if possible_candidates_prefix:
+            display = (
+                f"{possible_candidates_prefix}. "
+                f"Possibly {style_bit} depicting {subject_bit.rstrip('.')} "
+                f"— compare with {_related_works_phrase(top)} below."
+            )
+        else:
+            display = (
+                f"Related work: possibly {style_bit} depicting {subject_bit.rstrip('.')} "
+                f"— compare with {_related_works_phrase(top)} below."
+            )
         suggested_title = None
         suggested_artist = None
         level = "low"
@@ -436,6 +519,11 @@ def build_identification(
             visual_subject=visual.subject if visual else None,
             visual_keywords=keywords,
             visual_overlap=visual_score or 0.0,
+            museum_context_match=_candidate_museum_context_match(
+                top,
+                museum_collection_name=museum_collection_name,
+                search_scope=search_scope,
+            ),
         )
         evidence = IdentityEvidenceRead(
             exact_title_match=calibrated.evidence.exact_title_match,

@@ -19,6 +19,47 @@ from app.sources.museums import (
 MUSEUM_SOURCES = ("nga", "smithsonian", "met", "aic")
 ALL_OPEN_SOURCES = (*MUSEUM_SOURCES, "wikimedia")
 
+MUSEUM_SHORT_LABELS: dict[str, str] = {
+    NGA_SOURCE_NAME: "NGA",
+    SMITHSONIAN_SOURCE_NAME: "Smithsonian",
+    MET_SOURCE_NAME: "Met",
+    AIC_SOURCE_NAME: "Art Institute of Chicago",
+}
+
+
+def is_recognized_museum(museum_name: str | None) -> bool:
+    return bool(
+        is_nga_museum(museum_name)
+        or is_smithsonian_museum(museum_name)
+        or is_met_museum(museum_name)
+        or is_aic_museum(museum_name)
+    )
+
+
+def museum_collection_display_name(museum_name: str | None) -> str | None:
+    if is_nga_museum(museum_name):
+        return NGA_SOURCE_NAME
+    if is_smithsonian_museum(museum_name):
+        return SMITHSONIAN_SOURCE_NAME
+    if is_met_museum(museum_name):
+        return MET_SOURCE_NAME
+    if is_aic_museum(museum_name):
+        return AIC_SOURCE_NAME
+    return None
+
+
+def museum_short_label(collection_name: str | None) -> str | None:
+    if not collection_name:
+        return None
+    return MUSEUM_SHORT_LABELS.get(collection_name, collection_name)
+
+
+def resolve_broaden_sources(*, include_wikimedia: bool = True) -> list[str]:
+    keys = list(MUSEUM_SOURCES)
+    if include_wikimedia:
+        keys.append("wikimedia")
+    return keys
+
 
 def resolve_lookup_sources(query: ArtworkLookupQuery) -> list[str]:
     if query.source:
@@ -45,9 +86,7 @@ def resolve_lookup_sources(query: ArtworkLookupQuery) -> list[str]:
         return ["met"]
     if is_aic_museum(query.museum_name):
         return ["aic"]
-    if query.museum_name:
-        return list(MUSEUM_SOURCES)
-    return list(MUSEUM_SOURCES)
+    return []
 
 
 def sources_searched_labels(query: ArtworkLookupQuery) -> list[str]:

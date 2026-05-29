@@ -15,5 +15,10 @@ def lookup_artwork_candidates(
     query: ArtworkLookupQuery,
     *,
     force_broad: bool = False,
+    allow_wikimedia_fallback: bool = False,
 ) -> LookupResult:
-    return lookup_artwork_candidates_staged(query, force_broad=force_broad)
+    return lookup_artwork_candidates_staged(
+        query,
+        force_broad=force_broad,
+        allow_wikimedia_fallback=allow_wikimedia_fallback,
+    )

@@ -213,7 +213,8 @@ def test_lookup_stages_falls_back_to_wikimedia(
             artist="Example Artist",
             museum_name="The Met",
             has_title_query=True,
-        )
+        ),
+        allow_wikimedia_fallback=True,
     )
 
     assert result.candidates

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import require_admin_user
@@ -58,6 +58,7 @@ def start_artwork_enrichment(
     artwork_id: int,
     _user: Annotated[dict[str, str], Depends(require_admin_user)],
     db: Session = Depends(get_db),
+    broaden_search: bool = Query(default=False),
 ) -> ArtworkEnrichmentRead:
     artwork = _get_artwork_or_404(db, artwork_id)
     if not artwork.image_url:
@@ -66,7 +67,7 @@ def start_artwork_enrichment(
             detail="Upload a photo before running AI enrichment.",
         )
 
-    request_artwork_enrichment(db, artwork)
+    request_artwork_enrichment(db, artwork, broaden_search=broaden_search)
     db.refresh(artwork)
 
     return ArtworkEnrichmentRead(

@@ -548,10 +548,12 @@ class ArtworkLookupResponse(BaseModel):
     expected_medium_type: str | None = None
     medium_type_filter: str = "any"
     disclaimer: str = (
-        "Matches are suggestions from open museum collection data. "
+        "Matches are suggestions from museum collection records. "
         "Review title, artist, and image before applying."
     )
     notice: str | None = None
+    search_scope: Literal["museum", "broad", "none"] = "museum"
+    museum_collection_name: str | None = None
 
 
 class ArtworkIdentificationRead(BaseModel):

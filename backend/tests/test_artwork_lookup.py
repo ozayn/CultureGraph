@@ -592,11 +592,13 @@ async def test_lookup_image_unsupported_museum_searches_all_open_collections(
         lookup_response = await client.get(
             f"/api/artworks/{artwork_id}/lookup-image",
             headers=auth_headers,
+            params={"broaden_sources": "true"},
         )
 
     assert lookup_response.status_code == 200
     payload = lookup_response.json()
     assert len(payload["sources_searched"]) >= 2
+    assert payload["search_scope"] == "broad"
 
 
 @pytest.mark.asyncio

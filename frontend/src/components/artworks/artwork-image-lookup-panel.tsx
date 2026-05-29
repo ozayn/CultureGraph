@@ -22,6 +22,7 @@ import {
   lookupMediumFilterLabel,
   type LookupMediumFilter,
 } from "@/lib/artwork-metadata";
+import { museumCollectionSearchLabel } from "@/lib/museum-collection";
 import type {
   Artwork,
   ArtworkLookupCandidate,
@@ -55,6 +56,7 @@ interface LookupSearchParams {
   artist?: string;
   searchMode?: "broad";
   mediumType?: ArtworkLookupMediumFilter;
+  broadenSources?: boolean;
 }
 
 interface ApplyFields {
@@ -83,6 +85,7 @@ export interface ArtworkImageLookupPanelProps {
   artwork: Artwork;
   canEdit: boolean;
   hasImage: boolean;
+  visitMuseumName?: string | null;
   aiTitleHint?: string | null;
   aiArtistHint?: string | null;
   aiMediumHint?: string | null;
@@ -96,7 +99,9 @@ function candidateKey(candidate: ArtworkLookupCandidate): string {
 
 function lookupEndpoint(artworkId: number, params: LookupSearchParams = {}): string {
   const query = new URLSearchParams();
-  query.set("source", "all");
+  if (params.broadenSources) {
+    query.set("broaden_sources", "true");
+  }
   if (params.title?.trim()) {
     query.set("title_override", params.title.trim());
   }
@@ -109,7 +114,8 @@ function lookupEndpoint(artworkId: number, params: LookupSearchParams = {}): str
   if (params.mediumType && params.mediumType !== "any") {
     query.set("medium_type", params.mediumType);
   }
-  return `/api/artworks/${artworkId}/lookup-image?${query.toString()}`;
+  const queryString = query.toString();
+  return `/api/artworks/${artworkId}/lookup-image${queryString ? `?${queryString}` : ""}`;
 }
 
 function defaultApplyFields(
@@ -349,6 +355,7 @@ export function ArtworkImageLookupPanel({
   artwork,
   canEdit,
   hasImage,
+  visitMuseumName = null,
   aiTitleHint,
   aiArtistHint,
   aiMediumHint,
@@ -370,6 +377,11 @@ export function ArtworkImageLookupPanel({
   );
   const [mediumTypeFilter, setMediumTypeFilter] =
     useState<LookupMediumFilter>(defaultMediumFilter);
+  const collectionLabel = response?.museum_collection_name ?? visitMuseumName ?? null;
+  const searchingLabel =
+    response?.search_scope === "broad"
+      ? "Searching open museum collections"
+      : museumCollectionSearchLabel(collectionLabel) ?? "Searching museum collection";
 
   const fetchLookup = useCallback(
     async (params: LookupSearchParams = {}) => {
@@ -384,6 +396,7 @@ export function ArtworkImageLookupPanel({
             title: params.title,
             artist: params.artist,
             searchMode: params.searchMode,
+            broadenSources: params.broadenSources,
           })
         );
         setResponse(result);
@@ -397,7 +410,13 @@ export function ArtworkImageLookupPanel({
         } else if (!result.candidates.length && result.notice) {
           setError(result.notice);
         } else if (!result.candidates.length) {
-          setError("No close matches found in the open collection indexes.");
+          setError(
+            result.search_scope === "broad"
+              ? "No close matches found across open collections."
+              : collectionLabel
+                ? `No close matches found in the ${collectionLabel} collection.`
+                : "No close matches found in the selected museum collection."
+          );
         }
       } catch (e) {
         setError(
@@ -408,7 +427,7 @@ export function ArtworkImageLookupPanel({
         setLoading(false);
       }
     },
-    [artwork.id, mediumTypeFilter]
+    [artwork.id, collectionLabel, mediumTypeFilter]
   );
 
   const runAutoLookup = useCallback(
@@ -425,7 +444,7 @@ export function ArtworkImageLookupPanel({
     [fetchLookup, manualArtist, manualTitle]
   );
 
-  const runBroaderLookup = useCallback(
+  const runBroadenLookup = useCallback(
     async () => {
       setLoading(true);
       setError(null);
@@ -436,14 +455,14 @@ export function ArtworkImageLookupPanel({
             mediumType: mediumTypeFilter,
             title: manualTitle || undefined,
             artist: manualArtist || undefined,
-            searchMode: "broad",
+            broadenSources: true,
           })
         );
         setResponse(result);
         if (!result.candidates.length && result.notice) {
           setError(result.notice);
         } else if (!result.candidates.length) {
-          setError("No matches found even with a broader search.");
+          setError("No matches found even with a broadened search.");
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Lookup failed.");
@@ -573,7 +592,13 @@ export function ArtworkImageLookupPanel({
           }
         }}
         title={hasImage ? "Replace official image" : "Find official image"}
-        description="Suggested matches from open museum collection records. Review before applying."
+        description={
+          response?.search_scope === "broad"
+            ? "Suggested matches from open museum collection records. Review before applying."
+            : collectionLabel
+              ? `Suggested matches from the ${collectionLabel} collection. Review before applying.`
+              : "Suggested matches from museum collection records. Review before applying."
+        }
         footer={
           response?.candidates.length ? (
             <p className="text-center text-xs text-muted-foreground">
@@ -705,7 +730,7 @@ export function ArtworkImageLookupPanel({
           {loading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
-              Searching collections…
+              {searchingLabel}…
             </div>
           ) : null}
 
@@ -798,29 +823,32 @@ export function ArtworkImageLookupPanel({
           {!loading && response && !response.candidates.length && !error ? (
             <div className="space-y-2">
               <p className="py-2 text-sm text-muted-foreground">
-                No matches found. Adjust the title or artist above, or try a broader search.
+                No matches found. Adjust the title or artist above, or broaden the search to other
+                open collections.
               </p>
-              <Button
-                type="button"
-                variant="secondary"
-                size="touch"
-                className="w-full"
-                onClick={() => void runBroaderLookup()}
-              >
-                Try broader search
-              </Button>
+              {response.search_scope !== "broad" ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="touch"
+                  className="w-full"
+                  onClick={() => void runBroadenLookup()}
+                >
+                  Broaden search
+                </Button>
+              ) : null}
             </div>
           ) : null}
 
-          {!loading && response?.candidates.length ? (
+          {!loading && response?.candidates.length && response.search_scope !== "broad" ? (
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="min-h-9 w-full"
-              onClick={() => void runBroaderLookup()}
+              onClick={() => void runBroadenLookup()}
             >
-              Try broader search
+              Broaden search
             </Button>
           ) : null}
         </div>

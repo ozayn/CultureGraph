@@ -16,9 +16,16 @@ def lookup_artwork_candidates_staged(
     query: ArtworkLookupQuery,
     *,
     force_broad: bool = False,
+    allow_wikimedia_fallback: bool = False,
 ) -> LookupResult:
     raw: list = []
     sources = _resolved_sources(query)
+    if (
+        allow_wikimedia_fallback
+        and "wikimedia" not in sources
+        and (query.source or "").strip().lower() == "all"
+    ):
+        sources = [*sources, "wikimedia"]
     if "nga" in sources:
         raw.extend(collect_nga_scored_candidates(query))
     if "smithsonian" in sources:
@@ -27,14 +34,29 @@ def lookup_artwork_candidates_staged(
         raw.extend(collect_met_scored_candidates(query))
     if "aic" in sources:
         raw.extend(collect_aic_scored_candidates(query))
+    if "wikimedia" in sources:
+        raw.extend(collect_wikimedia_scored_candidates(query))
 
-    result = _rank_staged(raw, query, force_broad=force_broad)
+    candidate_limit = 24 if len(sources) == 1 else 12
+    result = _rank_staged(
+        raw,
+        query,
+        force_broad=force_broad,
+        candidate_limit=candidate_limit,
+    )
     if result.candidates or result.related_candidates:
         return result
 
-    wiki_raw = collect_wikimedia_scored_candidates(_wikimedia_fallback_query(query))
-    if wiki_raw:
-        return _rank_staged(wiki_raw, query, force_broad=True, wikimedia_fallback=True)
+    if allow_wikimedia_fallback and "wikimedia" not in sources:
+        wiki_raw = collect_wikimedia_scored_candidates(_wikimedia_fallback_query(query))
+        if wiki_raw:
+            return _rank_staged(
+                wiki_raw,
+                query,
+                force_broad=True,
+                wikimedia_fallback=True,
+                candidate_limit=candidate_limit,
+            )
 
     return LookupResult(candidates=[], query_strategy=None)
 
@@ -45,6 +67,7 @@ def _rank_staged(
     *,
     force_broad: bool = False,
     wikimedia_fallback: bool = False,
+    candidate_limit: int = 12,
 ) -> LookupResult:
     if not raw:
         return LookupResult(candidates=[], query_strategy=None)
@@ -56,7 +79,12 @@ def _rank_staged(
     fallback_artist = False
 
     for strategy in strategies:
-        ranked = rank_lookup_candidates(raw, query, strategy=strategy)
+        ranked = rank_lookup_candidates(
+            raw,
+            query,
+            strategy=strategy,
+            limit=candidate_limit,
+        )
         if not ranked:
             continue
 

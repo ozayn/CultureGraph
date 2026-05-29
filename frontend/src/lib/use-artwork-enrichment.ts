@@ -163,10 +163,12 @@ async function refreshEnrichmentEntry(
 }
 
 async function startEnrichmentEntry(
-  artworkId: number
+  artworkId: number,
+  broadenSearch = false
 ): Promise<ArtworkEnrichmentState | null> {
   try {
-    await api.post(`/api/artworks/${artworkId}/enrichment`);
+    const query = broadenSearch ? "?broaden_search=true" : "";
+    await api.post(`/api/artworks/${artworkId}/enrichment${query}`);
   } catch {
     // Upload handler may have already queued enrichment.
   }
@@ -236,7 +238,7 @@ export function useArtworkEnrichment({
   );
 
   const startEnrichment = useCallback(
-    () => startEnrichmentEntry(artworkId),
+    (broadenSearch = false) => startEnrichmentEntry(artworkId, broadenSearch),
     [artworkId]
   );
 

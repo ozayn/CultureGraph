@@ -23,6 +23,7 @@ from app.services.artwork_lookup import lookup_artwork_candidates
 from app.services.lookup_query import build_artwork_lookup_query
 from app.services.lookup_response import lookup_response_from_result
 from app.sources.routing import (
+    museum_collection_display_name,
     resolve_lookup_sources,
 )
 from app.services.image_upload import (
@@ -96,17 +97,22 @@ def lookup_artwork_image(
         default=None,
         description="Override inferred artwork medium for ranking",
     ),
+    broaden_sources: bool = Query(
+        default=False,
+        description="Search all open museum collections and Wikimedia",
+    ),
 ) -> ArtworkLookupResponse:
     artwork = _get_artwork_or_404(db, artwork_id)
     museum_name = artwork.visit.museum_name if artwork.visit else None
 
+    effective_source = "all" if broaden_sources else source
     built = build_artwork_lookup_query(
         artwork,
         db,
         museum_name=museum_name,
         title_override=title_override,
         artist_override=artist_override,
-        source=source,
+        source=effective_source,
         medium_type=medium_type,
         medium_override=medium_override,
     )
@@ -121,11 +127,16 @@ def lookup_artwork_image(
             alternate_title=built.alternate_title,
             expected_medium_type=built.expected_medium_type,
             medium_type_filter=built.medium_type_filter,
+            search_scope="none",
+            museum_collection_name=(
+                None if broaden_sources else museum_collection_display_name(museum_name)
+            ),
         )
 
     lookup_result = lookup_artwork_candidates(
         query,
         force_broad=(search_mode or "").strip().lower() == "broad",
+        allow_wikimedia_fallback=broaden_sources,
     )
 
     return lookup_response_from_result(
@@ -136,6 +147,8 @@ def lookup_artwork_image(
         alternate_title=built.alternate_title,
         expected_medium_type=built.expected_medium_type,
         medium_type_filter=built.medium_type_filter,
+        visit_museum_name=museum_name,
+        broaden_search=broaden_sources,
     )
 
 

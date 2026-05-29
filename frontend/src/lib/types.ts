@@ -140,6 +140,8 @@ export type ArtworkLookupQueryStrategy =
   | "artist_fallback"
   | "broad";
 
+export type ArtworkLookupSearchScope = "museum" | "broad" | "none";
+
 export interface ArtworkLookupResponse {
   candidates: ArtworkLookupCandidate[];
   related_candidates?: ArtworkLookupCandidate[];
@@ -153,6 +155,8 @@ export interface ArtworkLookupResponse {
   medium_type_filter?: string;
   disclaimer: string;
   notice?: string | null;
+  search_scope?: ArtworkLookupSearchScope;
+  museum_collection_name?: string | null;
 }
 
 export type ArtworkLookupMediumFilter = "2d" | "3d" | "any";

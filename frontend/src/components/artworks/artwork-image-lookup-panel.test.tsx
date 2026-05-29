@@ -93,7 +93,7 @@ describe("ArtworkImageLookupPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Find official image/i }));
 
     await waitFor(() => {
-      expect(getMock).toHaveBeenCalledWith("/api/artworks/1/lookup-image?source=all");
+      expect(getMock).toHaveBeenCalledWith("/api/artworks/1/lookup-image");
     });
   });
 
@@ -181,7 +181,7 @@ describe("ArtworkImageLookupPanel", () => {
 
     await waitFor(() => {
       expect(getMock).toHaveBeenLastCalledWith(
-        "/api/artworks/1/lookup-image?source=all&title_override=Custom&artist_override=Artist"
+        "/api/artworks/1/lookup-image?title_override=Custom&artist_override=Artist"
       );
     });
   });

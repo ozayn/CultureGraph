@@ -7,6 +7,8 @@ import json
 import logging
 from typing import Any
 
+from dataclasses import replace
+
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -36,9 +38,11 @@ from app.services.research import (
 )
 from app.services.visual_analysis import VisualAnalysis
 from app.services.lookup_response import lookup_response_from_result
-from app.sources.routing import resolve_lookup_sources
+from app.sources.routing import museum_collection_display_name, resolve_lookup_sources
 
 logger = logging.getLogger(__name__)
+
+_ENRICHMENT_BROADEN: dict[int, bool] = {}
 
 ENRICHMENT_STATUS_IDLE = "idle"
 ENRICHMENT_STATUS_PENDING = "pending"
@@ -83,11 +87,20 @@ def _apply_artwork_label_ocr(draft: ResearchDraft, artwork: Artwork) -> Research
     return updated
 
 
-def _build_lookup_response(db: Session, artwork: Artwork, draft: ResearchDraft) -> ArtworkLookupResponse:
+def _build_lookup_response(
+    db: Session,
+    artwork: Artwork,
+    draft: ResearchDraft,
+    *,
+    broaden_search: bool = False,
+) -> ArtworkLookupResponse:
     museum_name = artwork.visit.museum_name if artwork.visit else None
     built = build_retrieval_lookup_query(artwork, db, draft, museum_name=museum_name)
+    query = built.query
+    if broaden_search:
+        query = replace(query, source="all")
 
-    if not resolve_lookup_sources(built.query):
+    if not resolve_lookup_sources(query):
         return ArtworkLookupResponse(
             candidates=[],
             sources_searched=[],
@@ -96,19 +109,26 @@ def _build_lookup_response(db: Session, artwork: Artwork, draft: ResearchDraft) 
             alternate_title=built.alternate_title,
             expected_medium_type=built.expected_medium_type,
             medium_type_filter=built.medium_type_filter,
+            search_scope="none",
+            museum_collection_name=None if broaden_search else museum_collection_display_name(museum_name),
         )
 
-    lookup_result = lookup_artwork_candidates(built.query)
+    lookup_result = lookup_artwork_candidates(
+        query,
+        allow_wikimedia_fallback=broaden_search,
+    )
 
     return lookup_response_from_result(
         lookup_result,
-        query=built.query,
+        query=query,
         query_used=built.query_used,
         query_source=built.query_source,
         alternate_title=built.alternate_title,
         expected_medium_type=built.expected_medium_type,
         medium_type_filter=built.medium_type_filter,
         visual_keywords=built.query_source == "visual_keywords",
+        visit_museum_name=museum_name,
+        broaden_search=broaden_search,
     )
 
 
@@ -124,8 +144,10 @@ def _set_enrichment_state(
     artwork.enrichment_error = error
 
 
-def schedule_artwork_enrichment(artwork_id: int) -> None:
+def schedule_artwork_enrichment(artwork_id: int, *, broaden_search: bool = False) -> None:
     """Fire-and-forget enrichment from sync request handlers."""
+    if broaden_search:
+        _ENRICHMENT_BROADEN[artwork_id] = True
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -154,7 +176,12 @@ async def _run_enrichment_task(artwork_id: int) -> None:
         db.close()
 
 
-def request_artwork_enrichment(db: Session, artwork: Artwork) -> bool:
+def request_artwork_enrichment(
+    db: Session,
+    artwork: Artwork,
+    *,
+    broaden_search: bool = False,
+) -> bool:
     """Mark artwork pending and schedule enrichment if eligible."""
     if not artwork.image_url:
         return False
@@ -167,11 +194,12 @@ def request_artwork_enrichment(db: Session, artwork: Artwork) -> bool:
     _set_enrichment_state(artwork, status=ENRICHMENT_STATUS_PENDING, stage=None, error=None)
     db.commit()
     db.refresh(artwork)
-    schedule_artwork_enrichment(artwork.id)
+    schedule_artwork_enrichment(artwork.id, broaden_search=broaden_search)
     return True
 
 
 async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
+    broaden_search = _ENRICHMENT_BROADEN.pop(artwork_id, False)
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         return
@@ -207,9 +235,20 @@ async def run_artwork_enrichment(db: Session, artwork_id: int) -> None:
         db.commit()
         db.refresh(artwork)
 
-        lookup_response = _build_lookup_response(db, artwork, draft)
+        lookup_response = _build_lookup_response(
+            db,
+            artwork,
+            draft,
+            broaden_search=broaden_search,
+        )
         visual = _draft_visual_analysis(draft)
-        identification = build_identification(draft, lookup_response, visual)
+        museum_name = artwork.visit.museum_name if artwork.visit else None
+        identification = build_identification(
+            draft,
+            lookup_response,
+            visual,
+            visit_museum_name=museum_name,
+        )
         calibrated = calibrate_research_draft(draft, identification, visual)
         lookup_response = lookup_with_identification_candidates(lookup_response, identification)
 
