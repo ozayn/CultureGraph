@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import requests
 
@@ -14,11 +16,117 @@ from app.models import Artwork
 logger = logging.getLogger(__name__)
 
 WEB_VISUAL_SEARCH_SOURCE = "Web visual search"
+SERPAPI_PROVIDER = "serpapi"
 SERPAPI_SEARCH_URL = "https://serpapi.com/search.json"
+REDACTED = "***REDACTED***"
+SENSITIVE_QUERY_PARAMS = frozenset({"api_key", "key", "token"})
+UNAUTHORIZED_LENS_MESSAGE = (
+    "Web visual search is not authorized. Check SerpApi configuration."
+)
+_SENSITIVE_QUERY_PATTERN = re.compile(
+    r"([?&](?:api_key|key|token)=)[^&\s]+",
+    re.IGNORECASE,
+)
 
 
 class LensSearchError(RuntimeError):
     """Raised when web visual search cannot run."""
+
+
+def redact_sensitive_url(url: str) -> str:
+    if not url:
+        return url
+    try:
+        parsed = urlparse(url)
+        if not parsed.query:
+            return url
+        query = [
+            (key, REDACTED if key.lower() in SENSITIVE_QUERY_PARAMS else value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        ]
+        return urlunparse(parsed._replace(query=urlencode(query)))
+    except Exception:
+        return "<redacted-url>"
+
+
+def redact_sensitive_text(text: str) -> str:
+    if not text:
+        return text
+    redacted = _SENSITIVE_QUERY_PATTERN.sub(rf"\1{REDACTED}", text)
+    if "://" in redacted:
+        parts: list[str] = []
+        last_end = 0
+        for match in re.finditer(r"https?://[^\s\"']+", redacted):
+            parts.append(redacted[last_end : match.start()])
+            parts.append(redact_sensitive_url(match.group(0)))
+            last_end = match.end()
+        parts.append(redacted[last_end:])
+        redacted = "".join(parts)
+    return redacted
+
+
+def _request_status_code(exc: requests.RequestException) -> int | None:
+    response = getattr(exc, "response", None)
+    if response is not None:
+        return getattr(response, "status_code", None)
+    return None
+
+
+def _safe_request_error_message(exc: requests.RequestException) -> str:
+    response = getattr(exc, "response", None)
+    if response is not None:
+        response_url = getattr(response, "url", None)
+        if isinstance(response_url, str) and response_url:
+            return redact_sensitive_text(f"HTTP {response.status_code} for {response_url}")
+    return redact_sensitive_text(str(exc))
+
+
+def _is_authorization_failure(*, status_code: int | None, message: str) -> bool:
+    if status_code in {401, 403}:
+        return True
+    lowered = message.lower()
+    return any(
+        term in lowered
+        for term in (
+            "invalid api key",
+            "api key",
+            "unauthorized",
+            "authentication",
+            "forbidden",
+        )
+    )
+
+
+def _log_lens_search_failure(
+    *,
+    artwork_id: int,
+    status_code: int | None,
+    message: str,
+) -> None:
+    logger.warning(
+        "lens search failed provider=%s artwork_id=%s status_code=%s error=%s",
+        SERPAPI_PROVIDER,
+        artwork_id,
+        status_code,
+        redact_sensitive_text(message),
+    )
+
+
+def _raise_lens_request_error(
+    exc: requests.RequestException,
+    *,
+    artwork_id: int,
+) -> None:
+    status_code = _request_status_code(exc)
+    safe_message = _safe_request_error_message(exc)
+    _log_lens_search_failure(
+        artwork_id=artwork_id,
+        status_code=status_code,
+        message=safe_message,
+    )
+    if _is_authorization_failure(status_code=status_code, message=safe_message):
+        raise LensSearchError(UNAUTHORIZED_LENS_MESSAGE) from exc
+    raise LensSearchError("Web visual search request failed.") from exc
 
 
 @dataclass(frozen=True)
@@ -157,8 +265,7 @@ def search_artwork_with_lens(artwork: Artwork) -> LensSearchResult:
     except requests.Timeout as exc:
         raise LensSearchError("Web visual search timed out. Try again in a moment.") from exc
     except requests.RequestException as exc:
-        logger.warning("SerpApi lens search failed artwork_id=%s error=%s", artwork.id, exc)
-        raise LensSearchError("Web visual search request failed.") from exc
+        _raise_lens_request_error(exc, artwork_id=artwork.id)
     except ValueError as exc:
         raise LensSearchError("Web visual search returned an invalid response.") from exc
 
@@ -167,7 +274,15 @@ def search_artwork_with_lens(artwork: Artwork) -> LensSearchResult:
 
     error_message = payload.get("error")
     if isinstance(error_message, str) and error_message.strip():
-        raise LensSearchError(error_message.strip())
+        safe_error = redact_sensitive_text(error_message.strip())
+        if _is_authorization_failure(status_code=None, message=safe_error):
+            _log_lens_search_failure(
+                artwork_id=artwork.id,
+                status_code=None,
+                message=safe_error,
+            )
+            raise LensSearchError(UNAUTHORIZED_LENS_MESSAGE)
+        raise LensSearchError(safe_error)
 
     candidates = _parse_candidates(payload, max_results=max(1, settings.lens_search_max_results))
     notice = None

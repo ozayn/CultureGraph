@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
+import requests
 
 from app.models import Artwork, Visit
 from app.services.lens_search import (
+    UNAUTHORIZED_LENS_MESSAGE,
     WEB_VISUAL_SEARCH_SOURCE,
     LensSearchError,
+    redact_sensitive_text,
+    redact_sensitive_url,
     resolve_lens_image_url,
     search_artwork_with_lens,
 )
@@ -140,6 +146,62 @@ def test_lens_search_endpoint(db_session, auth_headers, monkeypatch) -> None:
     assert payload["provider"] == WEB_VISUAL_SEARCH_SOURCE
     assert payload["candidates"] == []
     assert "third-party" in payload["disclaimer"]
+
+
+def test_redact_sensitive_url_masks_api_key() -> None:
+    url = "https://serpapi.com/search.json?engine=google_lens&api_key=super-secret&url=https%3A%2F%2Fexample.com"
+    redacted = redact_sensitive_url(url)
+    assert "super-secret" not in redacted
+    assert "api_key=" in redacted
+    assert "REDACTED" in redacted
+
+
+def test_redact_sensitive_text_masks_api_key_in_exception_message() -> None:
+    message = (
+        "401 Client Error: Unauthorized for url: "
+        "https://serpapi.com/search.json?api_key=super-secret&engine=google_lens"
+    )
+    redacted = redact_sensitive_text(message)
+    assert "super-secret" not in redacted
+    assert "api_key=" in redacted
+    assert "REDACTED" in redacted
+
+
+def test_search_artwork_with_lens_redacts_api_key_from_logs(db_session, monkeypatch, caplog) -> None:
+    from app.config import settings
+
+    secret_key = "super-secret-serpapi-key"
+    monkeypatch.setattr(settings, "serpapi_api_key", secret_key)
+    monkeypatch.setattr(settings, "public_api_base_url", "https://api.example.com")
+
+    visit = Visit(museum_name="National Gallery of Art", city="Washington", visit_date="2026-01-01")
+    db_session.add(visit)
+    db_session.flush()
+    artwork = Artwork(title="Test", visit_id=visit.id, image_url="/uploads/artworks/9/photo.webp")
+    db_session.add(artwork)
+    db_session.commit()
+
+    def raise_unauthorized(*args, **kwargs) -> None:
+        response = requests.Response()
+        response.status_code = 401
+        response.url = (
+            "https://serpapi.com/search.json?engine=google_lens"
+            f"&api_key={secret_key}&url=https%3A%2F%2Fapi.example.com%2Fuploads%2Fphoto.webp"
+        )
+        raise requests.HTTPError("401 Client Error: Unauthorized", response=response)
+
+    monkeypatch.setattr("app.services.lens_search.requests.get", raise_unauthorized)
+
+    caplog.set_level(logging.WARNING)
+    with pytest.raises(LensSearchError, match=UNAUTHORIZED_LENS_MESSAGE):
+        search_artwork_with_lens(artwork)
+
+    logged = " ".join(record.getMessage() for record in caplog.records)
+    assert secret_key not in logged
+    assert f"api_key={secret_key}" not in logged
+    assert "provider=serpapi" in logged
+    assert f"artwork_id={artwork.id}" in logged
+    assert "status_code=401" in logged
 
 
 def test_lens_search_endpoint_requires_auth(db_session) -> None:
