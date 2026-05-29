@@ -158,6 +158,7 @@ The admin dashboard shows this card beside upload storage health.
 - Honest confidence labels: `high`, `possible`, `weak`.
 - UI copy: **Best visual matches**, not verified identification.
 - Empty index UI: **NGA visual index is still building**; once indexed, the UI shows artwork counts.
+- Optional web visual search fallback via SerpApi: see `docs/LENS_SEARCH.md`.
 
 ## Future plan
 

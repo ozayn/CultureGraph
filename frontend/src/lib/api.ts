@@ -14,6 +14,8 @@ export const UPLOAD_REQUEST_TIMEOUT_MS = 120_000;
 export const LOOKUP_REQUEST_TIMEOUT_MS = 90_000;
 /** Visual artwork matching computes embeddings and scans the collection index. */
 export const VISUAL_MATCH_REQUEST_TIMEOUT_MS = 90_000;
+/** Web visual search calls SerpApi Google Lens upstream. */
+export const LENS_SEARCH_REQUEST_TIMEOUT_MS = 90_000;
 /** AI enrichment POST/GET polling — Claude vision + collection retrieval. */
 export const ENRICHMENT_REQUEST_TIMEOUT_MS = 120_000;
 /** Standalone research generation calls Claude synchronously. */

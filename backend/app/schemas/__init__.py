@@ -631,6 +631,29 @@ class VisualMatchResponse(BaseModel):
     )
 
 
+class LensSearchCandidateRead(BaseModel):
+    title: str
+    source: str
+    source_url: str | None = None
+    thumbnail_url: str | None = None
+    image_url: str | None = None
+    snippet: str | None = None
+    source_rank: int = Field(ge=1)
+    confidence_label: Literal["high", "possible", "weak"]
+
+
+class LensSearchResponse(BaseModel):
+    candidates: list[LensSearchCandidateRead]
+    provider: str = "Web visual search"
+    notice: str | None = None
+    query_image_url: str | None = None
+    disclaimer: str = (
+        "Results come from optional third-party web visual search (SerpApi), "
+        "not an official Google Lens API. Review each source before applying "
+        "any image or metadata."
+    )
+
+
 class AudioInterpretationRead(BaseModel):
     cleaned_note: str
     cleaned_note_original_language: str | None = None

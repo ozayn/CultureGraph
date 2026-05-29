@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     openai_transcription_model: str = "whisper-1"
     audio_note_max_bytes: int = 25 * 1024 * 1024
     audio_note_max_duration_seconds: float = 300.0
+    serpapi_api_key: str | None = None
+    serpapi_timeout_seconds: float = 45.0
+    lens_search_max_results: int = 12
+    public_api_base_url: str | None = None
 
     @property
     def is_production(self) -> bool:

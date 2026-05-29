@@ -16,6 +16,8 @@ from app.schemas import (
     ArtworkLookupResponse,
     ArtworkRead,
     ArtworkUpdate,
+    LensSearchCandidateRead,
+    LensSearchResponse,
     VisualMatchCandidateRead,
     VisualMatchResponse,
 )
@@ -28,6 +30,7 @@ from app.sources.routing import (
     museum_collection_display_name,
     resolve_lookup_sources,
 )
+from app.services.lens_search import LensSearchCandidate, LensSearchError, search_artwork_with_lens
 from app.services.visual_matching import VisualMatchCandidate, match_artwork_visually
 from app.services.image_upload import (
     process_and_store_artwork_image,
@@ -171,6 +174,41 @@ def _visual_match_read(candidate: VisualMatchCandidate) -> VisualMatchCandidateR
         accession_number=candidate.accession_number,
         rights_label=candidate.rights_label,
         external_id=candidate.external_id,
+    )
+
+
+def _lens_search_read(candidate: LensSearchCandidate) -> LensSearchCandidateRead:
+    return LensSearchCandidateRead(
+        title=candidate.title,
+        source=candidate.source,
+        source_url=candidate.source_url,
+        thumbnail_url=candidate.thumbnail_url,
+        image_url=candidate.image_url,
+        snippet=candidate.snippet,
+        source_rank=candidate.source_rank,
+        confidence_label=candidate.confidence_label,  # type: ignore[arg-type]
+    )
+
+
+@router.post("/{artwork_id}/lens-search", response_model=LensSearchResponse)
+def lens_search_artwork(
+    artwork_id: int,
+    _user: Annotated[dict[str, str], Depends(require_admin_user)],
+    db: Session = Depends(get_db),
+) -> LensSearchResponse:
+    """Optional web visual search fallback via SerpApi Google Lens (admin only)."""
+    artwork = _get_artwork_or_404(db, artwork_id)
+    try:
+        result = search_artwork_with_lens(artwork)
+    except LensSearchError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return LensSearchResponse(
+        candidates=[_lens_search_read(candidate) for candidate in result.candidates],
+        provider=result.provider,
+        notice=result.notice,
+        query_image_url=result.query_image_url,
+        disclaimer=result.disclaimer,
     )
 
 

@@ -223,6 +223,27 @@ export interface VisualMatchResponse {
   disclaimer?: string;
 }
 
+export type LensSearchConfidenceLabel = "high" | "possible" | "weak";
+
+export interface LensSearchCandidate {
+  title: string;
+  source: string;
+  source_url?: string | null;
+  thumbnail_url?: string | null;
+  image_url?: string | null;
+  snippet?: string | null;
+  source_rank: number;
+  confidence_label: LensSearchConfidenceLabel;
+}
+
+export interface LensSearchResponse {
+  candidates: LensSearchCandidate[];
+  provider?: string;
+  notice?: string | null;
+  query_image_url?: string | null;
+  disclaimer?: string;
+}
+
 export type ArtworkLookupMediumFilter = "2d" | "3d" | "any";
 
 export interface Annotation {
