@@ -103,3 +103,19 @@ export const ADMIN_TAB_BULK_DELETE_PATHS: Record<AdminTab, string> = {
 export interface AdminBulkDeleteResponse {
   deleted_count: number;
 }
+
+export interface AdminMissingUploadRecord {
+  record_type: "artwork" | "cultural_entity" | "audio_note";
+  record_id: number;
+  field: string;
+  path: string;
+  label: string | null;
+}
+
+export interface AdminUploadHealth {
+  upload_dir: string;
+  storage_backend: string;
+  persistent: boolean;
+  missing_count: number;
+  records: AdminMissingUploadRecord[];
+}

@@ -6,6 +6,7 @@ import { format } from "date-fns";
 
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
+import { UploadStorageHealthCard } from "@/components/admin/upload-storage-health-card";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { Button } from "@/components/ui/button";
 import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
@@ -24,6 +25,7 @@ import {
   type AdminResearchNoteRecord,
   type AdminSummary,
   type AdminTab,
+  type AdminUploadHealth,
   type AdminVisitRecord,
 } from "@/lib/admin-types";
 import { entityThumbnailUrl } from "@/lib/thumbnails";
@@ -63,6 +65,8 @@ export function AdminDashboardClient() {
   const { canEdit, loading: authLoading, user } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>("visits");
   const [summary, setSummary] = useState<AdminSummary | null>(null);
+  const [uploadHealth, setUploadHealth] = useState<AdminUploadHealth | null>(null);
+  const [uploadHealthError, setUploadHealthError] = useState<string | null>(null);
   const [records, setRecords] = useState<AdminRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -105,14 +109,34 @@ export function AdminDashboardClient() {
     });
     if (search) params.set("search", search);
 
-    const [summaryData, recordsData] = await Promise.all([
+    const [summaryResult, recordsResult, healthResult] = await Promise.allSettled([
       api.get<AdminSummary>("/api/admin/summary"),
       api.get<AdminPaginated<AdminRecord>>(
         `${ADMIN_TAB_PATHS[activeTab]}?${params.toString()}`
       ),
+      api.get<AdminUploadHealth>("/api/admin/upload-health"),
     ]);
 
-    return { summaryData, recordsData };
+    if (summaryResult.status === "rejected") {
+      throw summaryResult.reason;
+    }
+    if (recordsResult.status === "rejected") {
+      throw recordsResult.reason;
+    }
+
+    const uploadHealthError =
+      healthResult.status === "rejected"
+        ? healthResult.reason instanceof Error
+          ? healthResult.reason.message
+          : "Could not load upload storage health."
+        : null;
+
+    return {
+      summaryData: summaryResult.value,
+      recordsData: recordsResult.value,
+      uploadHealthData: healthResult.status === "fulfilled" ? healthResult.value : null,
+      uploadHealthError,
+    };
   }, [activeTab, offset, search]);
 
   useEffect(() => {
@@ -124,10 +148,14 @@ export function AdminDashboardClient() {
       setLoading(true);
       setError(null);
       setUnauthorized(false);
+      setUploadHealthError(null);
       try {
-        const { summaryData, recordsData } = await fetchDashboardData();
+        const { summaryData, recordsData, uploadHealthData, uploadHealthError: healthError } =
+          await fetchDashboardData();
         if (cancelled) return;
         setSummary(summaryData);
+        setUploadHealth(uploadHealthData);
+        setUploadHealthError(healthError);
         setRecords(recordsData.records);
         setTotal(recordsData.meta.total);
       } catch (e) {
@@ -154,9 +182,13 @@ export function AdminDashboardClient() {
     setLoading(true);
     setError(null);
     setUnauthorized(false);
+    setUploadHealthError(null);
     try {
-      const { summaryData, recordsData } = await fetchDashboardData();
+      const { summaryData, recordsData, uploadHealthData, uploadHealthError: healthError } =
+        await fetchDashboardData();
       setSummary(summaryData);
+      setUploadHealth(uploadHealthData);
+      setUploadHealthError(healthError);
       setRecords(recordsData.records);
       setTotal(recordsData.meta.total);
     } catch (e) {
@@ -285,6 +317,12 @@ export function AdminDashboardClient() {
           Browse database records for debugging, cleanup, and content management.
         </p>
       </header>
+
+      <UploadStorageHealthCard
+        health={uploadHealth}
+        loading={loading && !uploadHealth}
+        error={uploadHealthError}
+      />
 
       {summary ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

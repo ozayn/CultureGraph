@@ -23,6 +23,15 @@ vi.mock("@/lib/api", () => ({
           research_notes: 0,
         };
       }
+      if (path === "/api/admin/upload-health") {
+        return {
+          upload_dir: "/app/uploads",
+          storage_backend: "filesystem",
+          persistent: true,
+          missing_count: 0,
+          records: [],
+        };
+      }
       if (path.startsWith("/api/admin/visits")) {
         return {
           records: [
@@ -72,6 +81,8 @@ describe("AdminDashboardClient", () => {
 
     expect(screen.getAllByText("Visits").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Artworks").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Upload storage" })).toBeInTheDocument();
+    expect(screen.getByText("/app/uploads")).toBeInTheDocument();
   });
 
   it("supports bulk selection and delete confirmation", async () => {
