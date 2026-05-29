@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { Mic } from "lucide-react";
 
 import { ArtworkRegionSelector } from "@/components/artworks/artwork-region-selector";
 import { MuseumAutocomplete } from "@/components/museums/museum-autocomplete";
@@ -12,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
+import { AudioNotePanel } from "@/components/audio-notes/audio-note-panel";
 import { api } from "@/lib/api";
 import type { ArtworkImageRegion } from "@/lib/artwork-region";
 import { prepareArtworkUploadFile } from "@/lib/prepare-artwork-upload";
@@ -63,6 +65,7 @@ export function ProgressiveArtworkForm({
   const [pendingRegion, setPendingRegion] = useState<ArtworkImageRegion | null>(null);
   const [regionOpen, setRegionOpen] = useState(false);
   const [savedArtwork, setSavedArtwork] = useState<Artwork | null>(null);
+  const [audioNoteOpen, setAudioNoteOpen] = useState(false);
   const [lastAction, setLastAction] = useState<"draft" | "details" | null>(null);
   const previewUrl = useMemo(
     () => (photo ? URL.createObjectURL(photo) : null),
@@ -71,6 +74,7 @@ export function ProgressiveArtworkForm({
 
   const canSaveDraft = isQuickCapture ? Boolean(photo) : Boolean(photo || title.trim() || artwork);
   const busy = loading || preparing;
+  const recordArtwork = savedArtwork ?? artwork ?? null;
 
   useEffect(() => {
     return () => {
@@ -396,6 +400,18 @@ export function ProgressiveArtworkForm({
               className="min-h-[4.5rem] resize-y"
             />
           </div>
+          {recordArtwork ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="touch"
+              className="w-full"
+              onClick={() => setAudioNoteOpen(true)}
+            >
+              <Mic className="size-5" />
+              Record voice note
+            </Button>
+          ) : null}
         </div>
       )}
 
@@ -440,6 +456,17 @@ export function ProgressiveArtworkForm({
             onSkip={() => setRegionOpen(false)}
           />
         </BottomSheet>
+      ) : null}
+
+      {recordArtwork ? (
+        <AudioNotePanel
+          open={audioNoteOpen}
+          onOpenChange={setAudioNoteOpen}
+          artworkId={recordArtwork.id}
+          visitId={recordArtwork.visit_id ?? visitId ?? null}
+          existingPersonalNote={personalNotes}
+          onPersonalNoteSaved={(text) => setPersonalNotes(text)}
+        />
       ) : null}
     </div>
   );

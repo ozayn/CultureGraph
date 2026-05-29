@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { formatCalendarDate } from "@/lib/calendar-date";
-import { Plus } from "lucide-react";
+import { Mic, Plus } from "lucide-react";
+
+import { AudioNotePanel } from "@/components/audio-notes/audio-note-panel";
 
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
@@ -12,6 +14,7 @@ import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwor
 import { CulturalEntityForm } from "@/components/cultural-entities/cultural-entity-form";
 import { AuthGate } from "@/components/auth/auth-gate";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
 import { EntryThumbnail } from "@/components/ui/entry-thumbnail";
 import { VisitForm } from "@/components/visits/visit-form";
@@ -144,6 +147,7 @@ export function VisitDetailClient({
   const [visitArtworks, setVisitArtworks] = useState(artworks);
   const [culturalEntities, setCulturalEntities] = useState(initialCulturalEntities);
   const [addOpen, setAddOpen] = useState(false);
+  const [audioNoteOpen, setAudioNoteOpen] = useState(false);
   const [editVisitOpen, setEditVisitOpen] = useState(false);
   const [deleteVisitOpen, setDeleteVisitOpen] = useState(false);
   const [deleteVisitLoading, setDeleteVisitLoading] = useState(false);
@@ -230,6 +234,18 @@ export function VisitDetailClient({
             <p className="whitespace-pre-line text-base leading-relaxed text-muted-foreground">
               {visit.notes}
             </p>
+          ) : null}
+          {canEdit ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="touch"
+              className="mt-3 w-full sm:w-auto"
+              onClick={() => setAudioNoteOpen(true)}
+            >
+              <Mic className="size-5" />
+              Record visit note
+            </Button>
           ) : null}
         </section>
 
@@ -330,6 +346,18 @@ export function VisitDetailClient({
               }}
             />
           </BottomSheet>
+
+          <AudioNotePanel
+            open={audioNoteOpen}
+            onOpenChange={setAudioNoteOpen}
+            visitId={visit.id}
+            culturalEntities={culturalEntities}
+            existingVisitNotes={visit.notes}
+            onVisitNotesSaved={(text) => {
+              setVisit((current) => ({ ...current, notes: text }));
+              router.refresh();
+            }}
+          />
 
           <BottomSheet
             open={editVisitOpen}

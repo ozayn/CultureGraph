@@ -213,3 +213,22 @@ class CollectionImageEmbedding(Base):
     )
 
     collection_artwork: Mapped["CollectionArtwork"] = relationship(back_populates="embeddings")
+
+
+class AudioNote(Base):
+    __tablename__ = "audio_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    visit_id: Mapped[int | None] = mapped_column(ForeignKey("visits.id", ondelete="CASCADE"))
+    artwork_id: Mapped[int | None] = mapped_column(ForeignKey("artworks.id", ondelete="CASCADE"))
+    audio_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    duration_seconds: Mapped[float | None] = mapped_column(Float)
+    transcript: Mapped[str | None] = mapped_column(Text)
+    cleaned_note: Mapped[str | None] = mapped_column(Text)
+    interpretation_json: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    visit: Mapped["Visit | None"] = relationship()
+    artwork: Mapped["Artwork | None"] = relationship()

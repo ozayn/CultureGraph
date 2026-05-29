@@ -25,6 +25,28 @@ export interface AiSuggestedAnnotation {
   accepted_annotation_id?: number | null;
 }
 
+export interface AudioInterpretation {
+  cleaned_note: string;
+  observations: string[];
+  visual_elements: string[];
+  questions: string[];
+  tags: string[];
+  suggested_annotations: AiSuggestedAnnotation[];
+  related_entities: string[];
+}
+
+export interface AudioNote {
+  id: number;
+  visit_id: number | null;
+  artwork_id: number | null;
+  audio_url: string;
+  duration_seconds: number | null;
+  transcript: string | null;
+  cleaned_note: string | null;
+  interpretation: AudioInterpretation | null;
+  created_at: string;
+}
+
 export interface Visit {
   id: number;
   museum_name: string;

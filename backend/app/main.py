@@ -10,6 +10,7 @@ from app.routers import (
     admin,
     annotations,
     artworks,
+    audio_notes,
     auth,
     cultural_entities,
     enrichment,
@@ -49,6 +50,7 @@ app.include_router(museums.router, prefix="/api")
 app.include_router(artworks.router, prefix="/api")
 app.include_router(cultural_entities.router, prefix="/api")
 app.include_router(annotations.router, prefix="/api")
+app.include_router(audio_notes.router, prefix="/api")
 app.include_router(research.router, prefix="/api")
 app.include_router(enrichment.router, prefix="/api")
 app.include_router(import_notes.router, prefix="/api")

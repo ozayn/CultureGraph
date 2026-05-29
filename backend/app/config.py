@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     visual_match_top_k: int = 12
     visual_match_high_threshold: float = 0.82
     visual_match_possible_threshold: float = 0.68
+    openai_api_key: str | None = None
+    openai_transcription_model: str = "whisper-1"
+    audio_note_max_bytes: int = 25 * 1024 * 1024
+    audio_note_max_duration_seconds: float = 300.0
 
     @property
     def is_production(self) -> bool:

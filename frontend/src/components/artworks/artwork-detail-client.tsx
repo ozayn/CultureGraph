@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, ImageIcon, MapPin, Pencil, Sparkles } from "lucide-react";
+import { Camera, ImageIcon, MapPin, Mic, Pencil, Sparkles } from "lucide-react";
 import { useRef, useState, useMemo, useEffect } from "react";
 
 import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
@@ -18,6 +18,7 @@ import {
 import { AuthGate } from "@/components/auth/auth-gate";
 import { SignInInlineHint } from "@/components/auth/sign-in-inline-hint";
 import { ArtworkRegionSheet } from "@/components/artworks/artwork-region-sheet";
+import { AudioNotePanel } from "@/components/audio-notes/audio-note-panel";
 import { ArtworkImageDebug } from "@/components/artworks/artwork-image-debug";
 import { ArtworkImage, ArtworkImagePlaceholder } from "@/components/artworks/artwork-image";
 import { PhotoCaptureDateSuggestion } from "@/components/artworks/photo-capture-date-suggestion";
@@ -73,6 +74,7 @@ export function ArtworkDetailClient({
   const [artwork, setArtwork] = useState(initialArtwork);
   const [annotations, setAnnotations] = useState(initialAnnotations);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [audioNoteOpen, setAudioNoteOpen] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [regionOpen, setRegionOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -483,20 +485,32 @@ export function ArtworkDetailClient({
 
       <section className="px-4 sm:px-0">
         {canEdit ? (
-          <button
-            type="button"
-            onClick={() => setNoteOpen(true)}
-            className="w-full rounded-xl border border-border bg-card p-4 text-left transition-colors active:bg-muted/50"
-          >
-            <p className="mb-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-              Personal note
-            </p>
-            <p className="text-base leading-relaxed">
-              {artwork.personal_notes?.trim()
-                ? artwork.personal_notes
-                : "Tap to jot a quick note while you're in the gallery."}
-            </p>
-          </button>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setNoteOpen(true)}
+              className="w-full rounded-xl border border-border bg-card p-4 text-left transition-colors active:bg-muted/50"
+            >
+              <p className="mb-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                Personal note
+              </p>
+              <p className="text-base leading-relaxed">
+                {artwork.personal_notes?.trim()
+                  ? artwork.personal_notes
+                  : "Tap to jot a quick note while you're in the gallery."}
+              </p>
+            </button>
+            <Button
+              type="button"
+              variant="outline"
+              size="touch"
+              className="w-full"
+              onClick={() => setAudioNoteOpen(true)}
+            >
+              <Mic className="size-5" />
+              Record voice note
+            </Button>
+          </div>
         ) : (
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="mb-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
@@ -605,8 +619,39 @@ export function ArtworkDetailClient({
         <Button size="touch" className="w-full" disabled={savingNote} onClick={saveNote}>
           {savingNote ? "Saving…" : "Save note"}
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="touch"
+          className="w-full"
+          onClick={() => {
+            setNoteOpen(false);
+            setAudioNoteOpen(true);
+          }}
+        >
+          <Mic className="size-5" />
+          Record voice note
+        </Button>
       </div>
     </BottomSheet>
+
+    <AudioNotePanel
+      open={audioNoteOpen}
+      onOpenChange={setAudioNoteOpen}
+      artworkId={artwork.id}
+      visitId={artwork.visit_id}
+      culturalEntities={culturalEntities}
+      existingPersonalNote={artwork.personal_notes}
+      onPersonalNoteSaved={(text) => {
+        setArtwork((current) => ({ ...current, personal_notes: text }));
+        setNote(text);
+        router.refresh();
+      }}
+      onAnnotationsCreated={(created) => {
+        setAnnotations((current) => [...current, ...created]);
+        router.refresh();
+      }}
+    />
 
     <BottomSheet
       open={photoOpen}

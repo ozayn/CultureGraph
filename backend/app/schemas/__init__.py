@@ -628,3 +628,36 @@ class VisualMatchResponse(BaseModel):
         "Best visual matches from the museum collection. "
         "Review the catalog image before applying metadata."
     )
+
+
+class AudioInterpretationRead(BaseModel):
+    cleaned_note: str
+    observations: list[str] = Field(default_factory=list)
+    visual_elements: list[str] = Field(default_factory=list)
+    questions: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    suggested_annotations: list[AiSuggestedAnnotation] = Field(default_factory=list)
+    related_entities: list[str] = Field(default_factory=list)
+
+
+class AudioNoteRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    visit_id: int | None = None
+    artwork_id: int | None = None
+    audio_url: str
+    duration_seconds: float | None = None
+    transcript: str | None = None
+    cleaned_note: str | None = None
+    interpretation: AudioInterpretationRead | None = None
+    created_at: datetime
+
+
+class AudioNoteTranscriptUpdate(BaseModel):
+    transcript: str | None = None
+    cleaned_note: str | None = None
+
+
+class AudioTranscribeRequest(BaseModel):
+    transcript: str | None = None
