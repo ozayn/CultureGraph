@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 UploadStorageBackend = Literal["filesystem", "s3", "r2"]
 
-# Railway volume mount path documented in docs/UPLOAD_STORAGE.md
+# Railway volume mount path documented in docs/storage/upload-storage.md
 RAILWAY_PERSISTENT_UPLOAD_DIR = Path("/app/uploads")
 
 
@@ -141,7 +141,7 @@ def log_upload_storage_status() -> None:
             "WARNING: UPLOAD_DIR is not on a persistent Railway volume. "
             "Uploaded images and audio will be lost on redeploy. "
             "Mount a volume at /app/uploads and set UPLOAD_DIR=/app/uploads. "
-            "See docs/UPLOAD_STORAGE.md."
+            "See docs/storage/upload-storage.md."
         )
         print(f"CultureGraph — {warning}", flush=True)
         logger.warning(warning)
