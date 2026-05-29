@@ -16,9 +16,11 @@ from app.schemas.admin import (
     AdminEntityListResponse,
     AdminEntityRecord,
     AdminListMeta,
+    AdminMissingUploadRecord,
     AdminResearchNoteListResponse,
     AdminResearchNoteRecord,
     AdminSummaryRead,
+    AdminUploadHealthRead,
     AdminVisitListResponse,
     AdminVisitRecord,
 )
@@ -41,6 +43,8 @@ from app.services.admin_queries import (
     normalize_search,
     paginate,
 )
+from app.services.upload_health import collect_missing_upload_records, count_missing_upload_records
+from app.services.upload_storage import get_upload_storage
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -56,6 +60,23 @@ def admin_summary(
 ) -> AdminSummaryRead:
     counts = count_all(db)
     return AdminSummaryRead(**counts)
+
+
+@router.get("/upload-health", response_model=AdminUploadHealthRead)
+def admin_upload_health(
+    _user: Annotated[dict[str, str | None], Depends(require_listed_admin_user)],
+    db: Session = Depends(get_db),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> AdminUploadHealthRead:
+    storage = get_upload_storage()
+    missing = collect_missing_upload_records(db, limit=limit)
+    return AdminUploadHealthRead(
+        upload_dir=str(storage.upload_root()),
+        storage_backend=storage.backend_name,
+        persistent=storage.is_persistent(),
+        missing_count=count_missing_upload_records(db),
+        records=[AdminMissingUploadRecord.model_validate(item) for item in missing],
+    )
 
 
 @router.get("/visits", response_model=AdminVisitListResponse)

@@ -42,3 +42,6 @@ def prepare_database() -> None:
     log_database_config()
     run_migrations()
     verify_required_tables()
+    from app.services.upload_storage import log_upload_storage_status
+
+    log_upload_storage_status()

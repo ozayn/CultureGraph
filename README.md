@@ -208,14 +208,20 @@ Deploy as **two services** from this monorepo. Configure variables in each servi
 | `JWT_SECRET` | Yes | Long random string for app JWT signing |
 | `ANTHROPIC_API_KEY` | No | Enables Claude research; API service only |
 | `ANTHROPIC_TIMEOUT_SECONDS` | No | Default `90`; museum-note import can take up to ~2 minutes end-to-end |
-| `UPLOAD_DIR` | No | Default `uploads`; local folder served at `/uploads` |
+| `UPLOAD_DIR` | No | Default `uploads` locally; **set `/app/uploads` on Railway with a volume** (see [docs/UPLOAD_STORAGE.md](docs/UPLOAD_STORAGE.md)) |
+| `UPLOAD_STORAGE_BACKEND` | No | `filesystem` (default), `s3`, or `r2` (object storage not implemented yet) |
 | `UPLOAD_MAX_BYTES` | No | Default `10485760` (10 MB) for artwork photo uploads |
+| `APP_ENV` | No | Set `production` on Railway; logs a warning if uploads are not on a persistent path |
 
-**Uploaded photos on Railway:** the API container filesystem is **ephemeral** unless you attach a volume. Without a volume, `/uploads/...` paths in the database survive redeploys but the files return **404**. Fix:
+**Uploaded files on Railway:** the API container filesystem is **ephemeral** unless you attach a volume. Without a volume, `/uploads/...` paths in the database survive redeploys but the files return **404**.
 
-1. Add a Railway **volume** mounted at `/app/uploads` (or your service root + `uploads`).
+**Fix (required for durable uploads):**
+
+1. Add a Railway **volume** on the API service mounted at `/app/uploads`.
 2. Set `UPLOAD_DIR=/app/uploads` on the API service.
-3. Re-upload photos or use **Find official image** to attach museum catalog URLs (these load from NGA/Smithsonian over HTTPS).
+3. Redeploy and verify with `GET /api/admin/upload-health` (`persistent: true`, `missing_count: 0`).
+
+See **[docs/UPLOAD_STORAGE.md](docs/UPLOAD_STORAGE.md)** for step-by-step setup.
 
 The API strips missing upload files from responses and falls back to `catalog_*` URLs when present, so the UI shows a clean placeholder instead of a broken image icon.
 
@@ -252,8 +258,10 @@ See `backend/Procfile`, `backend/railway.toml`, and `frontend/railway.toml` for 
 
 For Railway production, choose one of:
 
-- **Railway Volume** mounted at `UPLOAD_DIR` (simplest path for the current filesystem-based API)
-- **Object storage** (S3, Cloudflare R2, Supabase Storage) for durable media — recommended long term, but not wired in this repo yet
+- **Railway Volume** at `/app/uploads` with `UPLOAD_DIR=/app/uploads` — **required for durable uploads today** ([docs/UPLOAD_STORAGE.md](docs/UPLOAD_STORAGE.md))
+- **Object storage** (S3, Cloudflare R2) — adapter interface exists (`UPLOAD_STORAGE_BACKEND`); implementation is future work
+
+Use `GET /api/admin/upload-health` after deploy to confirm `persistent: true` and find any database paths with missing files.
 
 Until persistent storage is configured, treat uploaded artwork photos as **best-effort** on Railway.
 

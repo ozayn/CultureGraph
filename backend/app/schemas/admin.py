@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -110,3 +111,19 @@ class AdminBulkDeleteRequest(BaseModel):
 
 class AdminBulkDeleteResponse(BaseModel):
     deleted_count: int
+
+
+class AdminMissingUploadRecord(BaseModel):
+    record_type: Literal["artwork", "cultural_entity", "audio_note"]
+    record_id: int
+    field: str
+    path: str
+    label: str | None = None
+
+
+class AdminUploadHealthRead(BaseModel):
+    upload_dir: str
+    storage_backend: str
+    persistent: bool
+    missing_count: int
+    records: list[AdminMissingUploadRecord]
