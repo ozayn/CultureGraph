@@ -16,9 +16,21 @@ PROVIDER_DISPLAY_NAMES = {
     PROVIDER_SEARCHAPI: "Web visual search (SearchAPI)",
 }
 
-UNAUTHORIZED_LENS_MESSAGE = (
-    "Web visual search is not authorized. Check web visual search provider configuration."
-)
+def unauthorized_lens_message(provider_id: str = "") -> str:
+    if provider_id == PROVIDER_SEARCHAPI:
+        return (
+            "Web visual search is not authorized. Check SEARCHAPI_API_KEY on the API server."
+        )
+    if provider_id == PROVIDER_SERPAPI:
+        return (
+            "Web visual search is not authorized. Check SERPAPI_API_KEY on the API server."
+        )
+    return (
+        "Web visual search is not authorized. Check the API key for the active provider."
+    )
+
+
+UNAUTHORIZED_LENS_MESSAGE = unauthorized_lens_message()
 
 
 class LensSearchError(RuntimeError):

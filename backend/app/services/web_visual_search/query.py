@@ -6,6 +6,12 @@ from app.config import settings
 from app.models import Artwork
 from app.services.web_visual_search.crop import build_normalized_crop_parameter
 from app.services.web_visual_search.types import LensSearchError, LensSearchQuery
+from app.services.web_visual_search.validation import (
+    is_private_or_loopback_host,
+    missing_public_api_base_url_message,
+    private_image_host_message,
+    public_url_host,
+)
 
 
 def resolve_public_image_url(image_url: str) -> str:
@@ -16,13 +22,12 @@ def resolve_public_image_url(image_url: str) -> str:
     if normalized.startswith("/uploads/"):
         base = (settings.public_api_base_url or "").strip().rstrip("/")
         if not base:
-            raise LensSearchError(
-                "Web visual search needs a publicly reachable image URL. "
-                "Set PUBLIC_API_BASE_URL to your deployed API origin "
-                "(for example https://your-api.up.railway.app), "
-                "or apply a catalog image URL to the artwork first."
-            )
-        return f"{base}{normalized}"
+            raise LensSearchError(missing_public_api_base_url_message())
+        resolved = f"{base}{normalized}"
+        host = public_url_host(resolved)
+        if is_private_or_loopback_host(host):
+            raise LensSearchError(private_image_host_message(host=host))
+        return resolved
 
     raise LensSearchError("Unsupported artwork image URL for web visual search.")
 

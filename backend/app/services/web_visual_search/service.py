@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from app.config import settings
 from app.models import Artwork
 from app.services.web_visual_search.providers import SearchApiLensProvider, SerpApiLensProvider
@@ -13,6 +15,9 @@ from app.services.web_visual_search.types import (
     LensSearchResult,
     WebVisualSearchProvider,
 )
+from app.services.web_visual_search.validation import public_url_host, verify_public_lens_image_url
+
+logger = logging.getLogger(__name__)
 
 
 def get_web_visual_search_provider() -> WebVisualSearchProvider:
@@ -27,8 +32,34 @@ def get_web_visual_search_provider() -> WebVisualSearchProvider:
     )
 
 
+def log_lens_search_attempt(
+    *,
+    provider_id: str,
+    artwork: Artwork,
+    image_url: str,
+    has_crop: bool,
+) -> None:
+    logger.info(
+        "lens search attempt provider=%s artwork_id=%s has_image_url=%s has_master_url=%s "
+        "public_url_host=%s has_crop=%s",
+        provider_id,
+        artwork.id,
+        bool((artwork.image_url or "").strip()),
+        bool((artwork.image_master_url or "").strip()),
+        public_url_host(image_url),
+        has_crop,
+    )
+
+
 def search_artwork_with_lens(artwork: Artwork) -> LensSearchResult:
     provider = get_web_visual_search_provider()
     use_crop = provider.provider_id == PROVIDER_SEARCHAPI
     query = build_lens_search_query(artwork, use_crop=use_crop)
+    log_lens_search_attempt(
+        provider_id=provider.provider_id,
+        artwork=artwork,
+        image_url=query.image_url,
+        has_crop=bool(query.crop),
+    )
+    verify_public_lens_image_url(query.image_url)
     return provider.search(artwork, query)

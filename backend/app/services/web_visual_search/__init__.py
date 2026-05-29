@@ -16,6 +16,12 @@ from app.services.web_visual_search.types import (
     LensSearchQuery,
     LensSearchResult,
     WebVisualSearchProvider,
+    unauthorized_lens_message,
+)
+from app.services.web_visual_search.validation import (
+    missing_provider_api_key_message,
+    missing_public_api_base_url_message,
+    verify_public_lens_image_url,
 )
 
 __all__ = [
@@ -37,4 +43,8 @@ __all__ = [
     "redact_sensitive_url",
     "resolve_lens_image_url",
     "search_artwork_with_lens",
+    "unauthorized_lens_message",
+    "missing_provider_api_key_message",
+    "missing_public_api_base_url_message",
+    "verify_public_lens_image_url",
 ]

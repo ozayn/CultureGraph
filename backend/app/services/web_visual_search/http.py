@@ -9,7 +9,11 @@ import requests
 
 from app.config import settings
 from app.services.web_visual_search.redaction import redact_sensitive_text
-from app.services.web_visual_search.types import LensSearchError, UNAUTHORIZED_LENS_MESSAGE
+from app.services.web_visual_search.types import LensSearchError
+from app.services.web_visual_search.validation import (
+    provider_validation_message,
+    unauthorized_provider_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +66,27 @@ def log_lens_search_failure(
     )
 
 
+def raise_provider_error(
+    *,
+    provider_id: str,
+    artwork_id: int,
+    status_code: int | None,
+    message: str,
+) -> None:
+    log_lens_search_failure(
+        provider_id=provider_id,
+        artwork_id=artwork_id,
+        status_code=status_code,
+        message=message,
+    )
+    if is_authorization_failure(status_code=status_code, message=message):
+        raise LensSearchError(unauthorized_provider_message(provider_id))
+    friendly = provider_validation_message(message)
+    if friendly:
+        raise LensSearchError(friendly)
+    raise LensSearchError(message)
+
+
 def fetch_json(
     *,
     provider_id: str,
@@ -85,15 +110,12 @@ def fetch_json(
     except requests.RequestException as exc:
         status_code = request_status_code(exc)
         safe_message = safe_request_error_message(exc)
-        log_lens_search_failure(
+        raise_provider_error(
             provider_id=provider_id,
             artwork_id=artwork_id,
             status_code=status_code,
             message=safe_message,
         )
-        if is_authorization_failure(status_code=status_code, message=safe_message):
-            raise LensSearchError(UNAUTHORIZED_LENS_MESSAGE) from exc
-        raise LensSearchError("Web visual search request failed.") from exc
     except ValueError as exc:
         raise LensSearchError("Web visual search returned an invalid response.") from exc
 
@@ -103,14 +125,11 @@ def fetch_json(
     error_message = payload.get("error")
     if isinstance(error_message, str) and error_message.strip():
         safe_error = redact_sensitive_text(error_message.strip())
-        if is_authorization_failure(status_code=None, message=safe_error):
-            log_lens_search_failure(
-                provider_id=provider_id,
-                artwork_id=artwork_id,
-                status_code=None,
-                message=safe_error,
-            )
-            raise LensSearchError(UNAUTHORIZED_LENS_MESSAGE)
-        raise LensSearchError(safe_error)
+        raise_provider_error(
+            provider_id=provider_id,
+            artwork_id=artwork_id,
+            status_code=None,
+            message=safe_error,
+        )
 
     return payload

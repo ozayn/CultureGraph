@@ -15,6 +15,7 @@ from app.services.web_visual_search.types import (
     LensSearchQuery,
     LensSearchResult,
 )
+from app.services.web_visual_search.validation import missing_provider_api_key_message
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +29,7 @@ class SerpApiLensProvider:
     def search(self, artwork: Artwork, query: LensSearchQuery) -> LensSearchResult:
         api_key = (settings.serpapi_api_key or "").strip()
         if not api_key:
-            raise LensSearchError(
-                "Web visual search is not configured. Set SERPAPI_API_KEY on the API server."
-            )
+            raise LensSearchError(missing_provider_api_key_message(self.provider_id))
 
         params = {
             "engine": "google_lens",

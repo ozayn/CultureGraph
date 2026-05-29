@@ -19,6 +19,7 @@ from app.services.web_visual_search import (
     redact_sensitive_url,
     resolve_lens_image_url,
     search_artwork_with_lens,
+    unauthorized_lens_message,
 )
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "redact_sensitive_url",
     "resolve_lens_image_url",
     "search_artwork_with_lens",
+    "unauthorized_lens_message",
 ]

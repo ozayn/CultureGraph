@@ -12,7 +12,6 @@ from app.services.lens_search import (
     PROVIDER_DISPLAY_NAMES,
     PROVIDER_SEARCHAPI,
     PROVIDER_SERPAPI,
-    UNAUTHORIZED_LENS_MESSAGE,
     build_lens_search_query,
     build_normalized_crop_parameter,
     get_web_visual_search_provider,
@@ -21,9 +20,17 @@ from app.services.lens_search import (
     redact_sensitive_url,
     resolve_lens_image_url,
     search_artwork_with_lens,
+    unauthorized_lens_message,
 )
 from app.services.web_visual_search.providers.searchapi import SearchApiLensProvider
 from app.services.web_visual_search.providers.serpapi import SerpApiLensProvider
+
+
+def _skip_image_reachability_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "app.services.web_visual_search.service.verify_public_lens_image_url",
+        lambda image_url, timeout=10.0: None,
+    )
 
 
 def test_resolve_lens_image_url_requires_upload(db_session) -> None:
@@ -69,6 +76,115 @@ def test_resolve_lens_image_url_accepts_https(db_session) -> None:
     db_session.commit()
 
     assert resolve_lens_image_url(artwork) == "https://example.org/art.jpg"
+
+
+def test_resolve_lens_image_url_requires_public_api_base_url(db_session, monkeypatch) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "public_api_base_url", None)
+
+    visit = Visit(museum_name="National Gallery of Art", city="Washington", visit_date="2026-01-01")
+    db_session.add(visit)
+    db_session.flush()
+    artwork = Artwork(title="Test", visit_id=visit.id, image_url="/uploads/artworks/1/photo.webp")
+    db_session.add(artwork)
+    db_session.commit()
+
+    with pytest.raises(Exception, match="PUBLIC_API_BASE_URL"):
+        resolve_lens_image_url(artwork)
+
+
+def test_missing_serpapi_key_returns_clear_error(db_session, monkeypatch) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "web_visual_search_provider", PROVIDER_SERPAPI)
+    monkeypatch.setattr(settings, "serpapi_api_key", None)
+    monkeypatch.setattr(settings, "public_api_base_url", "https://api.example.com")
+    _skip_image_reachability_check(monkeypatch)
+
+    visit = Visit(museum_name="National Gallery of Art", city="Washington", visit_date="2026-01-01")
+    db_session.add(visit)
+    db_session.flush()
+    artwork = Artwork(title="Test", visit_id=visit.id, image_url="/uploads/artworks/5/photo.webp")
+    db_session.add(artwork)
+    db_session.commit()
+
+    with pytest.raises(Exception, match="SERPAPI_API_KEY"):
+        search_artwork_with_lens(artwork)
+
+
+def test_missing_searchapi_key_returns_clear_error(db_session, monkeypatch) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "web_visual_search_provider", PROVIDER_SEARCHAPI)
+    monkeypatch.setattr(settings, "searchapi_api_key", None)
+    monkeypatch.setattr(settings, "public_api_base_url", "https://api.example.com")
+    _skip_image_reachability_check(monkeypatch)
+
+    visit = Visit(museum_name="National Gallery of Art", city="Washington", visit_date="2026-01-01")
+    db_session.add(visit)
+    db_session.flush()
+    artwork = Artwork(title="Test", visit_id=visit.id, image_url="/uploads/artworks/6/photo.webp")
+    db_session.add(artwork)
+    db_session.commit()
+
+    with pytest.raises(Exception, match="SEARCHAPI_API_KEY"):
+        search_artwork_with_lens(artwork)
+
+
+def test_unreachable_upload_returns_clear_error(db_session, monkeypatch) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "web_visual_search_provider", PROVIDER_SEARCHAPI)
+    monkeypatch.setattr(settings, "searchapi_api_key", "searchapi-key")
+    monkeypatch.setattr(settings, "public_api_base_url", "https://api.example.com")
+
+    visit = Visit(museum_name="National Gallery of Art", city="Washington", visit_date="2026-01-01")
+    db_session.add(visit)
+    db_session.flush()
+    artwork = Artwork(
+        title="Test",
+        visit_id=visit.id,
+        image_url="/uploads/artworks/7/display.webp",
+        image_master_url="/uploads/artworks/7/master.webp",
+        crop_x_percent=10.0,
+        crop_y_percent=20.0,
+        crop_width_percent=50.0,
+        crop_height_percent=40.0,
+    )
+    db_session.add(artwork)
+    db_session.commit()
+
+    class FakeHeadResponse:
+        status_code = 404
+
+        @property
+        def headers(self) -> dict[str, str]:
+            return {"content-type": "application/json"}
+
+    monkeypatch.setattr(
+        "app.services.web_visual_search.validation.requests.head",
+        lambda *args, **kwargs: FakeHeadResponse(),
+    )
+
+    with pytest.raises(Exception, match="not publicly reachable"):
+        search_artwork_with_lens(artwork)
+
+
+def test_localhost_public_base_url_is_rejected(db_session, monkeypatch) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "public_api_base_url", "http://localhost:8000")
+
+    visit = Visit(museum_name="National Gallery of Art", city="Washington", visit_date="2026-01-01")
+    db_session.add(visit)
+    db_session.flush()
+    artwork = Artwork(title="Test", visit_id=visit.id, image_url="/uploads/artworks/8/photo.webp")
+    db_session.add(artwork)
+    db_session.commit()
+
+    with pytest.raises(Exception, match="non-public host"):
+        resolve_lens_image_url(artwork)
 
 
 def test_build_normalized_crop_parameter_from_artwork(db_session) -> None:
@@ -189,6 +305,7 @@ def test_search_artwork_with_lens_parses_serpapi_payload(db_session, monkeypatch
     monkeypatch.setattr(settings, "web_visual_search_provider", PROVIDER_SERPAPI)
     monkeypatch.setattr(settings, "serpapi_api_key", "test-key")
     monkeypatch.setattr(settings, "public_api_base_url", "https://api.example.com")
+    _skip_image_reachability_check(monkeypatch)
 
     visit = Visit(museum_name="National Gallery of Art", city="Washington", visit_date="2026-01-01")
     db_session.add(visit)
@@ -237,6 +354,7 @@ def test_search_artwork_with_lens_searchapi_sends_crop(db_session, monkeypatch) 
     monkeypatch.setattr(settings, "web_visual_search_provider", PROVIDER_SEARCHAPI)
     monkeypatch.setattr(settings, "searchapi_api_key", "searchapi-key")
     monkeypatch.setattr(settings, "public_api_base_url", "https://api.example.com")
+    _skip_image_reachability_check(monkeypatch)
 
     visit = Visit(museum_name="National Gallery of Art", city="Washington", visit_date="2026-01-01")
     db_session.add(visit)
@@ -287,6 +405,7 @@ def test_lens_search_endpoint(db_session, auth_headers, monkeypatch) -> None:
     monkeypatch.setattr(settings, "web_visual_search_provider", PROVIDER_SERPAPI)
     monkeypatch.setattr(settings, "serpapi_api_key", "test-key")
     monkeypatch.setattr(settings, "public_api_base_url", "https://api.example.com")
+    _skip_image_reachability_check(monkeypatch)
 
     visit = Visit(museum_name="National Gallery of Art", city="Washington", visit_date="2026-01-01")
     db_session.add(visit)
@@ -350,6 +469,7 @@ def test_search_artwork_with_lens_redacts_api_key_from_logs(db_session, monkeypa
     monkeypatch.setattr(settings, "web_visual_search_provider", PROVIDER_SERPAPI)
     monkeypatch.setattr(settings, "serpapi_api_key", secret_key)
     monkeypatch.setattr(settings, "public_api_base_url", "https://api.example.com")
+    _skip_image_reachability_check(monkeypatch)
 
     visit = Visit(museum_name="National Gallery of Art", city="Washington", visit_date="2026-01-01")
     db_session.add(visit)
@@ -370,7 +490,7 @@ def test_search_artwork_with_lens_redacts_api_key_from_logs(db_session, monkeypa
     monkeypatch.setattr("app.services.web_visual_search.http.requests.get", raise_unauthorized)
 
     caplog.set_level(logging.WARNING)
-    with pytest.raises(Exception, match=UNAUTHORIZED_LENS_MESSAGE):
+    with pytest.raises(Exception, match=unauthorized_lens_message(PROVIDER_SERPAPI)):
         search_artwork_with_lens(artwork)
 
     logged = " ".join(record.getMessage() for record in caplog.records)
@@ -388,6 +508,7 @@ def test_search_artwork_with_lens_searchapi_auth_failure(db_session, monkeypatch
     monkeypatch.setattr(settings, "web_visual_search_provider", PROVIDER_SEARCHAPI)
     monkeypatch.setattr(settings, "searchapi_api_key", secret_key)
     monkeypatch.setattr(settings, "public_api_base_url", "https://api.example.com")
+    _skip_image_reachability_check(monkeypatch)
 
     visit = Visit(museum_name="National Gallery of Art", city="Washington", visit_date="2026-01-01")
     db_session.add(visit)
@@ -408,7 +529,7 @@ def test_search_artwork_with_lens_searchapi_auth_failure(db_session, monkeypatch
     monkeypatch.setattr("app.services.web_visual_search.http.requests.get", raise_forbidden)
 
     caplog.set_level(logging.WARNING)
-    with pytest.raises(Exception, match=UNAUTHORIZED_LENS_MESSAGE):
+    with pytest.raises(Exception, match=unauthorized_lens_message(PROVIDER_SEARCHAPI)):
         search_artwork_with_lens(artwork)
 
     logged = " ".join(record.getMessage() for record in caplog.records)

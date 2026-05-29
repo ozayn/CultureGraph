@@ -104,6 +104,20 @@ On the artwork AI assistant panel, admins with a photo can click **Try web visua
 - Third-party dependency with usage-based billing
 - Results may include shopping or unrelated pages; always review before applying metadata
 
+## Troubleshooting
+
+Common `400` responses from `POST /api/artworks/{id}/lens-search`:
+
+| Error theme | Likely cause | Fix |
+|-------------|--------------|-----|
+| `PUBLIC_API_BASE_URL` | Upload path but no public API origin configured | Set `PUBLIC_API_BASE_URL` to your deployed API HTTPS origin |
+| `not publicly reachable` | Image 404 at the public origin | Upload exists only locally, or wrong `PUBLIC_API_BASE_URL`; deploy uploads or use a tunnel (ngrok) |
+| `non-public host` | `PUBLIC_API_BASE_URL` is `localhost` | Providers cannot fetch localhost; use a public HTTPS origin |
+| `SEARCHAPI_API_KEY` / `SERPAPI_API_KEY` | Missing or wrong provider key | Set the key for the active `WEB_VISUAL_SEARCH_PROVIDER` |
+| `not authorized` | Invalid provider API key | Verify the key in the provider dashboard |
+
+Server logs include safe debug fields: `provider`, `artwork_id`, `has_image_url`, `has_master_url`, `public_url_host`, `has_crop`, and redacted provider errors.
+
 ## Related docs
 
 - Local museum visual matching: [visual-matching.md](visual-matching.md)
