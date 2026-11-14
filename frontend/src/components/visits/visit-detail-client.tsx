@@ -12,7 +12,6 @@ import { AdminActionsMenu } from "@/components/admin/admin-actions-menu";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { ProgressiveArtworkForm } from "@/components/artworks/progressive-artwork-form";
 import { CulturalEntityForm } from "@/components/cultural-entities/cultural-entity-form";
-import { AuthGate } from "@/components/auth/auth-gate";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
@@ -262,14 +261,29 @@ export function VisitDetailClient({
               </ButtonLink>
               <h2 className="font-heading text-xl">Artworks</h2>
             </div>
-            <ButtonLink href="/visits" variant="ghost" size="sm" className="hidden min-h-11 sm:inline-flex">
-              All visits
-            </ButtonLink>
+            <div className="flex items-center gap-2">
+              <ButtonLink href="/visits" variant="ghost" size="sm" className="hidden min-h-11 sm:inline-flex">
+                All visits
+              </ButtonLink>
+              {canEdit ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="size-11 p-0"
+                  aria-label="Add artwork"
+                  title="Add artwork"
+                  aria-haspopup="dialog"
+                  onClick={() => setAddOpen(true)}
+                >
+                  <Plus className="size-5" aria-hidden="true" />
+                </Button>
+              ) : null}
+            </div>
           </div>
 
           {visitArtworks.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-muted-foreground">
-              No artworks yet. Tap Add artwork below.
+              No artworks yet.
             </div>
           ) : (
             <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -301,32 +315,7 @@ export function VisitDetailClient({
             </ul>
           </section>
         ))}
-
-        <section className="hidden rounded-xl border border-border bg-card p-5 md:block">
-          <h3 className="mb-4 font-heading text-xl">Add artwork</h3>
-          {canEdit ? (
-            <ProgressiveArtworkForm visitId={visit.id} compact />
-          ) : (
-            <AuthGate />
-          )}
-        </section>
       </div>
-
-      {canEdit ? (
-        <div
-          className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background p-3 md:hidden"
-          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
-        >
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-base font-medium text-primary-foreground active:opacity-90"
-          >
-            <Plus className="size-5" />
-            Add artwork
-          </button>
-        </div>
-      ) : null}
 
       {canEdit ? (
         <>
@@ -334,7 +323,7 @@ export function VisitDetailClient({
             open={addOpen}
             onOpenChange={setAddOpen}
             title="Add artwork"
-            description="Photo first — AI enrichment starts on the artwork page."
+            description="Take or choose a photo to add an artwork."
             footer={null}
           >
             <ProgressiveArtworkForm
