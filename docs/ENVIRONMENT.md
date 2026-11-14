@@ -36,7 +36,7 @@ Templates:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `ANTHROPIC_API_KEY` | — | Research, enrichment, label OCR |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | Model name |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Model name |
 | `ANTHROPIC_TIMEOUT_SECONDS` | `120` | Request timeout |
 | `ANTHROPIC_MAX_TOKENS` | `2048` | Max response tokens |
 

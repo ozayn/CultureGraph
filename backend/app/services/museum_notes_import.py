@@ -664,7 +664,6 @@ class ClaudeMuseumNotesImportProvider:
             message = await self._client.messages.create(
                 model=settings.anthropic_model,
                 max_tokens=settings.anthropic_max_tokens,
-                temperature=0.1,
                 messages=[{"role": "user", "content": prompt}],
                 tools=[
                     {

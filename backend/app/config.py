@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     upload_max_bytes: int = 10 * 1024 * 1024
     cors_origins: str = "http://localhost:3000"
     anthropic_api_key: str | None = None
-    anthropic_model: str = "claude-sonnet-4-20250514"
+    anthropic_model: str = "claude-sonnet-4-6"
     anthropic_timeout_seconds: float = 120.0
     anthropic_max_tokens: int = 2048
     jwt_secret: str | None = None
