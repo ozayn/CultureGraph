@@ -51,6 +51,14 @@ class Settings(BaseSettings):
             if email.strip()
         }
 
+    @field_validator("database_url")
+    @classmethod
+    def select_postgres_driver(cls, value: str) -> str:
+        scheme, separator, rest = value.partition("://")
+        if separator and scheme in {"postgres", "postgresql"}:
+            return f"postgresql+psycopg2://{rest}"
+        return value
+
     @field_validator("database_url", mode="before")
     @classmethod
     def normalize_database_url(cls, value: object) -> object:
