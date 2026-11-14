@@ -1,7 +1,7 @@
 "use client";
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { VisitDetailClient } from "@/components/visits/visit-detail-client";
 import { AuthProvider } from "@/contexts/auth-context";
@@ -97,6 +97,8 @@ const artworks = [
 ];
 
 describe("VisitDetailClient artwork delete", () => {
+  afterEach(cleanup);
+
   it("renders visit calendar date without timezone shift", async () => {
     render(
       <AuthProvider googleConfigured={false}>

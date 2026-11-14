@@ -8,6 +8,8 @@ import {
   ArtworkImageLookupPanel,
 } from "@/components/artworks/artwork-image-lookup-panel";
 
+import { LOOKUP_REQUEST_TIMEOUT_MS } from "@/lib/api";
+
 const getMock = vi.fn();
 const putMock = vi.fn();
 
@@ -93,7 +95,10 @@ describe("ArtworkImageLookupPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Find official image/i }));
 
     await waitFor(() => {
-      expect(getMock).toHaveBeenCalledWith("/api/artworks/1/lookup-image");
+      expect(getMock).toHaveBeenCalledWith(
+        "/api/artworks/1/lookup-image",
+        { timeoutMs: LOOKUP_REQUEST_TIMEOUT_MS }
+      );
     });
   });
 
@@ -181,7 +186,8 @@ describe("ArtworkImageLookupPanel", () => {
 
     await waitFor(() => {
       expect(getMock).toHaveBeenLastCalledWith(
-        "/api/artworks/1/lookup-image?title_override=Custom&artist_override=Artist"
+        "/api/artworks/1/lookup-image?title_override=Custom&artist_override=Artist",
+        { timeoutMs: LOOKUP_REQUEST_TIMEOUT_MS }
       );
     });
   });

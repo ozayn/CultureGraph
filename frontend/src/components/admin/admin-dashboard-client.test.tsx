@@ -1,7 +1,7 @@
 "use client";
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminDashboardClient } from "@/components/admin/admin-dashboard-client";
 import { AuthProvider } from "@/contexts/auth-context";
@@ -31,6 +31,15 @@ vi.mock("@/lib/api", () => ({
           missing_count: 0,
           missing_record_count: 0,
           records: [],
+        };
+      }
+      if (path === "/api/admin/visual-index-status") {
+        return {
+          indexed_count: 0,
+          embedding_model: "ViT-B-32",
+          last_updated: null,
+          thumbnail_cache_size: 0,
+          source_name: "NGA",
         };
       }
       if (path.startsWith("/api/admin/visits")) {
@@ -69,6 +78,8 @@ vi.mock("@/lib/auth-storage", () => ({
 }));
 
 describe("AdminDashboardClient", () => {
+  afterEach(cleanup);
+
   it("renders summary cards and visit table for signed-in admin", async () => {
     render(
       <AuthProvider googleConfigured={false}>
