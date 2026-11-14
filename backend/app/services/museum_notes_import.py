@@ -182,6 +182,8 @@ Exact shape:
 }
 
 Rules:
+- For substantive notes, return at least one entity. Explicitly named artworks, artists,
+  historical events, and ideas belong in entities even if also mentioned in visit.summary.
 - Classify each distinct note entry by entity_type before filling fields.
 - Do NOT force every line into artwork. Artists, concepts, movements, materials, techniques,
   historical events, symbols, architecture, museum spaces, and political ideas are valid entries.
@@ -712,6 +714,13 @@ class ClaudeMuseumNotesImportProvider:
             raise ResearchProviderError(
                 f"{IMPORT_SCHEMA_MISMATCH_MESSAGE} ({summary})"
             ) from exc
+
+        if not parsed.entities:
+            fallback = await _fallback_to_mock_import(
+                request,
+                ai_warning="Claude extracted no entries. Review the entries from local extraction.",
+            )
+            return fallback.model_copy(update={"visit": parsed.visit})
 
         logger.info(
             "Claude museum-notes import finished entities=%d",

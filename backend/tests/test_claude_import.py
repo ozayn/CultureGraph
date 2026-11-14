@@ -249,3 +249,32 @@ async def test_claude_import_timeout_falls_back_to_mock() -> None:
     assert result.ai_warning == IMPORT_TIMEOUT_WARNING
     assert result.entities
 
+
+
+@pytest.mark.asyncio
+async def test_claude_import_empty_entities_preserves_summary_and_falls_back() -> None:
+    provider = ClaudeMuseumNotesImportProvider("test-api-key")
+
+    async def fake_create(**kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            content=[
+                SimpleNamespace(
+                    type="tool_use",
+                    name=IMPORT_TOOL_NAME,
+                    input={"visit": {"summary": "Olympics tour summary"}, "entities": []},
+                )
+            ]
+        )
+
+    provider._client = SimpleNamespace(messages=SimpleNamespace(create=fake_create))
+    result = await provider.extract(
+        MuseumNotesImportRequest(
+            text="Glenn Kaino's Bridge and the 1968 Mexico City Olympics",
+            visit_date=date(2026, 1, 12),
+        )
+    )
+
+    assert result.visit.summary == "Olympics tour summary"
+    assert result.source == "mock"
+    assert result.entities
+    assert result.ai_warning
